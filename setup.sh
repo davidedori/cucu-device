@@ -35,6 +35,16 @@ PROJECT_DIR="/home/${DEPLOY_USER}/cucu-device"
 VENV_DIR="${PROJECT_DIR}/api/venv"
 SUDOERS_FILE="/etc/sudoers.d/cucu-device"
 
+# Helper: copia solo se src != dst (idempotente quando REPO_DIR == PROJECT_DIR)
+copy_file() {
+    local src="$1" dst="$2"
+    if [ "$(realpath "$src" 2>/dev/null)" = "$(realpath "$dst" 2>/dev/null)" ]; then
+        ok "In place: $(basename "$src")"
+        return 0
+    fi
+    cp "$src" "$dst"
+}
+
 # ---- VERIFICA ROOT ----------------------------------------------------------
 if [ "$EUID" -ne 0 ]; then
     fail "Questo script richiede privilegi root. Esegui con: sudo bash setup.sh"
@@ -153,19 +163,25 @@ chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "$PROJECT_DIR"
 step "Copia file di progetto"
 
 # Codice: sovrascrive sempre (è la fonte di verità)
-cp "$REPO_DIR/read_nfc.py"      "$PROJECT_DIR/read_nfc.py"
-cp "$REPO_DIR/api/main.py"      "$PROJECT_DIR/api/main.py"
-cp "$REPO_DIR/api/index.html"   "$PROJECT_DIR/api/index.html"
-cp "$REPO_DIR/VERSION"          "$PROJECT_DIR/VERSION"
-ok "Copiati: read_nfc.py, api/main.py, api/index.html, VERSION"
+for f in read_nfc.py updater.sh VERSION requirements.txt; do
+    copy_file "$REPO_DIR/$f" "$PROJECT_DIR/$f"
+done
+copy_file "$REPO_DIR/api/main.py"    "$PROJECT_DIR/api/main.py"
+copy_file "$REPO_DIR/api/index.html" "$PROJECT_DIR/api/index.html"
+chmod +x "$PROJECT_DIR/read_nfc.py" "$PROJECT_DIR/updater.sh"
+ok "Copiati: read_nfc.py, updater.sh, VERSION, requirements.txt, api/main.py, api/index.html"
 
-# Grafica: sovrascrive sempre
-cp -r "$REPO_DIR/graphics/"* "$PROJECT_DIR/graphics/"
-ok "Copiata: graphics/"
+# Grafica: sovrascrive sempre (skip se repo == deploy dir)
+if [ "$(realpath "$REPO_DIR/graphics")" != "$(realpath "$PROJECT_DIR/graphics")" ]; then
+    cp -r "$REPO_DIR/graphics/"* "$PROJECT_DIR/graphics/"
+    ok "Copiata: graphics/"
+else
+    ok "Grafica in place"
+fi
 
 # tags.json: preserva la configurazione esistente (tag NFC associati)
 if [ ! -f "$PROJECT_DIR/tags.json" ]; then
-    cp "$REPO_DIR/tags.json" "$PROJECT_DIR/tags.json"
+    copy_file "$REPO_DIR/tags.json" "$PROJECT_DIR/tags.json"
     ok "Copiato: tags.json (primo avvio)"
 else
     ok "Mantenuto: tags.json (configurazione esistente preservata)"
@@ -228,20 +244,46 @@ fi
 # =============================================================================
 step "Configurazione e abilitazione servizi systemd"
 
-SERVICES=(cucu-device.service cucu-device-api.service splashscreen.service)
+SERVICES=(
+    cucu-device.service
+    cucu-device-api.service
+    splashscreen.service
+    cucu-device-updater.service
+    cucu-device-updater.timer
+)
 
 for svc in "${SERVICES[@]}"; do
-    cp "$REPO_DIR/systemd/$svc" "/etc/systemd/system/$svc"
+    copy_file "$REPO_DIR/systemd/$svc" "/etc/systemd/system/$svc"
     ok "Installato: $svc"
 done
 
 systemctl daemon-reload
 ok "daemon-reload eseguito"
 
-for svc in "${SERVICES[@]}"; do
+# Abilita i servizi applicativi e il timer OTA
+# Il .service dell'updater NON viene abilitato direttamente (lo lancia il timer)
+for svc in cucu-device.service cucu-device-api.service splashscreen.service; do
     systemctl enable "$svc"
     ok "Abilitato all'avvio: $svc"
 done
+systemctl enable cucu-device-updater.timer
+ok "Timer OTA abilitato: cucu-device-updater.timer (ogni notte alle 3:00)"
+
+# =============================================================================
+# STEP 9 — CONFIGURAZIONE OTA
+# =============================================================================
+step "Configurazione OTA (config.env)"
+
+CONFIG_ENV_DST="$PROJECT_DIR/config.env"
+
+if [ ! -f "$CONFIG_ENV_DST" ]; then
+    copy_file "$REPO_DIR/config.env.template" "$CONFIG_ENV_DST"
+    chown "${DEPLOY_USER}:${DEPLOY_USER}" "$CONFIG_ENV_DST"
+    warn "config.env creato da template. Configura REPO_URL per abilitare gli aggiornamenti OTA:"
+    warn "  nano $CONFIG_ENV_DST"
+else
+    ok "Mantenuto: config.env (configurazione esistente preservata)"
+fi
 
 # =============================================================================
 # RIEPILOGO
@@ -258,12 +300,16 @@ printf "  %-14s %s\n" "API web:"   "http://${NEW_HOSTNAME}.local:8000"
 printf "  %-14s %s\n" "Versione:"  "$VERSION"
 echo ""
 echo -e "  ${BOLD}Prossimi passi:${NC}"
-echo "   1. Aggiungi i video dei personaggi in:"
+echo "   1. Configura l'aggiornamento automatico (OTA):"
+echo "      nano ${PROJECT_DIR}/config.env"
+echo "      → imposta REPO_URL=https://github.com/tuonome/cucu-device"
+echo ""
+echo "   2. Aggiungi i video dei personaggi in:"
 echo "      ${PROJECT_DIR}/characters/<nome_personaggio>/"
 echo ""
-echo "   2. Configura Wi-Fi e associa i tag NFC dall'interfaccia web:"
+echo "   3. Configura Wi-Fi e associa i tag NFC dall'interfaccia web:"
 echo "      http://${NEW_HOSTNAME}.local:8000"
 echo ""
-echo "   3. Riavvia il dispositivo per attivare tutti i servizi:"
+echo "   4. Riavvia il dispositivo per attivare tutti i servizi:"
 echo "      sudo reboot"
 echo ""
