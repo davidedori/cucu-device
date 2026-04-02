@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Configuration
-HOTSPOT_SSID="TinyWorlds_AP"
-HOTSPOT_PASSWORD="tinyworlds"
+HOTSPOT_SSID="CucuDevice_AP"
+HOTSPOT_PASSWORD="cucu-device"
 CONNECTION_NAME="Hotspot"
 
-echo "Configuring Auto-Hotspot for TinyWorlds..."
+echo "Configuring Auto-Hotspot for cucu-device..."
 
 # Check for nmcli
 if ! command -v nmcli &> /dev/null; then
@@ -41,5 +41,5 @@ sudo nmcli con modify "$CONNECTION_NAME" \
     connection.autoconnect-priority 5
 
 echo "Done! The Hotspot '$HOTSPOT_SSID' has been configured."
-echo "If no known WiFi networks are found, the Raspberry Pi should create this network."
+echo "If no known Wi-Fi networks are found, the Raspberry Pi will create this network."
 echo "Password: $HOTSPOT_PASSWORD"
