@@ -33,12 +33,8 @@ restart.log
 episode_state.json
 episode_state.json.bak
 
-# Media (i video non vanno in git — sono troppo pesanti)
-characters/**/*.mp4
-characters/**/*.mkv
-characters/**/*.avi
-characters/**/*.mov
-characters/**/*.m4v
+# Contenuto device-specifico — tutta la cartella characters è esclusa
+characters/
 
 # macOS
 .DS_Store
