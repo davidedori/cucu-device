@@ -17,7 +17,7 @@ except ImportError:
 
 # --- CONFIG -------------------------------------------------------------
 
-BASE_DIR = Path("/home/davidedorigatti/tinyworlds")
+BASE_DIR = Path("/home/davidedorigatti/cucu-device")
 CONFIG_PATH = BASE_DIR / "tags.json"
 CHARACTERS_DIR = BASE_DIR / "characters"
 GRAPHICS_DIR = BASE_DIR / "graphics"
@@ -30,7 +30,7 @@ VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v"}
 
 # --- VLC PLAYER CLASS ---------------------------------------------------
 
-class TinyPlayer:
+class CucuPlayer:
     def __init__(self):
         # Parametri per full screen, no overlay, niente titolo
         # --mouse-hide-timeout=0 nasconde il mouse subito
@@ -87,7 +87,7 @@ class TinyPlayer:
 
 # --- STATO GLOBALE ------------------------------------------------------
 
-player = TinyPlayer()
+player = CucuPlayer()
 mode = "idle"
 # mode values: "idle", "playing", "paused", "ended_wait_remove", "ended_wait_return"
 
@@ -236,7 +236,7 @@ def manage_graphics():
         target_img = WAIT_NEXT_IMAGE
 
     # Ottimizzazione: se l'immagine è già quella giusta, non ricaricarla.
-    # Ma TinyPlayer non sa cosa sta suonando. 
+    # Ma CucuPlayer non sa cosa sta suonando.
     # Possiamo tenere traccia qui o ricaricare sempre (python-vlc è veloce).
     # Per evitare flicker, ricarichiamo solo se necessario è meglio.
     # Tuttavia, player.set_media non causa flicker se è già quella.
@@ -275,7 +275,7 @@ def read_uid_once():
 
 # --- LOOP PRINCIPALE ----------------------------------------------------
 
-print("TinyWorlds Single-Instance Player avviato.")
+print("cucu-device player avviato.")
 load_episode_state()
 refresh_graphic(IDLE_IMAGE) # Avvio con idle
 

@@ -1,11 +1,11 @@
 [Unit]
-Description=TinyWorlds NFC reader
+Description=cucu-device NFC reader
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 -u /home/davidedorigatti/tinyworlds/read_nfc.py
-WorkingDirectory=/home/davidedorigatti/tinyworlds
+ExecStart=/usr/bin/python3 -u /home/davidedorigatti/cucu-device/read_nfc.py
+WorkingDirectory=/home/davidedorigatti/cucu-device
 StandardOutput=journal
 StandardError=journal
 Restart=always

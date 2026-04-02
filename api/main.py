@@ -18,7 +18,7 @@ API_DIR = Path(__file__).resolve().parent
 app = FastAPI()
 
 # Percorsi base (stessi del tuo script NFC)
-BASE_DIR = Path("/home/davidedorigatti/tinyworlds")
+BASE_DIR = Path("/home/davidedorigatti/cucu-device")
 CHARACTERS_DIR = BASE_DIR / "characters"
 EPISODE_STATE_FILE = BASE_DIR / "episode_state.json"
 TAGS_FILE = BASE_DIR / "tags.json"
@@ -76,12 +76,12 @@ def serve_frontend():
     index_path = API_DIR / "index.html"
     if not index_path.exists():
         # fallback: messaggio semplice se manca il file
-        return "<h1>TinyWorlds API</h1><p>index.html non trovato.</p>"
+        return "<h1>cucu-device API</h1><p>index.html non trovato.</p>"
     return FileResponse(index_path)
 
 @app.get("/api")
 def api_root():
-    return {"message": "TinyWorlds API attiva"}
+    return {"message": "cucu-device API attiva"}
 
 
 @app.get("/characters")
@@ -735,7 +735,7 @@ def _restart_service_task():
         # Spesso su Debian/Raspbian è /bin/systemctl o /usr/bin/systemctl.
         # Proviamo con un comando shell wrapper per catturare tutto.
         
-        cmd = ["sudo", "systemctl", "restart", "tinyworlds.service"]
+        cmd = ["sudo", "systemctl", "restart", "cucu-device.service"]
         
         with log_file.open("a") as f:
             f.write(f"[{time.ctime()}] Tentativo riavvio: {' '.join(cmd)}\n")
@@ -796,7 +796,7 @@ def delete_character(name: str):
 @app.post("/system/restart-player")
 def restart_player(background_tasks: BackgroundTasks):
     """
-    Riavvia il servizio principale TinyWorlds (lettore NFC + riproduzione).
+    Riavvia il servizio principale cucu-device (lettore NFC + riproduzione).
     Utile dopo modifiche a personaggi/episodi fatte via web.
     Usa un background task per non uccidere l'API prima della risposta.
     """
@@ -859,7 +859,7 @@ def list_wifi():
             if len(parts) >= 2 and parts[1] == "802-11-wireless":
                 name = parts[0]
                 # Filtra connessioni di sistema o hotspot che non vogliamo eliminare
-                if name not in ("Hotspot", "TinyWorlds_AP", "TinyWorlds-AP", "preconfigured"):
+                if name not in ("Hotspot", "CucuDevice_AP", "Cucu_AP", "preconfigured"):
                     saved.append(name)
     except Exception as e:
         print(f"Errore check saved wifi: {e}")

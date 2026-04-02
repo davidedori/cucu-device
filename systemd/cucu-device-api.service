@@ -1,0 +1,15 @@
+[Unit]
+Description=cucu-device API (FastAPI server)
+After=network.target
+
+[Service]
+User=davidedorigatti
+WorkingDirectory=/home/davidedorigatti/cucu-device/api
+
+ExecStart=/home/davidedorigatti/cucu-device/api/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
