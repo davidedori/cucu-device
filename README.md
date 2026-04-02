@@ -25,6 +25,7 @@ cucu-device/
 ├── VERSION                     # Versione corrente (es. 0.1.0)
 ├── version.json                # Manifest OTA: versione remota + changelog
 ├── requirements.txt            # Dipendenze Python per l'API
+├── bootstrap.sh                # One-shot installer (curl | sudo bash)
 ├── setup.sh                    # Script di installazione (idempotente)
 ├── updater.sh                  # Script aggiornamento OTA con fallback
 ├── setup_hotspot.sh            # Configurazione hotspot Wi-Fi di fallback
@@ -51,7 +52,19 @@ cucu-device/
 
 ---
 
-## Installazione su Raspberry Pi vergine
+## Installazione rapida
+
+Su un Raspberry Pi con Raspberry Pi OS Lite 64-bit già avviato, un solo comando:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/davidedori/cucu-device/main/bootstrap.sh | sudo bash
+```
+
+Questo comando scarica ed esegue `bootstrap.sh`, che installa `git` se mancante, clona il repository in `~/cucu-device` e lancia `setup.sh` in autonomia.
+
+---
+
+## Installazione manuale su Raspberry Pi vergine
 
 ### 1. Requisiti iniziali
 
