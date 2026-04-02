@@ -1,0 +1,16 @@
+[Unit]
+Description=TinyWorlds NFC reader
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -u /home/davidedorigatti/tinyworlds/read_nfc.py
+WorkingDirectory=/home/davidedorigatti/tinyworlds
+StandardOutput=journal
+StandardError=journal
+Restart=always
+RestartSec=1
+User=davidedorigatti
+
+[Install]
+WantedBy=multi-user.target

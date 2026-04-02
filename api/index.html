@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8">
+  <title>TinyWorlds</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+  <!-- Font Giocoso -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      /* Palette Toy Box */
+      --bg: #fdfbf7;
+      --surface: #ffffff;
+      --primary: #3b82f6;
+      /* Blu morbido */
+      --primary-soft: #eff6ff;
+      --accent: #f472b6;
+      /* Rosa */
+      --accent-soft: #fdf2f8;
+      --text: #334155;
+      --text-soft: #94a3b8;
+      --border: #e2e8f0;
+      --danger: #ef4444;
+
+      --radius: 20px;
+      --shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Nunito', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* --- Header & Tabs --- */
+    header {
+      background: var(--surface);
+      padding: 16px 20px 0 20px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    }
+
+    .logo {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo span {
+      background: var(--accent);
+      color: white;
+      padding: 2px 10px;
+      border-radius: 99px;
+      font-size: 14px;
+      transform: rotate(-3deg);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 20px;
+    }
+
+    .tab {
+      padding: 12px 4px;
+      font-weight: 700;
+      color: var(--text-soft);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    /* --- Layout --- */
+    main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .view {
+      display: none;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    /* --- Card Grid --- */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      transition: transform 0.1s;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+    }
+
+    .card:active {
+      transform: scale(0.96);
+    }
+
+    .card-icon {
+      font-size: 32px;
+      margin-bottom: 10px;
+      background: var(--primary-soft);
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-title {
+      font-weight: 800;
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+
+    .card-subtitle {
+      font-size: 12px;
+      color: var(--text-soft);
+      font-weight: 600;
+    }
+
+    .card.add-card {
+      border: 2px dashed var(--border);
+      background: transparent;
+      box-shadow: none;
+      justify-content: center;
+      color: var(--text-soft);
+    }
+
+    .card.add-card:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* --- List Items --- */
+    .list-item {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid var(--border);
+    }
+
+    .list-item-content {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .list-item-title {
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .list-item-sub {
+      font-size: 12px;
+      color: var(--text-soft);
+    }
+
+    /* --- Buttons & Inputs --- */
+    .btn {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-weight: 700;
+      color: var(--text);
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.1s;
+    }
+
+    .btn:active {
+      transform: scale(0.96);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+      box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-danger {
+      color: var(--danger);
+      border-color: #fee2e2;
+      background: #fef2f2;
+    }
+
+    .btn-block {
+      width: 100%;
+      display: block;
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: 2px solid var(--border);
+      font-family: inherit;
+      outline: none;
+      background: #f8fafc;
+      font-weight: 600;
+    }
+
+    input:focus {
+      border-color: var(--primary);
+      background: white;
+    }
+
+    /* --- Modal --- */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+      padding: 20px;
+    }
+
+    .modal {
+      background: var(--bg);
+      border-radius: 24px;
+      width: 100%;
+      max-width: 400px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      padding: 20px;
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-weight: 800;
+      font-size: 18px;
+    }
+
+    .modal-close {
+      background: #f1f5f9;
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .section-title {
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--text-soft);
+      font-weight: 800;
+      margin: 20px 0 10px 0;
+    }
+
+    /* --- Toast --- */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 99px;
+      font-weight: 600;
+      font-size: 14px;
+      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+      z-index: 200;
+      width: max-content;
+      max-width: 90%;
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+
+    /* --- Utility --- */
+    .badge {
+      background: var(--accent);
+      color: white;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* Upload Progress */
+    .progress-bar {
+      height: 6px;
+      background: #e2e8f0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 10px;
+      display: none;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--primary);
+      width: 0%;
+      transition: width 0.1s;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <div class="logo">TinyWorlds <span>v2.0</span></div>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('characters')">Personaggi</div>
+      <div class="tab" onclick="switchTab('system')">Sistema</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- View: Personaggi -->
+    <div id="view-characters" class="view active">
+      <div class="grid" id="characters-grid">
+        <!-- JS Grid Injection -->
+      </div>
+    </div>
+
+    <!-- View: Sistema -->
+    <div id="view-system" class="view">
+      <h3>WiFi</h3>
+      <div class="list-item">
+        <div class="list-item-content">
+          <div class="list-item-title" id="wifi-status-text">Analisi...</div>
+          <div class="list-item-sub" id="wifi-detail-text">NetworkManager</div>
+        </div>
+        <button class="btn btn-sm" onclick="renderWifiPanel()">↺</button>
+      </div>
+
+      <div id="wifi-list-container"></div>
+
+      <h3 style="margin-top: 30px;">Comandi</h3>
+      <button class="btn btn-block" onclick="handleRestartPlayer()">↺ Riavvia Lettore NFC</button>
+    </div>
+  </main>
+
+  <!-- MODAL: Dettaglio Personaggio -->
+  <div class="modal-overlay" id="char-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="modal-title" id="m-char-title">Personaggio</div>
+          <button class="btn btn-sm" style="font-size:12px; padding:2px 8px;" onclick="renameCharacter()">✎</button>
+        </div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Stats Chips -->
+        <div style="display:flex; gap:8px; margin-bottom:20px;">
+          <div class="badge" id="m-char-episodes">0 ep</div>
+          <div class="badge" style="background:var(--primary)" id="m-char-tags">0 tag</div>
+        </div>
+
+        <div class="section-title">Aspetto</div>
+        <div style="display:flex; align-items:center; gap:15px; margin-bottom:10px;">
+          <div id="m-char-img-preview"
+            style="width:60px; height:60px; background-color:var(--primary-soft); border-radius:50%; background-size:cover; background-position:center; border:1px solid var(--border);">
+          </div>
+          <div>
+            <input type="file" id="m-input-img" accept=".png,.jpg,.jpeg" style="display:none"
+              onchange="uploadProfileImage()">
+            <button class="btn btn-sm" onclick="document.getElementById('m-input-img').click()">Cambia Foto</button>
+          </div>
+        </div>
+
+        <div class="section-title">Tag NFC</div>
+        <div id="m-tags-list"></div>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <input type="text" id="m-input-tag" placeholder="UID Tag" style="font-size:14px; padding:8px;">
+          <button class="btn btn-primary" onclick="addTagFromModal()">+</button>
+        </div>
+
+        <div class="section-title">Episodi</div>
+        <div id="m-episodes-list" style="max-height: 200px; overflow-y: auto;"></div>
+
+        <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
+          <input type="file" id="m-input-files" multiple accept=".mp4,.mkv,.avi,.mov,.m4v" style="display:none"
+            onchange="uploadEpisodesFromModal()">
+          <button class="btn btn-block" onclick="document.getElementById('m-input-files').click()">Carica Video</button>
+
+          <div class="progress-bar" id="upload-progress">
+            <div class="progress-fill" id="upload-fill"></div>
+          </div>
+        </div>
+
+        <div style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 20px;">
+          <button class="btn btn-danger btn-block" onclick="deleteCharacter()">Elimina Personaggio</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: WiFi Connect -->
+  <div class="modal-overlay" id="wifi-modal">
+    <div class="modal" style="max-width:300px; height:auto;">
+      <div class="modal-header">
+        <div class="modal-title">Connetti WiFi</div>
+        <button class="modal-close" onclick="closeWifiModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <h4 id="w-ssid-title" style="margin:0 0 10px 0;">Network</h4>
+        <input type="password" id="w-password" placeholder="Password WPA2">
+        <button class="btn btn-primary btn-block" id="w-connect-btn" onclick="connectWifiConfirm()">Connetti</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast">Messaggio</div>
+
+  <!-- Overlay Reconnect -->
+  <div id="reconnect-overlay"
+    style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:999; flex-direction:column; align-items:center; justify-content:center; color:white;">
+    <h2>Riavvio in corso...</h2>
+    <div id="reconnect-timer"></div>
+  </div>
+
+  <script>
+    /* --- STATE --- */
+    const apiBase = "";
+    let characters = [];
+    let selectedCharName = null;
+    let pendingWifiSsid = null;
+
+    /* --- UI HELPERS --- */
+    const $ = (id) => document.getElementById(id);
+
+    function switchTab(viewId) {
+      document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+      $('view-' + viewId).classList.add('active');
+
+      // Highlight tab logic simple
+      const tabIndex = viewId === 'characters' ? 0 : 1;
+      document.querySelectorAll('.tab')[tabIndex].classList.add('active');
+
+      if (viewId === 'system') renderWifiPanel();
+    }
+
+    function showToast(msg) {
+      const t = $('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    /* --- BASIC API --- */
+    async function apiCall(path, method = "GET", body = null) {
+      const opts = { method };
+      if (body) {
+        opts.headers = { "Content-Type": "application/json" };
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(apiBase + path, opts);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    }
+
+    /* --- CHARACTERS LOGIC --- */
+    async function loadCharacters() {
+      try {
+        characters = await apiCall("/characters");
+        renderGrid();
+      } catch (e) { console.error(e); showToast("Errore caricamento"); }
+    }
+
+    function renderGrid() {
+      const grid = $('characters-grid');
+      grid.innerHTML = '';
+
+      // Add "New" Card
+      const addCard = document.createElement('div');
+      addCard.className = 'card add-card';
+      addCard.innerHTML = '<div style="font-size:30px;">+</div><div>Nuovo</div>';
+      addCard.onclick = createNewCharacter;
+      grid.appendChild(addCard);
+
+      characters.forEach(char => {
+        const el = document.createElement('div');
+        el.className = 'card';
+        el.onclick = () => openCharModal(char.name);
+
+        const iconContent = char.has_image
+          ? `<div style="width:100%; height:100%; border-radius:50%; background:url('${char.image_url}?v=${Date.now()}') center/cover no-repeat;"></div>`
+          : char.display_name[0].toUpperCase();
+
+        el.innerHTML = `
+                <div class="card-icon">${iconContent}</div>
+                <div class="card-title">${char.display_name}</div>
+                <div class="card-subtitle">${char.stats.known || 0} ep · ${char.tags_count} tag</div>
+            `;
+        grid.appendChild(el);
+      });
+    }
+
+    async function createNewCharacter() {
+      const name = prompt("Nome del personaggio:");
+      if (!name) return;
+      try {
+        await apiCall("/characters", "POST", { name });
+        showToast("Creato!");
+        loadCharacters();
+      } catch (e) { showToast("Errore creazione: " + e.message); }
+    }
+
+    /* --- MODAL LOGIC --- */
+    async function openCharModal(name) {
+      selectedCharName = name;
+      const modal = $('char-modal');
+      modal.style.display = 'flex';
+
+      // Load details
+      const data = await apiCall(`/characters/${name}`);
+
+      $('m-char-title').textContent = data.display_name;
+      $('m-char-episodes').textContent = data.stats.total_episodes + ' ep';
+      $('m-char-tags').textContent = data.tag_uids.length + ' tag';
+
+      // Update Image Preview
+      const imgPreview = $('m-char-img-preview');
+      if (data.has_image) {
+        imgPreview.style.backgroundImage = `url('${data.image_url}?v=${Date.now()}')`;
+        imgPreview.textContent = '';
+      } else {
+        imgPreview.style.backgroundImage = 'none';
+        imgPreview.style.display = 'flex';
+        imgPreview.style.alignItems = 'center';
+        imgPreview.style.justifyContent = 'center';
+        imgPreview.style.fontWeight = '800';
+        imgPreview.style.color = 'var(--primary)';
+        imgPreview.textContent = data.display_name[0].toUpperCase();
+      }
+
+      // Render Tags
+      const tagsList = $('m-tags-list');
+      tagsList.innerHTML = '';
+      data.tag_uids.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.style.padding = '8px';
+        div.innerHTML = `
+                <code style="font-size:12px;">${t.uid}</code>
+                <button class="btn btn-danger" style="padding:4px 8px; font-size:12px;" onclick="deleteTag('${t.uid}')">×</button>
+            `;
+        tagsList.appendChild(div);
+      });
+
+      // Render Episodes
+      const epsList = $('m-episodes-list');
+      epsList.innerHTML = '';
+      data.episodes.forEach(ep => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.style.padding = '8px';
+        div.innerHTML = `
+                <div class="list-item-title" style="font-size:12px; overflow:hidden; text-overflow:ellipsis;">${ep.filename}</div>
+                <button class="btn btn-danger" style="padding:4px 8px; font-size:12px;" onclick="deleteEpisode('${ep.filename}')">×</button>
+            `;
+        epsList.appendChild(div);
+      });
+    }
+
+    function closeModal() {
+      $('char-modal').style.display = 'none';
+      selectedCharName = null;
+      loadCharacters(); // refresh grid stats
+    }
+
+    /* --- ACTIONS INSIDE MODAL --- */
+    async function addTagFromModal() {
+      const input = $('m-input-tag');
+      const uid = input.value.trim();
+      if (!uid) return;
+      try {
+        await apiCall(`/characters/${selectedCharName}/tags`, "POST", { uid });
+        input.value = '';
+        showToast("Tag aggiunto");
+        openCharModal(selectedCharName); // refresh modal
+      } catch (e) { showToast("Errore: " + e.message); }
+    }
+
+    async function deleteTag(uid) {
+      if (!confirm("Eliminare tag?")) return;
+      try {
+        await apiCall(`/characters/${selectedCharName}/tags/${uid}`, "DELETE");
+        openCharModal(selectedCharName);
+      } catch (e) { showToast("Errore: " + e.message); }
+    }
+
+    async function deleteEpisode(filename) {
+      if (!confirm("Eliminare video?")) return;
+      try {
+        await apiCall(`/characters/${selectedCharName}/episodes/${filename}`, "DELETE");
+        openCharModal(selectedCharName);
+      } catch (e) { showToast("Errore: " + e.message); }
+    }
+
+    async function uploadEpisodesFromModal() {
+      const input = $('m-input-files');
+      const files = Array.from(input.files);
+      if (!files.length) return;
+
+      const bar = $('progress-bar');
+      const fill = $('upload-fill');
+      $('upload-progress').style.display = 'block';
+      fill.style.width = '0%';
+
+      // Upload Logic
+      const url = `/characters/${selectedCharName}/episodes`;
+      const totalSize = files.reduce((acc, f) => acc + f.size, 0);
+      let loadedTotal = 0;
+
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('files', file);
+
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", url);
+          xhr.upload.onprogress = e => {
+            const current = loadedTotal + e.loaded;
+            const pct = Math.round((current / totalSize) * 100);
+            fill.style.width = pct + '%';
+          };
+          xhr.onload = () => resolve();
+          xhr.onerror = () => reject();
+          xhr.send(fd);
+        });
+        loadedTotal += file.size;
+      }
+
+      $('upload-progress').style.display = 'none';
+      input.value = '';
+      showToast("Upload completato");
+      openCharModal(selectedCharName);
+    }
+
+    async function uploadProfileImage() {
+      const input = $('m-input-img');
+      const file = input.files[0];
+      if (!file) return;
+
+      const fd = new FormData();
+      fd.append('file', file);
+
+      try {
+        const res = await fetch(`/characters/${selectedCharName}/image`, {
+          method: 'POST',
+          body: fd
+        });
+        if (!res.ok) throw new Error(await res.text());
+
+        showToast("Immagine aggiornata");
+        // Ricarica modale per vedere aggiornamento
+        openCharModal(selectedCharName);
+        // Anche la griglia sotto deve aggiornarsi
+        loadCharacters();
+      } catch (e) {
+        showToast("Errore upload: " + e.message);
+      }
+      input.value = '';
+    }
+
+
+
+    async function renameCharacter() {
+      if (!selectedCharName) return;
+      const newName = prompt("Nuovo nome per " + selectedCharName + ":", selectedCharName);
+      if (!newName || newName === selectedCharName) return;
+
+      try {
+        const res = await fetch(`/characters/${selectedCharName}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ new_name: newName })
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+
+        showToast("Rinominato!");
+        closeModal();
+        loadCharacters();
+      } catch (e) {
+        showToast("Errore rinomina: " + e.message);
+      }
+    }
+
+    async function deleteCharacter() {
+      if (!selectedCharName) return;
+      if (!confirm(`Sei sicuro di voler eliminare definitivamente "${selectedCharName}"?\nQuesta azione rimuoverà tutti i file e i dati associati.`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/characters/${selectedCharName}`, {
+          method: "DELETE"
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+
+        showToast("Personaggio eliminato");
+        closeModal();
+        loadCharacters();
+      } catch (e) {
+        showToast("Errore eliminazione: " + e.message);
+      }
+    }
+
+    /* --- SYSTEM / WIFI --- */
+    async function renderWifiPanel() {
+      const container = $('wifi-list-container');
+      container.innerHTML = '<div style="padding:20px; text-align:center; color:#94a3b8;">Scansione...</div>';
+
+      try {
+        const data = await apiCall("/system/wifi");
+
+        // Status
+        $('wifi-status-text').textContent = data.current ? `Connesso: ${data.current.ssid}` : "Non connesso";
+        $('wifi-detail-text').textContent = data.current ? `${data.current.bars} segnale` : "Hotspot o disconnesso";
+
+        container.innerHTML = '';
+
+        // Saved
+        if (data.saved.length) {
+          const title = document.createElement('div');
+          title.className = 'section-title';
+          title.innerText = 'Reti Salvate';
+          container.appendChild(title);
+
+          data.saved.forEach(ssid => {
+            const el = document.createElement('div');
+            el.className = 'list-item';
+            el.innerHTML = `<span>${ssid}</span><button class="btn btn-danger btn-sm" onclick="forgetWifi('${ssid}')">×</button>`;
+            container.appendChild(el);
+          });
+        }
+
+        // Available
+        const title2 = document.createElement('div');
+        title2.className = 'section-title';
+        title2.innerText = 'Reti Disponibili';
+        container.appendChild(title2);
+
+        data.scan.forEach(net => {
+          if (data.current && net.ssid === data.current.ssid) return;
+
+          const el = document.createElement('div');
+          el.className = 'list-item';
+          el.innerHTML = `
+                    <div class="list-item-content">
+                        <div class="list-item-title">${net.ssid}</div>
+                        <div class="list-item-sub">${net.bars} ${net.security ? '🔒' : '🔓'}</div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="promptWifi('${net.ssid}')">Connect</button>
+                 `;
+          container.appendChild(el);
+        });
+
+      } catch (e) {
+        container.innerHTML = `<div style="color:red; padding:20px;">Errore: ${e.message}</div>`;
+      }
+    }
+
+    async function forgetWifi(ssid) {
+      if (!confirm(`Dimenticare ${ssid}?`)) return;
+      try { await apiCall(`/system/wifi/${ssid}`, "DELETE"); renderWifiPanel(); }
+      catch (e) { showToast(e.message); }
+    }
+
+    function promptWifi(ssid) {
+      pendingWifiSsid = ssid;
+      $('w-ssid-title').textContent = ssid;
+      $('w-password').value = '';
+      $('wifi-modal').style.display = 'flex';
+    }
+
+    function closeWifiModal() { $('wifi-modal').style.display = 'none'; }
+
+    async function connectWifiConfirm() {
+      const pwd = $('w-password').value;
+      const btn = $('w-connect-btn');
+      btn.textContent = '...';
+      btn.disabled = true;
+
+      try {
+        await apiCall("/system/wifi", "POST", { ssid: pendingWifiSsid, password: pwd });
+        closeWifiModal();
+        showReconnectOverlay();
+      } catch (e) {
+        showToast("Errore: " + e.message);
+      } finally {
+        btn.textContent = 'Connetti';
+        btn.disabled = false;
+      }
+    }
+
+    /* --- RESTART --- */
+    window.handleRestartPlayer = async function () {
+      if (!confirm("Riavviare il servizio?")) return;
+      try {
+        await fetch("/system/restart-player", { method: "POST" });
+        showToast("Riavvio in corso...");
+        setTimeout(showReconnectOverlay, 1000);
+      } catch (e) { showToast("Errore comando: " + e.message); }
+    }
+
+    function showReconnectOverlay() {
+      const ov = $('reconnect-overlay');
+      ov.style.display = 'flex';
+      let s = 0;
+      setInterval(() => {
+        s++;
+        $('reconnect-timer').innerText = `${s}s`;
+        // Try ping
+        if (s % 2 === 0) {
+          fetch("/api").then(r => { if (r.ok) window.location.reload(); });
+        }
+      }, 1000);
+    }
+
+    /* --- INIT --- */
+    document.addEventListener("DOMContentLoaded", () => {
+      loadCharacters();
+    });
+
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Environment files
+.env
+*.env
+config.env
+
+# Logs
+logs/
+*.log
+restart.log
+
+# Runtime state (generato automaticamente)
+episode_state.json
+episode_state.json.bak
+
+# Media (i video non vanno in git — sono troppo pesanti)
+characters/**/*.mp4
+characters/**/*.mkv
+characters/**/*.avi
+characters/**/*.mov
+characters/**/*.m4v
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Raspberry Pi specifici
+*.pyc
