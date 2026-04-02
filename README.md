@@ -63,7 +63,7 @@ cucu-device/
 
 ```bash
 cd ~
-git clone https://github.com/OWNER/cucu-device
+git clone https://github.com/davidedori/cucu-device
 cd cucu-device
 ```
 
@@ -95,7 +95,7 @@ mkdir -p ~/cucu-device/characters/peppa_pig
 
 ```bash
 nano ~/cucu-device/config.env
-# imposta REPO_URL=https://github.com/tuonome/cucu-device
+# imposta REPO_URL=https://github.com/davidedori/cucu-device
 ```
 
 ### 6. Riavvia

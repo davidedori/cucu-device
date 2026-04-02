@@ -147,7 +147,7 @@ tail -f ~/cucu-device/logs/updater.log
 ### Nuova installazione
 
 ```bash
-git clone https://github.com/OWNER/cucu-device ~/cucu-device
+git clone https://github.com/davidedori/cucu-device ~/cucu-device
 sudo bash ~/cucu-device/setup.sh
 # configura config.env, aggiungi video, sudo reboot
 ```
