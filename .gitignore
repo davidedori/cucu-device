@@ -33,8 +33,9 @@ restart.log
 episode_state.json
 episode_state.json.bak
 
-# Contenuto device-specifico — tutta la cartella characters è esclusa
-characters/
+# Contenuto device-specifico — ignorato tutto tranne .gitkeep
+characters/*
+!characters/.gitkeep
 
 # macOS
 .DS_Store
