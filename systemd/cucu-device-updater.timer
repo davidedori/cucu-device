@@ -1,0 +1,14 @@
+[Unit]
+Description=cucu-device OTA updater — timer giornaliero alle 3:00
+Requires=cucu-device-updater.service
+
+[Timer]
+# Esecuzione ogni notte alle 3:00
+OnCalendar=*-*-* 03:00:00
+# Ritardo casuale fino a 5 minuti (evita spike se più dispositivi sono presenti)
+RandomizedDelaySec=300
+# Se il sistema era spento alle 3:00, esegue al primo avvio utile
+Persistent=true
+
+[Install]
+WantedBy=timers.target
