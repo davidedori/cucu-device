@@ -294,31 +294,66 @@ else
 fi
 
 # =============================================================================
-# STEP 10 — PULIZIA RETI WI-FI
+# STEP 10 — HOTSPOT WI-FI DI FALLBACK
+# =============================================================================
+step "Configurazione hotspot Wi-Fi di fallback"
+
+# Configura un access point NM che si attiva automaticamente quando nessuna
+# rete nota è raggiungibile. SSID = hostname_AP, password = cucusetup.
+bash "$REPO_DIR/setup_hotspot.sh"
+ok "Hotspot configurato: ${NEW_HOSTNAME}_AP (password: cucusetup)"
+
+# =============================================================================
+# STEP 11 — PULIZIA RETI WI-FI
 # =============================================================================
 step "Pulizia reti Wi-Fi di configurazione"
 
-# Rimuove i file netplan che definiscono reti Wi-Fi conosciute.
-# La cancellazione non disconnette la sessione corrente (effettiva al prossimo riavvio).
-# Questo step serve a non lasciare nel dispositivo la rete del produttore/installatore
-# prima della consegna al cliente finale.
+# Rimuove le reti Wi-Fi salvate durante il setup/sviluppo prima della consegna
+# al cliente finale. L'hotspot (connessione NM con nome *_AP) viene preservato.
+# La disconnessione non avviene subito: è effettiva al prossimo riavvio.
 
 WIFI_DELETED=0
-for f in /etc/netplan/*.yaml; do
-    [ -f "$f" ] || continue
-    if grep -q 'wifis:' "$f" 2>/dev/null; then
-        rm -f "$f"
-        WIFI_DELETED=$((WIFI_DELETED + 1))
-        ok "Rimossa configurazione Wi-Fi: $(basename "$f")"
-    fi
-done
+
+if systemctl is-active --quiet NetworkManager 2>/dev/null && command -v nmcli &>/dev/null; then
+    # Sistema con NetworkManager: rimuove connessioni Wi-Fi client via nmcli
+    while IFS=: read -r name type _rest; do
+        # Solo profili Wi-Fi (tipo 802-11-wireless)
+        [ "$type" = "802-11-wireless" ] || continue
+        # Preserva l'hotspot (nome termina in _AP)
+        if [[ "$name" == *"_AP" ]]; then
+            ok "Preservato hotspot: $name"
+            continue
+        fi
+        # Preserva connessioni di sistema non toccabili
+        if [[ "$name" =~ ^(preconfigured|lo)$ ]]; then
+            ok "Preservata connessione di sistema: $name"
+            continue
+        fi
+        if nmcli connection delete "$name" &>/dev/null; then
+            ok "Rimossa connessione Wi-Fi NM: $name"
+            WIFI_DELETED=$((WIFI_DELETED + 1))
+        else
+            warn "Impossibile rimuovere connessione: $name"
+        fi
+    done < <(nmcli -t -f NAME,TYPE connection show 2>/dev/null)
+else
+    # Sistema con netplan/dhcpcd: rimuove i file yaml con reti Wi-Fi definite
+    for f in /etc/netplan/*.yaml; do
+        [ -f "$f" ] || continue
+        if grep -q 'wifis:' "$f" 2>/dev/null; then
+            rm -f "$f"
+            WIFI_DELETED=$((WIFI_DELETED + 1))
+            ok "Rimossa configurazione Wi-Fi netplan: $(basename "$f")"
+        fi
+    done
+fi
 
 if [ "$WIFI_DELETED" -eq 0 ]; then
-    ok "Nessuna rete Wi-Fi salvata da rimuovere"
+    ok "Nessuna rete Wi-Fi da rimuovere"
 else
-    warn "$WIFI_DELETED configurazione/i Wi-Fi rimosse."
-    warn "La disconnessione avverrà al prossimo riavvio."
+    warn "$WIFI_DELETED rete/i Wi-Fi rimossa/e. Effettivo al prossimo riavvio."
     warn "Il cliente potrà configurare la propria rete da: http://${NEW_HOSTNAME}.local:8000"
+    warn "Senza rete nota il Pi sarà in hotspot: ${NEW_HOSTNAME}_AP (password: cucusetup)"
 fi
 
 # =============================================================================
@@ -335,6 +370,8 @@ printf "  %-14s %s\n" "Progetto:"  "$PROJECT_DIR"
 printf "  %-14s %s\n" "API web:"   "http://${NEW_HOSTNAME}.local:8000"
 printf "  %-14s %s\n" "Versione:"  "$VERSION"
 echo ""
+printf "  %-14s %s\n" "Hotspot:"   "${NEW_HOSTNAME}_AP (password: cucusetup)"
+echo ""
 echo -e "  ${BOLD}Prossimi passi:${NC}"
 echo "   1. Configura l'aggiornamento automatico (OTA):"
 echo "      nano ${PROJECT_DIR}/config.env"
@@ -345,6 +382,7 @@ echo "      ${PROJECT_DIR}/characters/<nome_personaggio>/"
 echo ""
 echo "   3. Configura Wi-Fi e associa i tag NFC dall'interfaccia web:"
 echo "      http://${NEW_HOSTNAME}.local:8000"
+echo "      (se non connesso alla rete, connettiti all'hotspot ${NEW_HOSTNAME}_AP)"
 echo ""
 echo "   4. Riavvia il dispositivo per attivare tutti i servizi:"
 echo "      sudo reboot"
