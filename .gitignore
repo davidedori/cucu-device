@@ -33,6 +33,7 @@ restart.log
 episode_state.json
 episode_state.json.bak
 last_seen_tag.json
+tags.json
 
 # Contenuto device-specifico — ignorato tutto tranne .gitkeep
 characters/*
