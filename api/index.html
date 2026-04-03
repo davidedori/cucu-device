@@ -806,22 +806,30 @@
 
         // Saved
         if (data.saved.length) {
-          const title = document.createElement('div');
-          title.className = 'section-title';
-          title.innerText = 'Reti Salvate';
-          container.appendChild(title);
+          const details = document.createElement('details');
+          details.style.marginBottom = '15px';
+          
+          const summary = document.createElement('summary');
+          summary.className = 'section-title';
+          summary.style.cursor = 'pointer';
+          summary.style.outline = 'none';
+          summary.innerText = 'Gestisci Reti Salvate ▾';
+          details.appendChild(summary);
 
           data.saved.forEach(ssid => {
             const isAp = ssid.endsWith('_AP');
             const btnHtml = isAp 
                 ? `<button class="btn btn-sm" disabled style="opacity:0.3; cursor:not-allowed;">✕</button>`
-                : `<button class="btn btn-primary btn-sm" style="margin-right:8px;" onclick="reconnectWifi('${ssid}')">Connetti</button><button class="btn btn-danger btn-sm" onclick="forgetWifi('${ssid}')">✕</button>`;
+                : `<button class="btn btn-danger btn-sm" onclick="forgetWifi('${ssid}')">✕</button>`;
             
             const el = document.createElement('div');
             el.className = 'list-item';
+            el.style.marginTop = '4px';
+            el.style.padding = '8px 12px';
             el.innerHTML = `<span>${ssid}</span><div style="display:flex;">${btnHtml}</div>`;
-            container.appendChild(el);
+            details.appendChild(el);
           });
+          container.appendChild(details);
         }
 
         // Available
@@ -833,14 +841,25 @@
         data.scan.forEach(net => {
           if (data.current && net.ssid === data.current.ssid) return;
 
+          const isSaved = data.saved.includes(net.ssid);
+          
+          let btnHtml = '';
+          let badgeHtml = '';
+          if (isSaved) {
+              badgeHtml = `<span style="font-size:0.7em; background-color:#e0f2f1; color:#00695c; padding:2px 6px; border-radius:4px; margin-left:8px; display:inline-block; vertical-align:middle;">✓ Conosciuta</span>`;
+              btnHtml = `<button class="btn btn-primary btn-sm" onclick="reconnectWifi('${net.ssid}')">Connetti</button>`;
+          } else {
+              btnHtml = `<button class="btn btn-secondary btn-sm" onclick="promptWifi('${net.ssid}')">Configura</button>`;
+          }
+
           const el = document.createElement('div');
           el.className = 'list-item';
           el.innerHTML = `
                     <div class="list-item-content">
-                        <div class="list-item-title">${net.ssid}</div>
+                        <div class="list-item-title" style="display:flex; align-items:center;">${net.ssid} ${badgeHtml}</div>
                         <div class="list-item-sub">${net.bars} ${net.security ? '🔒' : '🔓'}</div>
                     </div>
-                    <button class="btn btn-primary btn-sm" onclick="promptWifi('${net.ssid}')">Connect</button>
+                    ${btnHtml}
                  `;
           container.appendChild(el);
         });
@@ -905,16 +924,42 @@
 
     function showReconnectOverlay() {
       const ov = $('reconnect-overlay');
+      ov.innerHTML = `
+        <h2 style="margin-bottom:10px;">Applicazione in corso...</h2>
+        <div id="reconnect-timer" style="font-size:2em; font-weight:bold; margin-bottom:20px;">0s</div>
+        <div style="font-size:1em; max-width: 300px; text-align:center; margin-bottom: 25px;">
+          Se stavi usando l'Hotspot, assicurati di ricollegare il tuo telefono alla rete Wi-Fi di casa.
+        </div>
+        <button id="reconnect-btn" class="btn btn-primary" style="display:none;" onclick="forceReload()">Ricarica Pagina</button>
+      `;
       ov.style.display = 'flex';
       let s = 0;
       setInterval(() => {
         s++;
-        $('reconnect-timer').innerText = `${s}s`;
-        // Try ping
-        if (s % 2 === 0) {
-          fetch("/api").then(r => { if (r.ok) window.location.reload(); });
+        const t = $('reconnect-timer');
+        if (t) t.innerText = `${s}s`;
+        
+        if (s > 10) {
+           const btn = $('reconnect-btn');
+           if (btn) btn.style.display = 'block';
+        }
+        
+        // Try ping cautiously
+        if (s > 2 && s % 3 === 0) {
+          fetch("/api", { cache: "no-store" })
+            .then(r => { if (r.ok) window.location.reload(); })
+            .catch(() => {});
         }
       }, 1000);
+    }
+
+    function forceReload() {
+      const host = window.location.hostname;
+      if (host === '10.42.0.1') {
+         alert("Collegati al Wi-Fi del tuo router e naviga sull'indirizzo cucu-XXXX.local del tuo Cucù, perché l'Hotspot si è appena spento!");
+      } else {
+         window.location.reload();
+      }
     }
 
     /* --- INIT --- */
