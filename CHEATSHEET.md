@@ -11,11 +11,9 @@ Questo file raccoglie tutti i comandi utili da terminale (SSH) per installare, a
 curl -sSL https://raw.githubusercontent.com/davidedori/cucu-device/main/bootstrap.sh | sudo bash
 ```
 
-**Aggiornare manualmente un dispositivo esistente all'ultima versione:**
+**Aggiornare manualmente un dispositivo esistente all'ultima versione (tutto in uno):**
 ```bash
-cd ~/cucu-device
-git pull origin main
-sudo bash setup.sh
+cd ~/cucu-device && git pull origin main && sudo bash setup.sh && sudo reboot
 ```
 
 **Riavviare i servizi dopo un aggiornamento minore (senza rilanciare setup.sh):**
