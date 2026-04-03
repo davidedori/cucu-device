@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import time
+import socket
 
 VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v"}
 IMAGE_EXT = {".png", ".jpg", ".jpeg"}
@@ -912,6 +913,10 @@ def _connect_wifi_task(ssid: str, password: str):
     """Logica di connessione eseguita in background."""
     print(f"[WiFi] Avvio connessione a '{ssid}'...")
     try:
+        # 0. Abbatti l'hotspot se è attivo per liberare l'antenna wlan0
+        ap_name = f"{socket.gethostname()}_AP"
+        subprocess.run(["sudo", "nmcli", "con", "down", ap_name], capture_output=True)
+
         # 1. Elimina eventuale vecchia connessione con stesso nome
         subprocess.run(["sudo", "nmcli", "con", "delete", ssid], capture_output=True)
         
@@ -967,6 +972,32 @@ def connect_wifi(payload: WifiConnect, background_tasks: BackgroundTasks):
     background_tasks.add_task(_connect_wifi_task, ssid, payload.password)
     
     return {"status": "ok", "message": f"Tentativo di connessione a '{ssid}' avviato..."}
+
+@app.post("/system/wifi/{ssid}/connect")
+def switch_wifi(ssid: str, background_tasks: BackgroundTasks):
+    """
+    Si connette a una rete già salvata spegnendo l'AP.
+    """
+    if ssid.endswith("_AP"):
+        raise HTTPException(status_code=400, detail="Non puoi connetterti manualmente all'Hotspot da qui.")
+        
+    def _switch_wifi_task(target_ssid: str):
+        print(f"[WiFi] Switch a rete salvata '{target_ssid}'...")
+        try:
+            ap_name = f"{socket.gethostname()}_AP"
+            subprocess.run(["sudo", "nmcli", "con", "down", ap_name], capture_output=True)
+            time.sleep(1)
+            subprocess.run(
+                ["sudo", "nmcli", "con", "up", target_ssid],
+                check=True, capture_output=True, timeout=30
+            )
+            print(f"[WiFi] Connesso a '{target_ssid}' completato.")
+        except Exception as e:
+            print(f"[WiFi] Errore switch a '{target_ssid}': {e}")
+
+    background_tasks.add_task(_switch_wifi_task, ssid)
+    return {"status": "ok", "message": f"Tentativo di passaggio a '{ssid}' avviato..."}
+
 
 @app.delete("/system/wifi/{ssid}")
 def forget_wifi(ssid: str):
