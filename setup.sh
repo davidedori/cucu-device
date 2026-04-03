@@ -294,6 +294,34 @@ else
 fi
 
 # =============================================================================
+# STEP 10 — PULIZIA RETI WI-FI
+# =============================================================================
+step "Pulizia reti Wi-Fi di configurazione"
+
+# Rimuove i file netplan che definiscono reti Wi-Fi conosciute.
+# La cancellazione non disconnette la sessione corrente (effettiva al prossimo riavvio).
+# Questo step serve a non lasciare nel dispositivo la rete del produttore/installatore
+# prima della consegna al cliente finale.
+
+WIFI_DELETED=0
+for f in /etc/netplan/*.yaml; do
+    [ -f "$f" ] || continue
+    if grep -q 'wifis:' "$f" 2>/dev/null; then
+        rm -f "$f"
+        WIFI_DELETED=$((WIFI_DELETED + 1))
+        ok "Rimossa configurazione Wi-Fi: $(basename "$f")"
+    fi
+done
+
+if [ "$WIFI_DELETED" -eq 0 ]; then
+    ok "Nessuna rete Wi-Fi salvata da rimuovere"
+else
+    warn "$WIFI_DELETED configurazione/i Wi-Fi rimosse."
+    warn "La disconnessione avverrà al prossimo riavvio."
+    warn "Il cliente potrà configurare la propria rete da: http://${NEW_HOSTNAME}.local:8000"
+fi
+
+# =============================================================================
 # RIEPILOGO
 # =============================================================================
 echo ""
