@@ -804,34 +804,6 @@
 
         container.innerHTML = '';
 
-        // Saved
-        if (data.saved.length) {
-          const details = document.createElement('details');
-          details.style.marginBottom = '15px';
-          
-          const summary = document.createElement('summary');
-          summary.className = 'section-title';
-          summary.style.cursor = 'pointer';
-          summary.style.outline = 'none';
-          summary.innerText = 'Gestisci Reti Salvate ▾';
-          details.appendChild(summary);
-
-          data.saved.forEach(ssid => {
-            const isAp = ssid.endsWith('_AP');
-            const btnHtml = isAp 
-                ? `<button class="btn btn-sm" disabled style="opacity:0.3; cursor:not-allowed;">✕</button>`
-                : `<button class="btn btn-danger btn-sm" onclick="forgetWifi('${ssid}')">✕</button>`;
-            
-            const el = document.createElement('div');
-            el.className = 'list-item';
-            el.style.marginTop = '4px';
-            el.style.padding = '8px 12px';
-            el.innerHTML = `<span>${ssid}</span><div style="display:flex;">${btnHtml}</div>`;
-            details.appendChild(el);
-          });
-          container.appendChild(details);
-        }
-
         // Available
         const title2 = document.createElement('div');
         title2.className = 'section-title';
@@ -864,14 +836,53 @@
           container.appendChild(el);
         });
 
+        // Saved networks (moved below Available networks)
+        if (data.saved.length) {
+          const details = document.createElement('details');
+          details.style.marginBottom = '15px';
+          details.style.marginTop = '20px';
+          
+          const summary = document.createElement('summary');
+          summary.className = 'section-title';
+          summary.style.cursor = 'pointer';
+          summary.style.outline = 'none';
+          summary.innerText = 'Gestisci Reti Salvate ▾';
+          details.appendChild(summary);
+
+          data.saved.forEach(ssid => {
+            const isAp = ssid.endsWith('_AP');
+            const btnHtml = isAp 
+                ? `<button class="btn btn-sm" disabled style="opacity:0.3; cursor:not-allowed;">✕</button>`
+                : `<button class="btn btn-danger btn-sm" onclick="forgetWifi('${ssid}')">✕</button>`;
+            
+            const el = document.createElement('div');
+            el.className = 'list-item';
+            el.style.marginTop = '4px';
+            el.style.padding = '8px 12px';
+            el.innerHTML = `<span>${ssid}</span><div style="display:flex;">${btnHtml}</div>`;
+            details.appendChild(el);
+          });
+          container.appendChild(details);
+        }
+
       } catch (e) {
         container.innerHTML = `<div style="color:red; padding:20px;">Errore: ${e.message}</div>`;
       }
     }
 
     async function forgetWifi(ssid) {
-      if (!confirm(`Dimenticare ${ssid}?`)) return;
-      try { await apiCall(`/system/wifi/${ssid}`, "DELETE"); renderWifiPanel(); }
+      if (!confirm(`Dimenticare e scollegare ${ssid}?`)) return;
+      try { 
+        await apiCall(`/system/wifi/${ssid}`, "DELETE"); 
+        
+        // Se stiamo eliminando la rete attualmente connessa, andiamo offline e deve partire l'overlay
+        const statusText = $('wifi-status-text').textContent;
+        if (statusText.includes(ssid)) {
+            showReconnectOverlay();
+        } else {
+            renderWifiPanel(); 
+        }
+      }
       catch (e) { showToast(e.message); }
     }
 
@@ -928,7 +939,7 @@
         <h2 style="margin-bottom:10px;">Applicazione in corso...</h2>
         <div id="reconnect-timer" style="font-size:2em; font-weight:bold; margin-bottom:20px;">0s</div>
         <div style="font-size:1em; max-width: 300px; text-align:center; margin-bottom: 25px;">
-          Se stavi usando l'Hotspot, assicurati di ricollegare il tuo telefono alla rete Wi-Fi di casa.
+          A seconda dell'operazione di rete, assicurati di collegare il tuo dispositivo allo stesso Wi-Fi del Cucù, oppure alla sua rete fissa d'emergenza.
         </div>
         <button id="reconnect-btn" class="btn btn-primary" style="display:none;" onclick="forceReload()">Ricarica Pagina</button>
       `;
