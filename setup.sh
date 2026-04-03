@@ -86,13 +86,21 @@ NEW_HOSTNAME="cucu-${SUFFIX}"
 CURRENT_HOSTNAME=$(hostname)
 
 if [ "$CURRENT_HOSTNAME" != "$NEW_HOSTNAME" ]; then
-    hostnamectl set-hostname "$NEW_HOSTNAME"
+    # 1. Scrittura diretta (più forte di hostnamectl se ci sono permessi o fallback incerti)
+    echo "$NEW_HOSTNAME" > /etc/hostname
+    # 2. Scrittura tramite tool ufficiale (ignora gli errori se assente)
+    hostnamectl set-hostname "$NEW_HOSTNAME" || true
 
-    # Aggiorna /etc/hosts: rimuove righe 127.0.1.1 esistenti e le ricrea
+    # 3. Disabilita l'override forzato di eventuali sistemi cloud-init (inseriti da RPi Imager)
+    if [ -f /etc/cloud/cloud.cfg ]; then
+        sed -i 's/preserve_hostname: false/preserve_hostname: true/g' /etc/cloud/cloud.cfg 2>/dev/null || true
+    fi
+
+    # 4. Aggiorna /etc/hosts: rimuove righe 127.0.1.1 esistenti e le ricrea
     sed -i '/^127\.0\.1\.1/d' /etc/hosts
     printf '127.0.1.1\t%s\n' "$NEW_HOSTNAME" >> /etc/hosts
 
-    ok "Hostname impostato: ${BOLD}${NEW_HOSTNAME}${NC}"
+    ok "Hostname impostato forzatamente: ${BOLD}${NEW_HOSTNAME}${NC}"
     warn "Il nuovo hostname sarà attivo al prossimo riavvio"
 else
     ok "Hostname già corretto: ${BOLD}${NEW_HOSTNAME}${NC}"
