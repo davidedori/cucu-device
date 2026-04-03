@@ -815,11 +815,11 @@
             const isAp = ssid.endsWith('_AP');
             const btnHtml = isAp 
                 ? `<button class="btn btn-sm" disabled style="opacity:0.3; cursor:not-allowed;">✕</button>`
-                : `<button class="btn btn-danger btn-sm" onclick="forgetWifi('${ssid}')">✕</button>`;
+                : `<button class="btn btn-primary btn-sm" style="margin-right:8px;" onclick="reconnectWifi('${ssid}')">Connetti</button><button class="btn btn-danger btn-sm" onclick="forgetWifi('${ssid}')">✕</button>`;
             
             const el = document.createElement('div');
             el.className = 'list-item';
-            el.innerHTML = `<span>${ssid}</span>${btnHtml}`;
+            el.innerHTML = `<span>${ssid}</span><div style="display:flex;">${btnHtml}</div>`;
             container.appendChild(el);
           });
         }
@@ -854,6 +854,16 @@
       if (!confirm(`Dimenticare ${ssid}?`)) return;
       try { await apiCall(`/system/wifi/${ssid}`, "DELETE"); renderWifiPanel(); }
       catch (e) { showToast(e.message); }
+    }
+
+    async function reconnectWifi(ssid) {
+      showToast("Connessione in corso a " + ssid + "...");
+      try { 
+        await apiCall(`/system/wifi/${ssid}/connect`, "POST", null); 
+        showReconnectOverlay();
+      } catch(e) {
+        showToast("Errore: " + e.message);
+      }
     }
 
     function promptWifi(ssid) {
