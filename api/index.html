@@ -812,9 +812,14 @@
           container.appendChild(title);
 
           data.saved.forEach(ssid => {
+            const isAp = ssid.endsWith('_AP');
+            const btnHtml = isAp 
+                ? `<button class="btn btn-sm" disabled style="opacity:0.3; cursor:not-allowed;">✕</button>`
+                : `<button class="btn btn-danger btn-sm" onclick="forgetWifi('${ssid}')">✕</button>`;
+            
             const el = document.createElement('div');
             el.className = 'list-item';
-            el.innerHTML = `<span>${ssid}</span><button class="btn btn-danger btn-sm" onclick="forgetWifi('${ssid}')">×</button>`;
+            el.innerHTML = `<span>${ssid}</span>${btnHtml}`;
             container.appendChild(el);
           });
         }

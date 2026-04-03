@@ -973,7 +973,7 @@ def forget_wifi(ssid: str):
     """
     Dimentica (elimina) una connessione salvata.
     """
-    if ssid == "Hotspot":
+    if ssid == "Hotspot" or ssid.endswith("_AP"):
         raise HTTPException(status_code=400, detail="Non puoi eliminare l'Hotspot di sistema da qui.")
         
     try:
