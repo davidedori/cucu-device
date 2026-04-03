@@ -32,6 +32,7 @@ restart.log
 # Runtime state (generato automaticamente)
 episode_state.json
 episode_state.json.bak
+last_seen_tag.json
 
 # Contenuto device-specifico — ignorato tutto tranne .gitkeep
 characters/*
