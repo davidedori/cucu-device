@@ -346,20 +346,34 @@ ok "Tema Plymouth attivo: cucu"
 # poi li riscrive — sicuro da eseguire più volte.
 CMDLINE="/boot/firmware/cmdline.txt"
 if [ -f "$CMDLINE" ]; then
-    # Rimuovi parametri Plymouth preesistenti
+    # Rimuovi parametri Plymouth preesistenti (idempotenza)
     sed -i 's/\bquiet\b//g' "$CMDLINE"
     sed -i 's/\bsplash\b//g' "$CMDLINE"
     sed -i 's/loglevel=[0-9]*//g' "$CMDLINE"
     sed -i 's/logo\.nologo//g' "$CMDLINE"
     sed -i 's/vt\.global_cursor_default=[0-9]*//g' "$CMDLINE"
     sed -i 's/plymouth\.ignore-serial-consoles//g' "$CMDLINE"
+    # Reindirizza console da tty1 a tty3 (non visibile su HDMI):
+    # elimina il breve flash di testo tra Plymouth e VLC
+    sed -i 's/console=tty1/console=tty3/g' "$CMDLINE"
     # Pulisci spazi multipli residui
     sed -i 's/  */ /g; s/^ //; s/ $//' "$CMDLINE"
     # Aggiungi i parametri (il file deve restare tutto su una riga)
     sed -i "s/$/ quiet splash loglevel=3 logo.nologo vt.global_cursor_default=0 plymouth.ignore-serial-consoles/" "$CMDLINE"
-    ok "cmdline.txt: parametri Plymouth aggiunti"
+    ok "cmdline.txt: parametri Plymouth aggiunti, console reindirizzata a tty3"
 else
     warn "cmdline.txt non trovato in /boot/firmware/ — aggiungere manualmente: quiet splash loglevel=3 logo.nologo vt.global_cursor_default=0"
+fi
+
+# Disabilita lo splash arcobaleno del firmware Pi (appare prima del kernel)
+CONFIG_TXT="/boot/firmware/config.txt"
+if [ -f "$CONFIG_TXT" ]; then
+    if ! grep -q "^disable_splash=1" "$CONFIG_TXT"; then
+        echo "disable_splash=1" >> "$CONFIG_TXT"
+        ok "config.txt: splash arcobaleno firmware disabilitato"
+    else
+        ok "config.txt: disable_splash già presente"
+    fi
 fi
 
 # Rigenera initramfs per includere Plymouth nell'immagine di avvio precoce.
