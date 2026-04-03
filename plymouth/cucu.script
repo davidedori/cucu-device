@@ -1,0 +1,12 @@
+wallpaper_image = Image("splash.png");
+screen_width = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+if (screen_width == 0 || screen_height == 0) {
+    screen_width = 1920;
+    screen_height = 1080;
+}
+
+resized = wallpaper_image.Scale(screen_width, screen_height);
+sprite = Sprite(resized);
+sprite.SetZ(-100);
