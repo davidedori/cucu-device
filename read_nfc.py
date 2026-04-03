@@ -17,7 +17,7 @@ except ImportError:
 
 # --- CONFIG -------------------------------------------------------------
 
-BASE_DIR = Path("/home/davidedorigatti/cucu-device")
+BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "tags.json"
 CHARACTERS_DIR = BASE_DIR / "characters"
 GRAPHICS_DIR = BASE_DIR / "graphics"
