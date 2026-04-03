@@ -129,7 +129,7 @@ APT_PACKAGES=(
     vlc-bin            # core binaries VLC
     vlc-plugin-base    # plugin base VLC
     libnfc-bin         # nfc-list (usato da read_nfc.py per leggere i tag)
-    fbi                # framebuffer image viewer (splash screen)
+    fbi                # framebuffer image viewer (usato come fallback)
     python3-venv       # per creare il venv dell'API
     python3-pip        # pip
     git                # gestione aggiornamenti
@@ -138,6 +138,8 @@ APT_PACKAGES=(
     dnsmasq-base       # DHCP server per hotspot nmcli
     iptables           # NAT routing per hotspot nmcli
     avahi-daemon       # mDNS: rende raggiungibile <hostname>.local
+    plymouth           # splash screen grafico (avvio silenzioso)
+    plymouth-themes    # temi Plymouth
 )
 
 apt-get install -y -q "${APT_PACKAGES[@]}"
@@ -258,7 +260,6 @@ step "Configurazione e abilitazione servizi systemd"
 SERVICES=(
     cucu-device.service
     cucu-device-api.service
-    splashscreen.service
     cucu-device-updater.service
     cucu-device-updater.timer
 )
@@ -281,10 +282,17 @@ ok "daemon-reload eseguito"
 
 # Abilita i servizi applicativi e il timer OTA
 # Il .service dell'updater NON viene abilitato direttamente (lo lancia il timer)
-for svc in cucu-device.service cucu-device-api.service splashscreen.service; do
+for svc in cucu-device.service cucu-device-api.service; do
     systemctl enable "$svc"
     ok "Abilitato all'avvio: $svc"
 done
+
+# Disabilita splashscreen.service se presente da installazioni precedenti
+if systemctl is-enabled splashscreen.service &>/dev/null; then
+    systemctl disable splashscreen.service || true
+    rm -f /etc/systemd/system/splashscreen.service
+    ok "splashscreen.service rimosso (sostituito da Plymouth)"
+fi
 systemctl enable cucu-device-updater.timer
 ok "Timer OTA abilitato: cucu-device-updater.timer (ogni notte alle 3:00)"
 
@@ -317,6 +325,48 @@ ok "Hotspot configurato: ${NEW_HOSTNAME}_AP (password: cucusetup)"
 # Rimosso Step 11 (Pulizia reti Wi-Fi) per garantire idempotenza secondo CLAUDE.md.
 # La pulizia della rete utente deve essere fatta manualmente pre-consegna tramite:
 # nmcli connection delete NOME_RETE
+
+# =============================================================================
+# STEP 11 — PLYMOUTH (BOOT SILENZIOSO)
+# =============================================================================
+step "Configurazione Plymouth (splash screen al boot)"
+
+PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/cucu"
+mkdir -p "$PLYMOUTH_THEME_DIR"
+cp "$REPO_DIR/plymouth/cucu.plymouth" "$PLYMOUTH_THEME_DIR/"
+cp "$REPO_DIR/plymouth/cucu.script"   "$PLYMOUTH_THEME_DIR/"
+cp "$REPO_DIR/graphics/splash.png"    "$PLYMOUTH_THEME_DIR/"
+ok "Tema Plymouth copiato in: $PLYMOUTH_THEME_DIR"
+
+plymouth-set-default-theme cucu
+ok "Tema Plymouth attivo: cucu"
+
+# Modifica /boot/firmware/cmdline.txt per attivare il boot silenzioso.
+# Idempotente: rimuove prima i parametri eventualmente già presenti,
+# poi li riscrive — sicuro da eseguire più volte.
+CMDLINE="/boot/firmware/cmdline.txt"
+if [ -f "$CMDLINE" ]; then
+    # Rimuovi parametri Plymouth preesistenti
+    sed -i 's/\bquiet\b//g' "$CMDLINE"
+    sed -i 's/\bsplash\b//g' "$CMDLINE"
+    sed -i 's/loglevel=[0-9]*//g' "$CMDLINE"
+    sed -i 's/logo\.nologo//g' "$CMDLINE"
+    sed -i 's/vt\.global_cursor_default=[0-9]*//g' "$CMDLINE"
+    sed -i 's/plymouth\.ignore-serial-consoles//g' "$CMDLINE"
+    # Pulisci spazi multipli residui
+    sed -i 's/  */ /g; s/^ //; s/ $//' "$CMDLINE"
+    # Aggiungi i parametri (il file deve restare tutto su una riga)
+    sed -i "s/$/ quiet splash loglevel=3 logo.nologo vt.global_cursor_default=0 plymouth.ignore-serial-consoles/" "$CMDLINE"
+    ok "cmdline.txt: parametri Plymouth aggiunti"
+else
+    warn "cmdline.txt non trovato in /boot/firmware/ — aggiungere manualmente: quiet splash loglevel=3 logo.nologo vt.global_cursor_default=0"
+fi
+
+# Rigenera initramfs per includere Plymouth nell'immagine di avvio precoce.
+# Può richiedere 30-60 secondi — è normale.
+ok "Rigenerazione initramfs in corso (30-60 secondi)..."
+update-initramfs -u
+ok "initramfs aggiornato"
 
 # =============================================================================
 # RIEPILOGO

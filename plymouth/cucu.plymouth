@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Cucu
+Description=Cucù splash screen
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/cucu
+ScriptFile=/usr/share/plymouth/themes/cucu/cucu.script
