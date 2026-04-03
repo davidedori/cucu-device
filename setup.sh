@@ -190,9 +190,10 @@ else
 fi
 
 # tags.json: preserva la configurazione esistente (tag NFC associati)
+# Non viene più tracciato in git per evitare commit accidentali di dati reali.
 if [ ! -f "$PROJECT_DIR/tags.json" ]; then
-    copy_file "$REPO_DIR/tags.json" "$PROJECT_DIR/tags.json"
-    ok "Copiato: tags.json (primo avvio)"
+    echo '{}' > "$PROJECT_DIR/tags.json"
+    ok "Creato: tags.json vuoto (primo avvio)"
 else
     ok "Mantenuto: tags.json (configurazione esistente preservata)"
 fi
