@@ -44,7 +44,7 @@ Il refactor da "TinyWorlds" a "cucu-device" è stato completato. Tutti i path, n
 
 La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene caricato/salvato in `episode_state.json` (non tracciato in git, specifico del dispositivo).
 
-**`api/main.py`** — server FastAPI (porta 8000), lanciato da `cucu-device-api.service` tramite uvicorn nel venv. Gestisce:
+**`api/main.py`** — server FastAPI (porta 80), lanciato da `cucu-device-api.service` tramite uvicorn nel venv. Gestisce:
 - CRUD personaggi (crea cartella in `characters/`, gestisce `tags.json`)
 - Upload video (chunked, salva in `characters/<nome>/`)
 - Associazione tag NFC a personaggi

@@ -31,7 +31,7 @@ cucu-device/
 ├── setup_hotspot.sh            # Configurazione hotspot Wi-Fi di fallback
 ├── config.env.template         # Template configurazione OTA (copiare in config.env)
 ├── api/
-│   ├── main.py                 # Server FastAPI (porta 8000)
+│   ├── main.py                 # Server FastAPI (porta 80)
 │   └── index.html              # Frontend web (SPA single-file)
 ├── graphics/
 │   ├── idle.png                # Schermata riposo (nessun tag)
@@ -117,7 +117,7 @@ nano ~/cucu-device/config.env
 sudo reboot
 ```
 
-Il dispositivo sarà raggiungibile su `http://cucu-XXXX.local:8000`.
+Il dispositivo sarà raggiungibile su `http://cucu-XXXX.local`.
 
 ---
 
@@ -134,7 +134,7 @@ source venv/bin/activate
 pip install -r ../requirements.txt
 
 # Avvia l'API in modalità sviluppo
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+sudo uvicorn main:app --reload --host 0.0.0.0 --port 80
 ```
 
 Per testare senza il Pi: imposta `BASE_DIR` in `main.py` a una cartella locale con la struttura attesa.
@@ -206,7 +206,7 @@ Configura le reti Wi-Fi dall'interfaccia web (`/api/wifi`).
 | Servizio | Avvio | Descrizione |
 |---|---|---|
 | `cucu-device.service` | boot | NFC reader + VLC player |
-| `cucu-device-api.service` | boot | FastAPI su porta 8000 |
+| `cucu-device-api.service` | boot | FastAPI su porta 80 |
 | `splashscreen.service` | sysinit | Splash PNG su framebuffer |
 | `cucu-device-updater.timer` | boot | Trigger OTA ogni notte alle 3:00 |
 
