@@ -291,7 +291,14 @@ try:
         # 2. Lettura NFC
         uid = read_uid_once()
         has_tag = uid is not None
-        
+
+        # Scrivi l'ultimo tag visto per il wizard di associazione della UI
+        try:
+            with (BASE_DIR / "last_seen_tag.json").open("w") as _f:
+                json.dump({"uid": uid, "ts": time.time()}, _f)
+        except Exception:
+            pass
+
         # Detector cambio rapido (swap senza passare da None visibile)
         tag_swapped = has_tag and had_tag and (uid != last_uid)
         

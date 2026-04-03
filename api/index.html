@@ -361,6 +361,33 @@
       display: none !important;
     }
 
+    /* Scan Tag Wizard */
+    @keyframes scan-pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.15); opacity: 0.7; }
+    }
+
+    .scan-icon {
+      font-size: 48px;
+      display: inline-block;
+      animation: scan-pulse 1.4s ease-in-out infinite;
+    }
+
+    .scan-panel {
+      background: var(--primary-soft);
+      border-radius: 16px;
+      padding: 20px;
+      text-align: center;
+      margin-top: 12px;
+    }
+
+    .scan-status {
+      font-size: 13px;
+      margin: 6px 0 0 0;
+      color: var(--text-soft);
+      min-height: 18px;
+    }
+
     /* Upload Progress */
     .progress-bar {
       height: 6px;
@@ -448,9 +475,18 @@
 
         <div class="section-title">Tag NFC</div>
         <div id="m-tags-list"></div>
-        <div style="display:flex; gap:8px; margin-top:10px;">
+        <div id="m-tag-manual-row" style="display:flex; gap:8px; margin-top:10px;">
           <input type="text" id="m-input-tag" placeholder="UID Tag" style="font-size:14px; padding:8px;">
           <button class="btn btn-primary" onclick="addTagFromModal()">+</button>
+        </div>
+        <button class="btn btn-block" style="margin-top:8px;" onclick="startAddTagWizard()">Scansiona Tag</button>
+
+        <!-- Pannello scan inline (visibile solo durante wizard) -->
+        <div id="m-tag-scan-panel" class="scan-panel hidden">
+          <div class="scan-icon">📡</div>
+          <p style="font-weight:700; margin:10px 0 4px 0; font-size:14px;">Avvicina il tag al lettore</p>
+          <p class="scan-status" id="m-scan-status">In ascolto...</p>
+          <button class="btn" style="margin-top:12px; font-size:13px; padding:6px 14px;" onclick="stopTagScan()">Annulla</button>
         </div>
 
         <div class="section-title">Episodi</div>
@@ -468,6 +504,36 @@
 
         <div style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 20px;">
           <button class="btn btn-danger btn-block" onclick="deleteCharacter()">Elimina Personaggio</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Nuovo Personaggio (wizard 2 step) -->
+  <div class="modal-overlay" id="new-char-modal">
+    <div class="modal" style="max-width:360px;">
+      <div class="modal-header">
+        <div class="modal-title" id="new-char-modal-title">Nuovo Personaggio</div>
+        <button class="modal-close" onclick="closeNewCharModal()">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Step 1: nome -->
+        <div id="new-char-step1">
+          <p style="margin-top:0; color:var(--text-soft); font-size:14px;">Dai un nome al personaggio.</p>
+          <input type="text" id="new-char-name" placeholder="Es. Peppa Pig" onkeydown="if(event.key==='Enter') submitNewChar()">
+          <button class="btn btn-primary btn-block" style="margin-top:12px;" onclick="submitNewChar()">Crea Personaggio</button>
+        </div>
+
+        <!-- Step 2: scan tag -->
+        <div id="new-char-step2" class="hidden">
+          <div class="scan-panel">
+            <div class="scan-icon">📡</div>
+            <p style="font-weight:700; margin:10px 0 4px 0; font-size:15px;">Avvicina il tag al lettore</p>
+            <p class="scan-status" id="nc-scan-status">In ascolto...</p>
+          </div>
+          <button class="btn btn-block" style="margin-top:12px;" onclick="skipTagScan()">Salta — aggiungi il tag dopo</button>
         </div>
 
       </div>
@@ -505,6 +571,12 @@
     let characters = [];
     let selectedCharName = null;
     let pendingWifiSsid = null;
+
+    // Tag scan wizard
+    let tagScanInterval = null;
+    let tagScanTargetChar = null;
+    let tagScanMode = null; // 'new-char' | 'add-tag'
+    let tagScanKnownUids = new Set();
 
     /* --- UI HELPERS --- */
     const $ = (id) => document.getElementById(id);
@@ -556,7 +628,7 @@
       const addCard = document.createElement('div');
       addCard.className = 'card add-card';
       addCard.innerHTML = '<div style="font-size:30px;">+</div><div>Nuovo</div>';
-      addCard.onclick = createNewCharacter;
+      addCard.onclick = openNewCharModal;
       grid.appendChild(addCard);
 
       characters.forEach(char => {
@@ -577,14 +649,139 @@
       });
     }
 
-    async function createNewCharacter() {
-      const name = prompt("Nome del personaggio:");
+    /* --- NUOVO PERSONAGGIO WIZARD --- */
+
+    function openNewCharModal() {
+      $('new-char-step1').classList.remove('hidden');
+      $('new-char-step2').classList.add('hidden');
+      $('new-char-modal-title').textContent = 'Nuovo Personaggio';
+      $('new-char-name').value = '';
+      $('new-char-modal').style.display = 'flex';
+      setTimeout(() => $('new-char-name').focus(), 100);
+    }
+
+    function closeNewCharModal() {
+      stopTagScanInterval();
+      $('new-char-modal').style.display = 'none';
+      tagScanTargetChar = null;
+      tagScanMode = null;
+    }
+
+    async function submitNewChar() {
+      const name = $('new-char-name').value.trim();
       if (!name) return;
       try {
-        await apiCall("/characters", "POST", { name });
-        showToast("Creato!");
+        const char = await apiCall("/characters", "POST", { name });
+        showToast("Personaggio creato!");
         loadCharacters();
-      } catch (e) { showToast("Errore creazione: " + e.message); }
+        // Passa allo step 2: scan tag
+        $('new-char-modal-title').textContent = char.display_name || name;
+        $('new-char-step1').classList.add('hidden');
+        $('new-char-step2').classList.remove('hidden');
+        startTagScan(char.name, 'new-char');
+      } catch (e) {
+        showToast("Errore: " + e.message);
+      }
+    }
+
+    function skipTagScan() {
+      const charName = tagScanTargetChar;
+      closeNewCharModal();
+      if (charName) openCharModal(charName);
+    }
+
+    /* --- TAG SCAN WIZARD (condiviso) --- */
+
+    async function startTagScan(charName, mode) {
+      tagScanTargetChar = charName;
+      tagScanMode = mode;
+      setScanStatus('In ascolto...');
+
+      // Raccoglie gli UID già associati al personaggio prima di iniziare
+      try {
+        const data = await apiCall(`/characters/${charName}`);
+        tagScanKnownUids = new Set(data.tag_uids.map(t => t.uid));
+      } catch (e) {
+        tagScanKnownUids = new Set();
+      }
+
+      tagScanInterval = setInterval(pollTagScan, 600);
+    }
+
+    async function pollTagScan() {
+      try {
+        const data = await apiCall('/system/scan-tag');
+
+        if (!data.uid) {
+          setScanStatus('In ascolto...');
+          return;
+        }
+
+        // Tag già associato a questo personaggio
+        if (tagScanKnownUids.has(data.uid)) {
+          setScanStatus('Tag già associato a questo personaggio.', 'warn');
+          return;
+        }
+
+        // Tag già usato da un altro personaggio
+        if (data.known_character && data.known_character !== tagScanTargetChar) {
+          setScanStatus(`Tag già usato per "${data.known_character}" — avvicinane un altro.`, 'warn');
+          return;
+        }
+
+        // Tag nuovo: associa!
+        stopTagScanInterval();
+        setScanStatus('Tag rilevato! Associazione in corso...', 'ok');
+
+        try {
+          await apiCall(`/characters/${tagScanTargetChar}/tags`, 'POST', { uid: data.uid });
+          showToast('Tag aggiunto!');
+
+          if (tagScanMode === 'new-char') {
+            const charName = tagScanTargetChar;
+            closeNewCharModal();
+            openCharModal(charName);
+          } else if (tagScanMode === 'add-tag') {
+            stopTagScan();
+            openCharModal(tagScanTargetChar);
+          }
+        } catch (e) {
+          setScanStatus('Errore: ' + e.message, 'error');
+        }
+      } catch (e) {
+        // Ignore errori di rete durante il polling
+      }
+    }
+
+    function stopTagScanInterval() {
+      if (tagScanInterval) {
+        clearInterval(tagScanInterval);
+        tagScanInterval = null;
+      }
+    }
+
+    function stopTagScan() {
+      stopTagScanInterval();
+      $('m-tag-scan-panel').classList.add('hidden');
+      tagScanTargetChar = null;
+      tagScanMode = null;
+    }
+
+    function setScanStatus(msg, type) {
+      const elId = tagScanMode === 'new-char' ? 'nc-scan-status' : 'm-scan-status';
+      const el = $(elId);
+      if (!el) return;
+      el.textContent = msg;
+      el.style.color = type === 'warn' ? 'var(--danger)'
+                      : type === 'ok' ? '#16a34a'
+                      : 'var(--text-soft)';
+    }
+
+    async function startAddTagWizard() {
+      if (!selectedCharName) return;
+      $('m-tag-scan-panel').classList.remove('hidden');
+      $('m-tag-scan-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      await startTagScan(selectedCharName, 'add-tag');
     }
 
     /* --- MODAL LOGIC --- */
@@ -645,6 +842,7 @@
     }
 
     function closeModal() {
+      stopTagScan();
       $('char-modal').style.display = 'none';
       selectedCharName = null;
       loadCharacters(); // refresh grid stats

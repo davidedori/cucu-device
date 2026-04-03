@@ -462,6 +462,36 @@ def delete_character_tag(name: str, uid: str):
     save_tags(tags_map)
 
     return {"character": name, "uid": uid_norm, "status": "removed"}
+
+LAST_SEEN_TAG_FILE = BASE_DIR / "last_seen_tag.json"
+
+@app.get("/system/scan-tag")
+def scan_tag():
+    """
+    Legge l'ultimo tag visto dal lettore NFC (scritto da read_nfc.py).
+    Usato dal wizard di associazione nella UI.
+    Ritorna None se non c'è nessun tag o se il dato è troppo vecchio (>3s).
+    """
+    if not LAST_SEEN_TAG_FILE.exists():
+        return {"uid": None, "known_character": None}
+
+    try:
+        with LAST_SEEN_TAG_FILE.open() as f:
+            data = json.load(f)
+    except Exception:
+        return {"uid": None, "known_character": None}
+
+    uid = data.get("uid")
+    ts = data.get("ts", 0)
+
+    if uid is None or (time.time() - ts) > 3:
+        return {"uid": None, "known_character": None}
+
+    tags_map = load_tags()
+    known_character = tags_map.get(uid)
+
+    return {"uid": uid, "known_character": known_character}
+
 @app.get("/characters/{name}/episodes")
 def get_character_episodes(name: str):
     """
