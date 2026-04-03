@@ -18,7 +18,7 @@ API_DIR = Path(__file__).resolve().parent
 app = FastAPI()
 
 # Percorsi base (stessi del tuo script NFC)
-BASE_DIR = Path("/home/davidedorigatti/cucu-device")
+BASE_DIR = API_DIR.parent
 CHARACTERS_DIR = BASE_DIR / "characters"
 EPISODE_STATE_FILE = BASE_DIR / "episode_state.json"
 TAGS_FILE = BASE_DIR / "tags.json"

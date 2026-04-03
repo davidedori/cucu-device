@@ -204,7 +204,13 @@ _apply_service_files() {
     for svc in cucu-device.service cucu-device-api.service splashscreen.service \
                cucu-device-updater.service cucu-device-updater.timer; do
         if [ -f "$PROJECT_DIR/systemd/$svc" ]; then
-            cp "$PROJECT_DIR/systemd/$svc" "/etc/systemd/system/$svc"
+            local _uid
+            _uid="$(id -u "$DEPLOY_USER")"
+            sed \
+                -e "s|/home/davidedorigatti/|/home/${DEPLOY_USER}/|g" \
+                -e "s|User=davidedorigatti|User=${DEPLOY_USER}|g" \
+                -e "s|__DEPLOY_UID__|${_uid}|g" \
+                "$PROJECT_DIR/systemd/$svc" > "/etc/systemd/system/$svc"
             changed=1
         fi
     done

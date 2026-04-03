@@ -252,9 +252,17 @@ SERVICES=(
     cucu-device-updater.timer
 )
 
+DEPLOY_UID="$(id -u "$DEPLOY_USER")"
 for svc in "${SERVICES[@]}"; do
-    copy_file "$REPO_DIR/systemd/$svc" "/etc/systemd/system/$svc"
-    ok "Installato: $svc"
+    # Sostituisce i placeholder con i valori effettivi del dispositivo:
+    #   davidedorigatti → utente reale
+    #   __DEPLOY_UID__  → UID numerico (per XDG_RUNTIME_DIR)
+    sed \
+        -e "s|/home/davidedorigatti/|/home/${DEPLOY_USER}/|g" \
+        -e "s|User=davidedorigatti|User=${DEPLOY_USER}|g" \
+        -e "s|__DEPLOY_UID__|${DEPLOY_UID}|g" \
+        "$REPO_DIR/systemd/$svc" > "/etc/systemd/system/$svc"
+    ok "Installato: $svc (user=${DEPLOY_USER}, uid=${DEPLOY_UID})"
 done
 
 systemctl daemon-reload
