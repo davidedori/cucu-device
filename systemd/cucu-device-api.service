@@ -3,10 +3,11 @@ Description=cucu-device API (FastAPI server)
 After=network.target
 
 [Service]
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 User=davidedorigatti
 WorkingDirectory=/home/davidedorigatti/cucu-device/api
 
-ExecStart=/home/davidedorigatti/cucu-device/api/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+ExecStart=/home/davidedorigatti/cucu-device/api/venv/bin/uvicorn main:app --host 0.0.0.0 --port 80
 
 Restart=always
 RestartSec=3
