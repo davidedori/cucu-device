@@ -101,8 +101,15 @@ had_tag = False
 EPISODE_STATE_FILE = BASE_DIR / "episode_state.json"
 episode_state = {} 
 
-with CONFIG_PATH.open() as f:
-    tag_map = json.load(f)
+try:
+    with CONFIG_PATH.open() as f:
+        tag_map = json.load(f)
+except FileNotFoundError:
+    print(f"[WARN] {CONFIG_PATH} non trovato, parto con mappa vuota.")
+    tag_map = {}
+except json.JSONDecodeError as e:
+    print(f"[ERROR] {CONFIG_PATH} corrotto ({e}), parto con mappa vuota.")
+    tag_map = {}
 
 # --- FUNZIONI EPISODI ---------------------------------------------------
 
