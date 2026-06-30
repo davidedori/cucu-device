@@ -1,4 +1,6 @@
-wallpaper_image = Image("splash.png");
+// Cucu boot splash: sequenza di 5 immagini con durate custom.
+// Plymouth chiama refresh() ~50 volte al secondo.
+
 screen_width = Window.GetWidth();
 screen_height = Window.GetHeight();
 
@@ -7,6 +9,36 @@ if (screen_width == 0 || screen_height == 0) {
     screen_height = 1080;
 }
 
-resized = wallpaper_image.Scale(screen_width, screen_height);
-sprite = Sprite(resized);
+// Carica e scala i 5 frame
+frames = [];
+frames[0] = Image("boot_01.png").Scale(screen_width, screen_height);
+frames[1] = Image("boot_02.png").Scale(screen_width, screen_height);
+frames[2] = Image("boot_03.png").Scale(screen_width, screen_height);
+frames[3] = Image("boot_04.png").Scale(screen_width, screen_height);
+frames[4] = Image("boot_05.png").Scale(screen_width, screen_height);
+
+// Durate in tick (50 tick = 1 secondo)
+//   frame 0: 3.0s = 150
+//   frame 1: 0.2s = 10
+//   frame 2: 3.0s = 150
+//   frame 3: 3.0s = 150
+//   frame 4: 3.0s = 150  (poi resta fisso finché Plymouth è attivo)
+durations = [150, 10, 150, 150, 150];
+
+sprite = Sprite(frames[0]);
 sprite.SetZ(-100);
+
+current_frame = 0;
+tick_counter = 0;
+n_frames = 5;
+
+fun refresh() {
+    sprite.SetImage(frames[current_frame]);
+    tick_counter++;
+    if (tick_counter >= durations[current_frame]) {
+        tick_counter = 0;
+        current_frame = (current_frame + 1) % n_frames;
+    }
+}
+
+Plymouth.SetRefreshFunction(refresh);
