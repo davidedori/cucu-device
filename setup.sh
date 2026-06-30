@@ -335,6 +335,7 @@ PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/cucu"
 mkdir -p "$PLYMOUTH_THEME_DIR"
 cp "$REPO_DIR/plymouth/cucu.plymouth" "$PLYMOUTH_THEME_DIR/"
 cp "$REPO_DIR/plymouth/cucu.script"   "$PLYMOUTH_THEME_DIR/"
+cp "$REPO_DIR/plymouth/"*.png         "$PLYMOUTH_THEME_DIR/" 2>/dev/null || true
 cp "$REPO_DIR/graphics/splash.png"    "$PLYMOUTH_THEME_DIR/"
 ok "Tema Plymouth copiato in: $PLYMOUTH_THEME_DIR"
 
