@@ -1,5 +1,5 @@
-// Cucu boot splash: sequenza di 5 immagini con durate custom.
-// Plymouth chiama refresh() ~50 volte al secondo.
+// Cucu boot splash: 5-frame animation, time-based (loop infinito).
+// Usa SetBootProgressFunction: duration = secondi reali dall'inizio del boot.
 
 screen_width = Window.GetWidth();
 screen_height = Window.GetHeight();
@@ -9,7 +9,6 @@ if (screen_width == 0 || screen_height == 0) {
     screen_height = 1080;
 }
 
-// Carica e scala i 5 frame
 frames = [];
 frames[0] = Image("boot_01.png").Scale(screen_width, screen_height);
 frames[1] = Image("boot_02.png").Scale(screen_width, screen_height);
@@ -17,29 +16,33 @@ frames[2] = Image("boot_03.png").Scale(screen_width, screen_height);
 frames[3] = Image("boot_04.png").Scale(screen_width, screen_height);
 frames[4] = Image("boot_05.png").Scale(screen_width, screen_height);
 
-// Durate in tick. Plymouth refresh rate varia per hardware:
-// assumendo ~25Hz reali sul target Pi, 25 tick ≈ 1 secondo.
-//   frame 0: 3.0s
-//   frame 1: 0.2s
-//   frame 2: 3.0s
-//   frame 3: 3.0s
-//   frame 4: 3.0s
-durations = [75, 5, 75, 75, 75];
+// Durate in secondi reali
+durations_sec = [3.0, 0.2, 3.0, 3.0, 3.0];
+total_duration = 12.2;
+n_frames = 5;
 
 sprite = Sprite(frames[0]);
 sprite.SetZ(-100);
 
-current_frame = 0;
-tick_counter = 0;
-n_frames = 5;
-
-fun refresh() {
-    sprite.SetImage(frames[current_frame]);
-    tick_counter++;
-    if (tick_counter >= durations[current_frame]) {
-        tick_counter = 0;
-        current_frame = (current_frame + 1) % n_frames;
+fun pick_frame(t) {
+    // Ripiega t in [0, total_duration) per il loop
+    while (t >= total_duration) {
+        t = t - total_duration;
     }
+    cumulative = 0;
+    cumulative = cumulative + durations_sec[0];
+    if (t < cumulative) return 0;
+    cumulative = cumulative + durations_sec[1];
+    if (t < cumulative) return 1;
+    cumulative = cumulative + durations_sec[2];
+    if (t < cumulative) return 2;
+    cumulative = cumulative + durations_sec[3];
+    if (t < cumulative) return 3;
+    return 4;
 }
 
-Plymouth.SetRefreshFunction(refresh);
+fun on_boot_progress(duration, progress) {
+    sprite.SetImage(frames[pick_frame(duration)]);
+}
+
+Plymouth.SetBootProgressFunction(on_boot_progress);
