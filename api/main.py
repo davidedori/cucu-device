@@ -100,7 +100,6 @@ def list_characters():
             continue
 
         name = char_dir.name  # es. "peppa"
-        name = char_dir.name  # es. "peppa"
         state = episode_state.get(name, {})
         known = state.get("known", [])
         remaining = state.get("remaining", [])
@@ -338,11 +337,6 @@ def get_character(name: str):
                 "seen": fname in seen,
             }
         })
-
-    # Statistiche (basate solo su file realmente presenti)
-    total_episodes = len(file_names)
-    remaining_count = len([f for f in remaining if f in file_names])
-    seen_count = len([f for f in seen if f in file_names])
 
     # Statistiche (basate solo su file realmente presenti)
     total_episodes = len(file_names)
@@ -590,11 +584,14 @@ async def upload_character_episodes(
         if original_name not in remaining:
             remaining.append(original_name)
 
-    episode_state[name] = {
+    new_state = {
         "known": known,
         "remaining": remaining,
         "seen": seen,
     }
+    if "display_name" in state:
+        new_state["display_name"] = state["display_name"]
+    episode_state[name] = new_state
     save_episode_state(episode_state)
 
     return {
@@ -653,11 +650,14 @@ def rename_character_episode(name: str, filename: str, payload: EpisodeRename):
     remaining = [new_name if f == old_name else f for f in state.get("remaining", [])]
     seen = [new_name if f == old_name else f for f in state.get("seen", [])]
 
-    episode_state[name] = {
+    new_state = {
         "known": known,
         "remaining": remaining,
         "seen": seen,
     }
+    if "display_name" in state:
+        new_state["display_name"] = state["display_name"]
+    episode_state[name] = new_state
     save_episode_state(episode_state)
 
     return {
@@ -693,11 +693,14 @@ def delete_character_episode(name: str, filename: str):
     remaining = [f for f in state.get("remaining", []) if f != file_name]
     seen = [f for f in state.get("seen", []) if f != file_name]
 
-    episode_state[name] = {
+    new_state = {
         "known": known,
         "remaining": remaining,
         "seen": seen,
     }
+    if "display_name" in state:
+        new_state["display_name"] = state["display_name"]
+    episode_state[name] = new_state
     save_episode_state(episode_state)
 
     return {
@@ -935,9 +938,6 @@ def list_wifi():
         "scan": scan_results
     }
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
-
-# ... (rest of imports)
 
 def _connect_wifi_task(ssid: str, password: str):
     """Logica di connessione eseguita in background."""
