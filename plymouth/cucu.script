@@ -17,13 +17,14 @@ frames[2] = Image("boot_03.png").Scale(screen_width, screen_height);
 frames[3] = Image("boot_04.png").Scale(screen_width, screen_height);
 frames[4] = Image("boot_05.png").Scale(screen_width, screen_height);
 
-// Durate in tick (50 tick = 1 secondo)
-//   frame 0: 3.0s = 150
-//   frame 1: 0.2s = 10
-//   frame 2: 3.0s = 150
-//   frame 3: 3.0s = 150
-//   frame 4: 3.0s = 150  (poi resta fisso finché Plymouth è attivo)
-durations = [150, 10, 150, 150, 150];
+// Durate in tick. Plymouth refresh rate varia per hardware:
+// assumendo ~25Hz reali sul target Pi, 25 tick ≈ 1 secondo.
+//   frame 0: 3.0s
+//   frame 1: 0.2s
+//   frame 2: 3.0s
+//   frame 3: 3.0s
+//   frame 4: 3.0s
+durations = [75, 5, 75, 75, 75];
 
 sprite = Sprite(frames[0]);
 sprite.SetZ(-100);
