@@ -20,11 +20,11 @@ Il progetto è in fase prototipo/early product. Il codice è funzionante e viene
 
 ## Stato attuale
 
-- **Versione corrente:** `0.1.0` (vedi `VERSION` e `version.json`)
+- **Versione corrente:** vedi `VERSION` e `version.json` (aggiornata ad ogni rilascio, non tenerla allineata qui)
 - **Branch attivi:**
   - `main` — codice stabile, canale OTA `stable`
   - `dev` — sviluppo attivo, canale OTA `beta`
-- **Hardware di riferimento:** Raspberry Pi 4, lettore NFC ACR122U, TV via HDMI
+- **Hardware di riferimento:** Raspberry Pi Zero 2 W (512MB RAM fisici, ~415MB disponibili dopo lo split GPU — dispositivo molto vincolato in RAM, non un Pi 4), lettore NFC ACR122U, TV via HDMI
 - **OS:** Debian GNU/Linux 13 (trixie), kernel 6.12 aarch64
 - **Python:** 3.13.5
 
