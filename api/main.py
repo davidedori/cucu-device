@@ -573,9 +573,18 @@ async def upload_character_episodes(
                 detail=f"Esiste già un file chiamato '{original_name}' per '{name}'."
             )
 
-        with dest_path.open("wb") as f:
-            while chunk := await upload.read(1024 * 1024):
-                f.write(chunk)
+        # Scrive su file temporaneo e rinomina solo a copia completata:
+        # se il processo crasha a metà scrittura (es. OOM), non lascia un
+        # file parziale che blocchi i tentativi successivi con "esiste già".
+        tmp_path = dest_path.with_name(dest_path.name + ".part")
+        try:
+            with tmp_path.open("wb") as f:
+                while chunk := await upload.read(1024 * 1024):
+                    f.write(chunk)
+            tmp_path.rename(dest_path)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
 
         saved_files.append(original_name)
 
