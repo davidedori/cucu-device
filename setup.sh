@@ -366,6 +366,13 @@ else
     warn "cmdline.txt non trovato in /boot/firmware/ — aggiungere manualmente: quiet splash loglevel=3 logo.nologo vt.global_cursor_default=0"
 fi
 
+# Maschera getty@tty1: tty1 è la VT collegata al display fisico (Plymouth + VLC
+# disegnano lì). Se il getty resta attivo, ogni volta che VLC si riavvia o
+# crasha per un istante la VT torna al prompt "login:" sopra la UI grafica.
+# mask (non solo disable) evita anche l'avvio automatico via autovt.
+systemctl mask getty@tty1.service
+ok "getty@tty1 mascherato (evita il prompt di login sopra la UI grafica)"
+
 # Disabilita lo splash arcobaleno del firmware Pi (appare prima del kernel)
 CONFIG_TXT="/boot/firmware/config.txt"
 if [ -f "$CONFIG_TXT" ]; then
