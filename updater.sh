@@ -182,6 +182,9 @@ rollback() {
     # Ripristina anche i file di servizio del vecchio commit
     _apply_service_files
 
+    # Ripristina anche il tema Plymouth del vecchio commit
+    _apply_plymouth_theme
+
     # Ripristina file utente
     _restore_volatile_files
 
@@ -217,6 +220,37 @@ _apply_service_files() {
     if [ "$changed" -eq 1 ]; then
         systemctl daemon-reload
         ok "File di servizio systemd aggiornati"
+    fi
+}
+
+# ---- HELPER: SINCRONIZZA TEMA PLYMOUTH --------------------------------------
+# setup.sh copia plymouth/*.png + cucu.script in /usr/share/plymouth/themes/cucu
+# e rigenera l'initramfs, ma setup.sh non viene rieseguito dall'OTA automatico.
+# Senza questo passaggio, un aggiornamento che cambia i frame di boot lascia il
+# tema installato (e l'initramfs) disallineato dal repo: al boot successivo
+# Plymouth cerca frame che non corrispondono più a quelli attesi dallo script.
+_apply_plymouth_theme() {
+    local theme_dir="/usr/share/plymouth/themes/cucu"
+    if [ ! -d "$PROJECT_DIR/plymouth" ]; then
+        return
+    fi
+    mkdir -p "$theme_dir"
+    cp "$PROJECT_DIR/plymouth/cucu.plymouth" "$theme_dir/" 2>>"$LOG_FILE" || true
+    cp "$PROJECT_DIR/plymouth/cucu.script"   "$theme_dir/" 2>>"$LOG_FILE" || true
+    # Rimuove i frame vecchi prima di ricopiare: evita che un cambio nel numero
+    # di frame lasci file orfani non referenziati (o mancanti) nel tema attivo.
+    rm -f "$theme_dir"/boot_*.png
+    cp "$PROJECT_DIR/plymouth/"*.png "$theme_dir/" 2>>"$LOG_FILE" || true
+    if [ -f "$PROJECT_DIR/graphics/splash.png" ]; then
+        cp "$PROJECT_DIR/graphics/splash.png" "$theme_dir/" 2>>"$LOG_FILE" || true
+    fi
+    ok "Tema Plymouth risincronizzato in $theme_dir"
+
+    log "Rigenerazione initramfs (30-60s)..."
+    if update-initramfs -u 2>>"$LOG_FILE"; then
+        ok "initramfs aggiornato"
+    else
+        warn "update-initramfs fallito — il tema Plymouth potrebbe non essere aggiornato al prossimo boot"
     fi
 }
 
@@ -262,6 +296,9 @@ fi
 
 # ---- AGGIORNA FILE DI SERVIZIO SYSTEMD -------------------------------------
 _apply_service_files
+
+# ---- SINCRONIZZA TEMA PLYMOUTH ----------------------------------------------
+_apply_plymouth_theme
 
 # ---- RIAVVIA SERVIZI --------------------------------------------------------
 log "Riavvio servizi..."
