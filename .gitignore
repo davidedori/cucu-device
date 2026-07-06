@@ -29,6 +29,9 @@ logs/
 *.log
 restart.log
 
+# Staging temporaneo upload video (TMPDIR dell'API, vedi cucu-device-api.service)
+tmp_uploads/
+
 # Runtime state (generato automaticamente)
 episode_state.json
 episode_state.json.bak

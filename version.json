@@ -1,5 +1,5 @@
 {
-  "version": "0.1.2",
+  "version": "0.1.3",
   "min_version": "0.1.0",
-  "changelog": "Fix: sync Plymouth boot theme on OTA update, mask getty@tty1 to stop login prompt over idle screen"
+  "changelog": "Fix: video uploads staged on disk (TMPDIR) instead of /tmp RAM, prevents OOM crash of VLC during episode upload"
 }
