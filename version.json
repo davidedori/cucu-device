@@ -1,5 +1,5 @@
 {
-  "version": "0.1.1",
+  "version": "0.1.2",
   "min_version": "0.1.0",
-  "changelog": "Fix SSH disconnect, enable hotspot DHCP, API on port 80"
+  "changelog": "Fix: sync Plymouth boot theme on OTA update, mask getty@tty1 to stop login prompt over idle screen"
 }
