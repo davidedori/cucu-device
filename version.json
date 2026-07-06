@@ -1,5 +1,5 @@
 {
-  "version": "0.1.3",
+  "version": "0.1.4",
   "min_version": "0.1.0",
-  "changelog": "Fix: video uploads staged on disk (TMPDIR) instead of /tmp RAM, prevents OOM crash of VLC during episode upload"
+  "changelog": "Fix: failed episode upload no longer leaves a partial file that blocks retries with 'file already exists'"
 }
