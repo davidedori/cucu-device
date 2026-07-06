@@ -156,6 +156,7 @@ DIRS=(
     "$PROJECT_DIR/characters"
     "$PROJECT_DIR/graphics"
     "$PROJECT_DIR/logs"
+    "$PROJECT_DIR/tmp_uploads"  # staging upload video: deve stare su disco, non su /tmp (spesso tmpfs/RAM)
 )
 
 for dir in "${DIRS[@]}"; do
