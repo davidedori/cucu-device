@@ -343,6 +343,38 @@ ok "Tema Plymouth copiato in: $PLYMOUTH_THEME_DIR"
 plymouth-set-default-theme cucu
 ok "Tema Plymouth attivo: cucu"
 
+# DeviceTimeout di default (8s, non impostato esplicitamente) e' troppo corto
+# su questo hardware: vc4-drm/HDMI a volte non risulta ancora "inizializzato"
+# secondo udev quando il timeout scade, e Plymouth rinuncia al tema grafico
+# cucu per il fallback testuale (systemd-style, a schermo, per tutto il boot)
+# invece di aspettare ancora qualche istante. Margine ampio per assorbire la
+# variabilita' di boot in boot (confermato via log plymouth.debug).
+#
+# L'inserimento DEVE andare dopo la riga "Theme=", non prima: l'hook
+# initramfs-tools di plymouth determina il tema da includere chiamando
+# `plymouth-set-default-theme` senza argomenti, che legge il tema da questo
+# file con un awk che considera solo il PRIMO campo della sezione [Daemon]
+# (assume che sia "Theme="). Se DeviceTimeout finisce prima, quel parser non
+# trova più "Theme" come primo campo, ritorna vuoto, e l'hook include il tema
+# di fallback "text" invece di "cucu" nell'initramfs — verificato dal vivo.
+PLYMOUTHD_CONF="/etc/plymouth/plymouthd.conf"
+if grep -q '^DeviceTimeout' "$PLYMOUTHD_CONF" 2>/dev/null; then
+    sed -i -E 's/^DeviceTimeout[[:blank:]]*=.*/DeviceTimeout=20/' "$PLYMOUTHD_CONF"
+else
+    sed -i -e '/^Theme=/a DeviceTimeout=20' "$PLYMOUTHD_CONF"
+fi
+ok "plymouthd.conf: DeviceTimeout impostato a 20s"
+
+# /boot/firmware resta montata read-only in condizioni normali (vedi fstab più
+# sotto): un power-cycle a freddo (staccare la spina, il modo in cui i
+# genitori spengono il dispositivo) lascia questa partizione FAT32 "dirty" se
+# era montata rw, e il bootloader del Pi (gira prima di Linux/fsck, con un suo
+# driver FAT che ignora il dirty bit) può leggere un initramfs incoerente al
+# boot successivo — schermata grigia al posto dell'animazione invece
+# dell'errore visibile che ci si aspetterebbe. La rimettiamo rw solo per
+# questo step che ci scrive sopra.
+mount -o remount,rw /boot/firmware || warn "remount rw di /boot/firmware fallito"
+
 # Modifica /boot/firmware/cmdline.txt per attivare il boot silenzioso.
 # Idempotente: rimuove prima i parametri eventualmente già presenti,
 # poi li riscrive — sicuro da eseguire più volte.
@@ -390,6 +422,18 @@ fi
 ok "Rigenerazione initramfs in corso (30-60 secondi)..."
 update-initramfs -u
 ok "initramfs aggiornato"
+
+# Imposta /boot/firmware read-only in fstab (idempotente) e rimonta subito:
+# da qui in poi resta rw solo per i pochi secondi in cui setup.sh/updater.sh
+# ci scrivono sopra esplicitamente.
+FSTAB="/etc/fstab"
+if grep -qE '/boot/firmware\s+vfat\s+defaults\s' "$FSTAB"; then
+    sed -i -E 's|(/boot/firmware\s+vfat\s+)defaults(\s)|\1defaults,ro\2|' "$FSTAB"
+    ok "fstab: /boot/firmware impostata read-only"
+else
+    ok "fstab: /boot/firmware già configurata (nessuna modifica)"
+fi
+mount -o remount,ro /boot/firmware || warn "remount ro di /boot/firmware fallito"
 
 # =============================================================================
 # RIEPILOGO

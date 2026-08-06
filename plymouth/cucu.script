@@ -17,8 +17,8 @@ frames[3] = Image("boot_04.png").Scale(screen_width, screen_height);
 frames[4] = Image("boot_05.png").Scale(screen_width, screen_height);
 
 // Durate in secondi reali
-durations_sec = [3.0, 0.2, 3.0, 3.0, 3.0];
-total_duration = 12.2;
+durations_sec = [1.5, 0.1, 1.5, 1.5, 1.5];
+total_duration = 6.1;
 n_frames = 5;
 
 sprite = Sprite(frames[0]);
