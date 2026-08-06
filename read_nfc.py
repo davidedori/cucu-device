@@ -580,9 +580,11 @@ try:
                     print(f"Tag sconosciuto: {uid}")
             elif tag_removed:
                 refresh_graphic(IDLE_IMAGE) # Torna a idle puro se tolto tag sconosciuto
-            elif has_tag and current_graphic_path != WAIT_NEXT_IMAGE:
-                 # Se c'è tag (e non è partito video per qualche motivo), mostra wait
-                 refresh_graphic(WAIT_NEXT_IMAGE)
+            elif has_tag and current_graphic_path != IDLE_IMAGE:
+                 # Tag presente ma nessun video partito (tag sconosciuto o
+                 # bloccato dai limiti di tempo). Placeholder: stessa immagine
+                 # dell'idle, in attesa di una grafica dedicata.
+                 refresh_graphic(IDLE_IMAGE)
 
         elif mode == "playing":
             if tag_removed:
