@@ -1,5 +1,5 @@
 {
-  "version": "0.1.4",
+  "version": "0.1.5",
   "min_version": "0.1.0",
-  "changelog": "Fix: failed episode upload no longer leaves a partial file that blocks retries with 'file already exists'"
+  "changelog": "Fix: Plymouth boot theme not activated by OTA updates, causing the default grey splash instead of the Cucu boot animation"
 }

@@ -246,6 +246,17 @@ _apply_plymouth_theme() {
     fi
     ok "Tema Plymouth risincronizzato in $theme_dir"
 
+    # setup.sh imposta "cucu" come tema di default alla prima installazione, ma
+    # l'OTA non richiama setup.sh: su un dispositivo aggiornato via OTA da una
+    # versione pre-Plymouth (o con il tema resettato da un upgrade di pacchetti
+    # di sistema) il tema attivo resterebbe quello di default di Debian, con i
+    # frame cucu sincronizzati su disco ma mai mostrati al boot. Idempotente.
+    if plymouth-set-default-theme cucu 2>>"$LOG_FILE"; then
+        ok "Tema Plymouth impostato come default: cucu"
+    else
+        warn "plymouth-set-default-theme fallito — il tema cucu potrebbe non essere attivo al prossimo boot"
+    fi
+
     log "Rigenerazione initramfs (30-60s)..."
     if update-initramfs -u 2>>"$LOG_FILE"; then
         ok "initramfs aggiornato"
