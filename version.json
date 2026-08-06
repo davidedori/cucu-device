@@ -1,5 +1,5 @@
 {
-  "version": "0.1.6",
+  "version": "0.1.7",
   "min_version": "0.1.0",
-  "changelog": "Fix: cucu-device.service could lose the race against systemd's plymouth-quit.service, showing a grey screen instead of the boot animation on some reboots"
+  "changelog": "Fix: plymouth quit --retain-splash silently failed (ran as unprivileged user, no access to the daemon control socket), leaving a grey screen instead of the frozen boot animation before the app takes over"
 }

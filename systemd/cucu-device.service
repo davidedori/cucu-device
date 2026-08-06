@@ -13,7 +13,12 @@ Before=plymouth-quit.service plymouth-quit-wait.service
 Type=simple
 User=davidedorigatti
 Environment=XDG_RUNTIME_DIR=/run/user/__DEPLOY_UID__ TERM=linux
-ExecStartPre=-/usr/bin/plymouth quit --retain-splash
+# "+" fa girare questo comando come root ignorando lo User= del servizio:
+# plymouth quit --retain-splash richiede l'accesso al socket di controllo
+# del demone (root-only, nessun gruppo "plymouth" delegato su questo sistema)
+# e altrimenti fallisce sempre in silenzio (mascherato dal "-"), lasciando
+# lo schermo grigio invece di congelare l'ultimo frame dell'animazione.
+ExecStartPre=-+/usr/bin/plymouth quit --retain-splash
 ExecStart=/usr/bin/python3 -u /home/davidedorigatti/cucu-device/read_nfc.py
 WorkingDirectory=/home/davidedorigatti/cucu-device
 StandardOutput=journal
