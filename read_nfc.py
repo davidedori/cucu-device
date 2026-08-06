@@ -28,6 +28,8 @@ DAILY_USAGE_PATH = BASE_DIR / "daily_usage.json"
 NFCLIST_PATH = "/usr/bin/nfc-list"
 IDLE_IMAGE = GRAPHICS_DIR / "idle.png"
 WAIT_NEXT_IMAGE = GRAPHICS_DIR / "wait_next.png"
+HOURGLASS_DIR = GRAPHICS_DIR / "hourglass"
+HOURGLASS_LEVELS = 10  # 0 = vuoto/limite raggiunto, 9 = pieno
 
 VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v"}
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -48,14 +50,17 @@ class CucuPlayer:
             "--no-video-title-show",
             "--quiet",
             "--mouse-hide-timeout=0",
-            "--image-duration=-1" 
+            "--image-duration=-1",
+            "--sub-source=logo",
         )
         self.player = self.instance.media_player_new()
         # Event manager per intercettare fine video
         self.events = self.player.event_manager()
         self.events.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_end)
-        
+
         self.has_ended = False
+        self._hourglass_level = None
+        self._logo_configured = False
 
     def _on_end(self, event):
         self.has_ended = True
@@ -84,13 +89,39 @@ class CucuPlayer:
 
     def check_ended(self):
         """Ritorna True se il media (video) è finito."""
-        # Nota: per le immagini con duration -1 non finirà mai, 
+        # Nota: per le immagini con duration -1 non finirà mai,
         # ma per i video useremo i callback o lo stato
         if self.has_ended:
             self.has_ended = False # reset
             return True
         # Alternativa polling
         return self.player.get_state() == vlc.State.Ended
+
+    def set_hourglass_level(self, level):
+        """Mostra/aggiorna l'overlay 'clessidra' sopra il video corrente
+        (0=vuoto/limite raggiunto .. 9=pieno), o lo nasconde se level è None.
+        Usa il filtro logo di VLC (renderizza dentro VLC stesso: è l'unico modo
+        di sovrapporre qualcosa a un video fullscreen senza un compositor).
+        Best-effort: se l'API logo non è disponibile su questa build di
+        python-vlc, fallisce silenziosamente senza toccare la riproduzione."""
+        if level == self._hourglass_level:
+            return
+        self._hourglass_level = level
+        try:
+            if level is None:
+                self.player.video_set_logo_int(vlc.VideoLogoOption.enable, 0)
+                return
+            path = HOURGLASS_DIR / f"hourglass_{level}.png"
+            if not path.exists():
+                return
+            if not self._logo_configured:
+                self.player.video_set_logo_int(vlc.VideoLogoOption.position, 6)  # top-right
+                self.player.video_set_logo_int(vlc.VideoLogoOption.opacity, 200)
+                self._logo_configured = True
+            self.player.video_set_logo_string(vlc.VideoLogoOption.file, str(path))
+            self.player.video_set_logo_int(vlc.VideoLogoOption.enable, 1)
+        except Exception as e:
+            print(f"[WARN] Overlay clessidra non disponibile: {e}")
 
 # --- STATO GLOBALE ------------------------------------------------------
 
@@ -313,6 +344,52 @@ def is_viewing_allowed_now(character: str):
 
     return True, None
 
+def _compute_hourglass_level(character):
+    """Ritorna il livello clessidra (0=vuoto..9=pieno) da mostrare durante la
+    riproduzione, in base al limite più vicino (minuti residui oggi o tempo
+    residuo prima della fine della fascia oraria corrente). Ritorna None se
+    non c'è nessun limite attivo da segnalare (esente, limiti spenti, giorno
+    senza restrizioni)."""
+    if character in time_limits_config.get("exempt_characters", []):
+        return None
+    if not time_limits_config.get("enabled", False):
+        return None
+
+    day_cfg = time_limits_config.get("days", {}).get(DAY_KEYS[datetime.now().weekday()])
+    if not day_cfg:
+        return None
+
+    candidates = []  # (minuti_residui, budget_totale_minuti)
+
+    daily_limit = day_cfg.get("daily_limit_minutes")
+    if daily_limit is not None:
+        _refresh_daily_usage_if_new_day()
+        candidates.append((daily_limit - daily_usage.get("minutes", 0.0), daily_limit))
+
+    now = datetime.now()
+    for w in day_cfg.get("windows", []):
+        try:
+            start_t = datetime.strptime(w.get("start", ""), "%H:%M").time()
+            end_t = datetime.strptime(w.get("end", ""), "%H:%M").time()
+        except ValueError:
+            continue
+        if start_t <= now.time() <= end_t:
+            start_dt = datetime.combine(now.date(), start_t)
+            end_dt = datetime.combine(now.date(), end_t)
+            candidates.append((
+                (end_dt - now).total_seconds() / 60.0,
+                (end_dt - start_dt).total_seconds() / 60.0,
+            ))
+
+    if not candidates:
+        return None
+
+    remaining, budget = min(candidates, key=lambda c: c[0])
+    if budget <= 0:
+        return None
+    fraction = max(0.0, min(1.0, remaining / budget))
+    return min(HOURGLASS_LEVELS - 1, int(fraction * HOURGLASS_LEVELS))
+
 def start_video(character):
     global current_character, mode, current_video_path
     allowed, remaining_minutes = is_viewing_allowed_now(character)
@@ -342,6 +419,7 @@ def start_video(character):
     current_character = character
     current_video_path = video
     mode = "playing"
+    player.set_hourglass_level(_compute_hourglass_level(character))
 
 def manage_graphics():
     """Gestisce la grafica in base allo stato, SE non stiamo riproducendo un video."""
@@ -428,12 +506,21 @@ try:
                 save_daily_usage()
                 usage_unsaved_seconds = 0.0
 
+        # 0b. Overlay clessidra: aggiornato ad ogni tick indipendentemente dallo
+        # stato (resta visibile anche in pausa/idle/fine episodio, non solo
+        # durante la riproduzione). set_hourglass_level() tocca VLC solo quando
+        # il livello cambia davvero (10 stati sull'intero budget = pochissime
+        # chiamate reali, non ad ogni tick).
+        player.set_hourglass_level(_compute_hourglass_level(current_character))
+
         # 1. Controllo fine video
         if mode == "playing":
             if player.check_ended():
                 print("Video finito.")
                 mode = "ended_wait_remove"
-                refresh_graphic(WAIT_NEXT_IMAGE) # Immediato switch
+                # Placeholder: stessa immagine dell'idle, in attesa di una
+                # grafica dedicata per la fine dell'episodio.
+                refresh_graphic(IDLE_IMAGE) # Immediato switch
                 save_daily_usage()
                 usage_unsaved_seconds = 0.0
 
@@ -507,7 +594,7 @@ try:
             if tag_removed:
                 print("Tag rimosso post-episodio.")
                 mode = "ended_wait_return"
-                # Grafica resta wait_next
+                # Grafica resta quella impostata a fine episodio (oggi: idle.png)
 
         elif mode == "ended_wait_return":
             # Qui accettiamo qualsiasi NUOVO tag.
