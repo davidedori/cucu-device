@@ -39,6 +39,13 @@ USAGE_FLUSH_INTERVAL_SEC = 10
 
 # --- VLC PLAYER CLASS ---------------------------------------------------
 
+def _logo_opt(name):
+    """python-vlc ha rinominato i membri di VideoLogoOption tra le versioni
+    (es. 'enable' nella doc corrente vs 'logo_enable' nella 3.0.21203 in uso
+    sul device): proviamo entrambe le convenzioni per non dipendere dalla
+    versione esatta installata via apt."""
+    return getattr(vlc.VideoLogoOption, name, None) or getattr(vlc.VideoLogoOption, f"logo_{name}")
+
 class CucuPlayer:
     def __init__(self):
         # Parametri per full screen, no overlay, niente titolo
@@ -109,17 +116,17 @@ class CucuPlayer:
         self._hourglass_level = level
         try:
             if level is None:
-                self.player.video_set_logo_int(vlc.VideoLogoOption.enable, 0)
+                self.player.video_set_logo_int(_logo_opt("enable"), 0)
                 return
             path = HOURGLASS_DIR / f"hourglass_{level}.png"
             if not path.exists():
                 return
             if not self._logo_configured:
-                self.player.video_set_logo_int(vlc.VideoLogoOption.position, 6)  # top-right
-                self.player.video_set_logo_int(vlc.VideoLogoOption.opacity, 200)
+                self.player.video_set_logo_int(_logo_opt("position"), 6)  # top-right
+                self.player.video_set_logo_int(_logo_opt("opacity"), 200)
                 self._logo_configured = True
-            self.player.video_set_logo_string(vlc.VideoLogoOption.file, str(path))
-            self.player.video_set_logo_int(vlc.VideoLogoOption.enable, 1)
+            self.player.video_set_logo_string(_logo_opt("file"), str(path))
+            self.player.video_set_logo_int(_logo_opt("enable"), 1)
         except Exception as e:
             print(f"[WARN] Overlay clessidra non disponibile: {e}")
 
