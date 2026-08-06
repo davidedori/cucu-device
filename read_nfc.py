@@ -122,7 +122,9 @@ class CucuPlayer:
             if not path.exists():
                 return
             if not self._logo_configured:
-                self.player.video_set_logo_int(_logo_opt("position"), 6)  # top-right
+                self.player.video_set_logo_int(_logo_opt("position"), 10)  # basso-destra
+                self.player.video_set_logo_int(_logo_opt("x"), 24)  # margine dal bordo
+                self.player.video_set_logo_int(_logo_opt("y"), 24)
                 self.player.video_set_logo_int(_logo_opt("opacity"), 200)
                 self._logo_configured = True
             self.player.video_set_logo_string(_logo_opt("file"), str(path))
