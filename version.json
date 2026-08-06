@@ -1,5 +1,5 @@
 {
-  "version": "0.1.8",
+  "version": "0.1.9",
   "min_version": "0.1.0",
-  "changelog": "Fix: Plymouth's 8s DeviceTimeout was shorter than vc4-drm's init time on cold/unclean boots, causing a silent fallback to the text splash (the real 'grey screen'). Also: /boot/firmware is now read-only outside of OTA writes (unclean shutdowns were leaving it dirty and confusing the bootloader), and boot animation frames now play 2x faster"
+  "changelog": "Added a manual OTA update check/apply control to the Sistema tab (Controlla / Aggiorna Ora), so an update no longer has to wait for the nightly timer."
 }
