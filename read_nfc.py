@@ -418,7 +418,9 @@ def _compute_hourglass_level(character):
     remaining = min(c[0] for c in candidates)
     budget = min(c[1] for c in candidates)
     if budget <= 0:
-        return None
+        # daily_limit_minutes: 0 configurato (giornata bloccata): mostra vuota,
+        # non nascosta, coerente col resto (fuori fascia, budget esaurito).
+        return 0
     fraction = max(0.0, min(1.0, remaining / budget))
     return min(HOURGLASS_LEVELS - 1, int(fraction * HOURGLASS_LEVELS))
 
