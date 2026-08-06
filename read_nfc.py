@@ -5,6 +5,7 @@ import re
 import time
 import random
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # Tenta import vlc
@@ -21,12 +22,18 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "tags.json"
 CHARACTERS_DIR = BASE_DIR / "characters"
 GRAPHICS_DIR = BASE_DIR / "graphics"
+TIME_LIMITS_PATH = BASE_DIR / "time_limits.json"
+DAILY_USAGE_PATH = BASE_DIR / "daily_usage.json"
 
 NFCLIST_PATH = "/usr/bin/nfc-list"
 IDLE_IMAGE = GRAPHICS_DIR / "idle.png"
 WAIT_NEXT_IMAGE = GRAPHICS_DIR / "wait_next.png"
 
 VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v"}
+DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+# Persistiamo il conteggio minuti solo ogni tot secondi di riproduzione continua,
+# per non stressare la SD card scrivendo ad ogni tick del loop (10Hz).
+USAGE_FLUSH_INTERVAL_SEC = 10
 
 # --- VLC PLAYER CLASS ---------------------------------------------------
 
@@ -111,6 +118,26 @@ except json.JSONDecodeError as e:
     print(f"[ERROR] {CONFIG_PATH} corrotto ({e}), parto con mappa vuota.")
     tag_map = {}
 
+# Limiti di tempo/fascia oraria (genitore). Fallback SEMPRE permissivo: un file
+# assente o corrotto non deve mai bloccare l'avvio del servizio né la visione.
+try:
+    with TIME_LIMITS_PATH.open() as f:
+        time_limits_config = json.load(f)
+except FileNotFoundError:
+    time_limits_config = {"enabled": False}
+except json.JSONDecodeError as e:
+    print(f"[ERROR] {TIME_LIMITS_PATH} corrotto ({e}), limiti disattivati.")
+    time_limits_config = {"enabled": False}
+
+# Minuti di riproduzione effettivi consumati nella giornata corrente.
+try:
+    with DAILY_USAGE_PATH.open() as f:
+        daily_usage = json.load(f)
+    if daily_usage.get("date") != datetime.now().strftime("%Y-%m-%d"):
+        daily_usage = {"date": datetime.now().strftime("%Y-%m-%d"), "minutes": 0.0}
+except (FileNotFoundError, json.JSONDecodeError):
+    daily_usage = {"date": datetime.now().strftime("%Y-%m-%d"), "minutes": 0.0}
+
 # --- FUNZIONI EPISODI ---------------------------------------------------
 
 def save_episode_state():
@@ -119,6 +146,13 @@ def save_episode_state():
             json.dump(episode_state, f)
     except Exception as e:
         print(f"Errore nel salvare {EPISODE_STATE_FILE}: {e}")
+
+def save_daily_usage():
+    try:
+        with DAILY_USAGE_PATH.open("w") as f:
+            json.dump(daily_usage, f)
+    except Exception as e:
+        print(f"Errore nel salvare {DAILY_USAGE_PATH}: {e}")
 
 def load_episode_state():
     global episode_state
@@ -166,7 +200,11 @@ def load_episode_state():
         }
     save_episode_state()
 
-def get_next_episode(character: str):
+def _select_episode(character: str):
+    """Sceglie il prossimo episodio SENZA consumarlo dalla rotazione (nessuna
+    scrittura su episode_state/disco). Ritorna (path, known, remaining, seen)
+    da passare a _commit_episode() solo se si decide davvero di riprodurlo —
+    così un episodio bloccato dai limiti di tempo non viene "sprecato"."""
     char_dir = CHARACTERS_DIR / character
     if not char_dir.exists(): return None
     files = [p for p in char_dir.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT]
@@ -201,19 +239,99 @@ def get_next_episode(character: str):
     if chosen_name not in seen:
         seen.append(chosen_name)
 
+    chosen_path = files[0]
+    for p in files:
+        if p.name == chosen_name:
+            chosen_path = p
+            break
+
+    return chosen_path, known, remaining, seen
+
+def _commit_episode(character: str, known, remaining, seen):
+    """Persiste la scelta fatta da _select_episode(): va chiamata solo quando
+    l'episodio sta davvero per partire."""
     episode_state[character] = {"known": known, "remaining": remaining, "seen": seen}
     save_episode_state()
 
-    for p in files:
-        if p.name == chosen_name: return p
-    return files[0]
+def get_media_duration_minutes(path: Path):
+    """Ritorna la durata del file in minuti, o None se non determinabile.
+    Usa l'istanza VLC già in uso da CucuPlayer per non introdurre dipendenze
+    aggiuntive (es. ffprobe) oltre a python3-vlc, già presente sul device."""
+    try:
+        media = player.instance.media_new(str(path))
+        media.parse()
+        length_ms = media.get_duration()
+        if length_ms and length_ms > 0:
+            return length_ms / 60000.0
+    except Exception as e:
+        print(f"Impossibile determinare la durata di {path.name}: {e}")
+    return None
+
+def _refresh_daily_usage_if_new_day():
+    global daily_usage
+    today = datetime.now().strftime("%Y-%m-%d")
+    if daily_usage.get("date") != today:
+        daily_usage = {"date": today, "minutes": 0.0}
+        save_daily_usage()
+
+def is_viewing_allowed_now(character: str):
+    """Ritorna (allowed, remaining_minutes). remaining_minutes è None quando
+    non c'è un budget minuti da rispettare (nessun limite, o personaggio esente)."""
+    if character in time_limits_config.get("exempt_characters", []):
+        return True, None
+
+    if not time_limits_config.get("enabled", False):
+        return True, None
+
+    day_cfg = time_limits_config.get("days", {}).get(DAY_KEYS[datetime.now().weekday()])
+    if not day_cfg:
+        return True, None
+
+    now_time = datetime.now().time()
+    window_start = day_cfg.get("window_start")
+    window_end = day_cfg.get("window_end")
+    if window_start and window_end:
+        try:
+            start_t = datetime.strptime(window_start, "%H:%M").time()
+            end_t = datetime.strptime(window_end, "%H:%M").time()
+            if not (start_t <= now_time <= end_t):
+                return False, None
+        except ValueError:
+            pass  # config malformata: non blocchiamo per un orario illeggibile
+
+    daily_limit = day_cfg.get("daily_limit_minutes")
+    if daily_limit is not None:
+        _refresh_daily_usage_if_new_day()
+        remaining = daily_limit - daily_usage.get("minutes", 0.0)
+        if remaining <= 0:
+            return False, 0
+        return True, remaining
+
+    return True, None
 
 def start_video(character):
     global current_character, mode, current_video_path
-    video = get_next_episode(character)
-    if not video:
+    allowed, remaining_minutes = is_viewing_allowed_now(character)
+    if not allowed:
+        print(f"Visione non permessa ora per '{character}' (limiti di tempo attivi).")
+        return
+
+    selection = _select_episode(character)
+    if not selection:
         print(f"Nessun video trovato per {character}")
         return
+    video, known, remaining, seen = selection
+
+    if remaining_minutes is not None:
+        duration_min = get_media_duration_minutes(video)
+        if duration_min is not None and duration_min > remaining_minutes:
+            print(
+                f"Episodio '{video.name}' ({duration_min:.1f} min) supera il tempo "
+                f"residuo oggi ({remaining_minutes:.1f} min): resto in idle."
+            )
+            return
+
+    _commit_episode(character, known, remaining, seen)
 
     print(f"Riproduco video: {video.name}")
     player.play_media(video)
@@ -286,23 +404,45 @@ print("cucu-device player avviato.")
 load_episode_state()
 refresh_graphic(IDLE_IMAGE) # Avvio con idle
 
+last_tick_ts = time.time()
+usage_unsaved_seconds = 0.0
+
 try:
     while True:
+        # 0. Accumulo minuti di riproduzione effettivi (esclusi personaggi
+        # esenti e stato "paused"), basato sul tempo reale trascorso dal tick
+        # precedente e non su un fisso 0.1s, per restare corretti anche se
+        # un'iterazione impiega più del previsto (es. subprocess nfc-list lento).
+        now_ts = time.time()
+        elapsed = now_ts - last_tick_ts
+        last_tick_ts = now_ts
+        if mode == "playing" and current_character not in time_limits_config.get("exempt_characters", []):
+            _refresh_daily_usage_if_new_day()
+            daily_usage["minutes"] += elapsed / 60.0
+            usage_unsaved_seconds += elapsed
+            if usage_unsaved_seconds >= USAGE_FLUSH_INTERVAL_SEC:
+                save_daily_usage()
+                usage_unsaved_seconds = 0.0
+
         # 1. Controllo fine video
         if mode == "playing":
             if player.check_ended():
                 print("Video finito.")
                 mode = "ended_wait_remove"
                 refresh_graphic(WAIT_NEXT_IMAGE) # Immediato switch
+                save_daily_usage()
+                usage_unsaved_seconds = 0.0
 
         # 2. Lettura NFC
         uid = read_uid_once()
         has_tag = uid is not None
 
-        # Scrivi l'ultimo tag visto per il wizard di associazione della UI
+        # Scrivi l'ultimo tag visto per il wizard di associazione della UI, e il
+        # mode corrente: l'API lo legge per capire se il player è "occupato"
+        # prima di riavviare il servizio (es. dopo un salvataggio dei limiti).
         try:
             with (BASE_DIR / "last_seen_tag.json").open("w") as _f:
-                json.dump({"uid": uid, "ts": time.time()}, _f)
+                json.dump({"uid": uid, "ts": time.time(), "mode": mode}, _f)
         except Exception:
             pass
 
@@ -335,6 +475,8 @@ try:
                 print("Pausa.")
                 player.pause()
                 mode = "paused"
+                save_daily_usage()
+                usage_unsaved_seconds = 0.0
             elif tag_just_added:
                 # Se arriviamo qui senza tag_removed (improbabile con la logica sopra, ma possibile se had_tag=False)
                 char = tag_map.get(uid)

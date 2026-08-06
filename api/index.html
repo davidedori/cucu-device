@@ -438,6 +438,18 @@
 
       <div id="wifi-list-container"></div>
 
+      <h3 style="margin-top: 30px;">Limiti di tempo</h3>
+      <div class="list-item">
+        <div class="list-item-content">
+          <div class="list-item-title">Attiva limiti di tempo</div>
+          <div class="list-item-sub" id="tl-usage-text">—</div>
+        </div>
+        <input type="checkbox" id="tl-enabled" style="width:auto;">
+      </div>
+      <div id="time-limits-days"></div>
+      <button class="btn btn-block btn-primary" id="tl-save-btn" style="margin-top:8px;"
+        onclick="saveTimeLimits()">Salva limiti di tempo</button>
+
       <h3 style="margin-top: 30px;">Comandi</h3>
       <button class="btn btn-block" onclick="handleRestartPlayer()">↺ Riavvia Lettore NFC</button>
 
@@ -497,6 +509,15 @@
           <p style="font-weight:700; margin:10px 0 4px 0; font-size:14px;">Avvicina il tag al lettore</p>
           <p class="scan-status" id="m-scan-status">In ascolto...</p>
           <button class="btn" style="margin-top:12px; font-size:13px; padding:6px 14px;" onclick="stopTagScan()">Annulla</button>
+        </div>
+
+        <div class="section-title">Limiti di tempo</div>
+        <div class="list-item" style="padding:10px 12px;">
+          <div class="list-item-content">
+            <div class="list-item-title" style="font-size:13px;">Escludi dai limiti di tempo</div>
+            <div class="list-item-sub">Questo personaggio potrà sempre partire, senza restrizioni.</div>
+          </div>
+          <input type="checkbox" id="m-char-exempt" style="width:auto;" onchange="toggleCharExempt()">
         </div>
 
         <div class="section-title">Episodi</div>
@@ -588,6 +609,11 @@
     let tagScanMode = null; // 'new-char' | 'add-tag'
     let tagScanKnownUids = new Set();
 
+    // Limiti di tempo
+    const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    const DAY_LABELS = { mon: 'Lunedì', tue: 'Martedì', wed: 'Mercoledì', thu: 'Giovedì', fri: 'Venerdì', sat: 'Sabato', sun: 'Domenica' };
+    let timeLimitsExemptCache = [];
+
     /* --- UI HELPERS --- */
     const $ = (id) => document.getElementById(id);
 
@@ -600,7 +626,10 @@
       const tabIndex = viewId === 'characters' ? 0 : 1;
       document.querySelectorAll('.tab')[tabIndex].classList.add('active');
 
-      if (viewId === 'system') renderWifiPanel();
+      if (viewId === 'system') {
+        renderWifiPanel();
+        renderTimeLimitsPanel();
+      }
     }
 
     function showToast(msg) {
@@ -806,6 +835,7 @@
       $('m-char-title').textContent = data.display_name;
       $('m-char-episodes').textContent = data.stats.total_episodes + ' ep';
       $('m-char-tags').textContent = data.tag_uids.length + ' tag';
+      $('m-char-exempt').checked = !!data.time_limit_exempt;
 
       // Update Image Preview
       const imgPreview = $('m-char-img-preview');
@@ -877,6 +907,22 @@
         await apiCall(`/characters/${selectedCharName}/tags/${uid}`, "DELETE");
         openCharModal(selectedCharName);
       } catch (e) { showToast("Errore: " + e.message); }
+    }
+
+    async function toggleCharExempt() {
+      const checkbox = $('m-char-exempt');
+      const checked = checkbox.checked;
+      try {
+        const res = await apiCall(`/characters/${selectedCharName}/time-limit-exempt`, 'PUT', { exempt: checked });
+        if (res.restart === 'immediate') {
+          showToast(checked ? 'Personaggio escluso dai limiti' : 'Limiti di tempo riattivati per il personaggio');
+        } else {
+          showToast('Salvato: verrà applicato al termine della visione in corso.');
+        }
+      } catch (e) {
+        checkbox.checked = !checked; // revert su errore
+        showToast('Errore: ' + e.message);
+      }
     }
 
     async function deleteEpisode(filename) {
@@ -1131,6 +1177,89 @@
       }
     }
 
+    /* --- LIMITI DI TEMPO --- */
+    function buildTimeLimitsDaysHtml() {
+      return DAY_KEYS.map(day => `
+        <div class="list-item" style="flex-direction:column; align-items:stretch; gap:8px;">
+          <div class="list-item-title">${DAY_LABELS[day]}</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input type="number" min="0" id="tl-${day}-minutes" placeholder="Minuti/giorno (illimitato)" style="flex:1; min-width:150px;">
+            <input type="time" id="tl-${day}-start" style="flex:1; min-width:100px;">
+            <input type="time" id="tl-${day}-end" style="flex:1; min-width:100px;">
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function renderTimeLimitsPanel() {
+      try {
+        const cfg = await apiCall('/system/time-limits');
+        $('tl-enabled').checked = cfg.enabled;
+        timeLimitsExemptCache = cfg.exempt_characters || [];
+        DAY_KEYS.forEach(day => {
+          const d = cfg.days[day] || {};
+          $(`tl-${day}-minutes`).value = (d.daily_limit_minutes === null || d.daily_limit_minutes === undefined) ? '' : d.daily_limit_minutes;
+          $(`tl-${day}-start`).value = d.window_start || '';
+          $(`tl-${day}-end`).value = d.window_end || '';
+        });
+      } catch (e) {
+        showToast('Errore caricamento limiti: ' + e.message);
+      }
+      refreshTimeLimitsUsage();
+    }
+
+    async function refreshTimeLimitsUsage() {
+      try {
+        const u = await apiCall('/system/time-limits/usage');
+        const el = $('tl-usage-text');
+        if (!u.enabled) {
+          el.textContent = 'Limiti disattivati.';
+          return;
+        }
+        const limitTxt = (u.daily_limit_minutes !== null && u.daily_limit_minutes !== undefined)
+          ? `${Math.round(u.minutes_used)}/${u.daily_limit_minutes} min oggi`
+          : `${Math.round(u.minutes_used)} min oggi (nessun limite)`;
+        const windowTxt = (u.window_start && u.window_end) ? ` · permesso ${u.window_start}–${u.window_end}` : '';
+        el.textContent = limitTxt + windowTxt;
+      } catch (e) {
+        // non critico: lasciamo il testo precedente
+      }
+    }
+
+    async function saveTimeLimits() {
+      const btn = $('tl-save-btn');
+      btn.textContent = '...';
+      btn.disabled = true;
+
+      const days = {};
+      DAY_KEYS.forEach(day => {
+        const minutesVal = $(`tl-${day}-minutes`).value.trim();
+        days[day] = {
+          daily_limit_minutes: minutesVal === '' ? null : parseInt(minutesVal, 10),
+          window_start: $(`tl-${day}-start`).value || null,
+          window_end: $(`tl-${day}-end`).value || null,
+        };
+      });
+
+      try {
+        const res = await apiCall('/system/time-limits', 'POST', {
+          enabled: $('tl-enabled').checked,
+          days,
+          exempt_characters: timeLimitsExemptCache,
+        });
+        if (res.restart === 'immediate') {
+          showReconnectOverlay();
+        } else {
+          showToast('Impostazioni salvate: verranno applicate al termine della visione in corso.');
+        }
+      } catch (e) {
+        showToast('Errore: ' + e.message);
+      } finally {
+        btn.textContent = 'Salva limiti di tempo';
+        btn.disabled = false;
+      }
+    }
+
     /* --- RESTART --- */
     window.handleRestartPlayer = async function () {
       if (!confirm("Riavviare il servizio?")) return;
@@ -1218,6 +1347,7 @@
 
     /* --- INIT --- */
     document.addEventListener("DOMContentLoaded", () => {
+      $('time-limits-days').innerHTML = buildTimeLimitsDaysHtml();
       loadCharacters();
     });
 

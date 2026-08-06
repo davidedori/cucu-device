@@ -37,6 +37,8 @@ episode_state.json
 episode_state.json.bak
 last_seen_tag.json
 tags.json
+time_limits.json
+daily_usage.json
 
 # Contenuto device-specifico — ignorato tutto tranne .gitkeep
 characters/*
