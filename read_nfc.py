@@ -407,7 +407,16 @@ def _compute_hourglass_level(character):
     if not candidates:
         return None
 
-    remaining, budget = min(candidates, key=lambda c: c[0])
+    # Il residuo è sempre quello reale (il minimo tra i limiti attivi), ma la
+    # scala di riferimento è il più piccolo tra i budget totali configurati
+    # (giornaliero e/o fascia), non quello del limite momentaneamente più
+    # vicino: altrimenti il livello "salta" quando il vincolo più stretto
+    # passa dall'uno all'altro, pur restando invariato il residuo reale in
+    # minuti. Nota: remaining_x <= budget_x per ogni singolo limite (non si
+    # può avere più residuo del proprio budget), quindi il minimo dei residui
+    # è sempre <= al minimo dei budget: la frazione non supera mai 1.
+    remaining = min(c[0] for c in candidates)
+    budget = min(c[1] for c in candidates)
     if budget <= 0:
         return None
     fraction = max(0.0, min(1.0, remaining / budget))
