@@ -361,6 +361,62 @@
       display: none !important;
     }
 
+    /* --- Toggle Switch --- */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 46px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .switch .slider {
+      position: absolute;
+      inset: 0;
+      cursor: pointer;
+      background-color: var(--border);
+      transition: background-color 0.2s;
+      border-radius: 999px;
+    }
+
+    .switch .slider::before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: transform 0.2s;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+
+    .switch input:checked+.slider {
+      background-color: var(--primary);
+    }
+
+    .switch input:checked+.slider::before {
+      transform: translateX(18px);
+    }
+
+    .switch input:disabled+.slider {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* --- Form disabilitato (es. programmazione limiti di tempo quando spenti) --- */
+    .form-disabled {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
     /* Scan Tag Wizard */
     @keyframes scan-pulse {
       0%, 100% { transform: scale(1); opacity: 1; }
@@ -412,8 +468,9 @@
   <header>
     <div class="logo">Cucù <span>v0.1.0</span></div>
     <div class="tabs">
-      <div class="tab active" onclick="switchTab('characters')">Personaggi</div>
-      <div class="tab" onclick="switchTab('system')">Sistema</div>
+      <div class="tab active" data-view="characters" onclick="switchTab('characters')">Personaggi</div>
+      <div class="tab" data-view="timelimits" onclick="switchTab('timelimits')">Limiti di tempo</div>
+      <div class="tab" data-view="system" onclick="switchTab('system')">Sistema</div>
     </div>
   </header>
 
@@ -423,6 +480,23 @@
       <div class="grid" id="characters-grid">
         <!-- JS Grid Injection -->
       </div>
+    </div>
+
+    <!-- View: Limiti di tempo -->
+    <div id="view-timelimits" class="view">
+      <div class="list-item">
+        <div class="list-item-content">
+          <div class="list-item-title">Attiva limiti di tempo</div>
+          <div class="list-item-sub" id="tl-usage-text">—</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="tl-enabled" onchange="applyTimeLimitsEnabledState()">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="time-limits-days"></div>
+      <button class="btn btn-block btn-primary" id="tl-save-btn" style="margin-top:8px;"
+        onclick="saveTimeLimits()">Salva limiti di tempo</button>
     </div>
 
     <!-- View: Sistema -->
@@ -437,18 +511,6 @@
       </div>
 
       <div id="wifi-list-container"></div>
-
-      <h3 style="margin-top: 30px;">Limiti di tempo</h3>
-      <div class="list-item">
-        <div class="list-item-content">
-          <div class="list-item-title">Attiva limiti di tempo</div>
-          <div class="list-item-sub" id="tl-usage-text">—</div>
-        </div>
-        <input type="checkbox" id="tl-enabled" style="width:auto;">
-      </div>
-      <div id="time-limits-days"></div>
-      <button class="btn btn-block btn-primary" id="tl-save-btn" style="margin-top:8px;"
-        onclick="saveTimeLimits()">Salva limiti di tempo</button>
 
       <h3 style="margin-top: 30px;">Comandi</h3>
       <button class="btn btn-block" onclick="handleRestartPlayer()">↺ Riavvia Lettore NFC</button>
@@ -517,7 +579,10 @@
             <div class="list-item-title" style="font-size:13px;">Escludi dai limiti di tempo</div>
             <div class="list-item-sub">Questo personaggio potrà sempre partire, senza restrizioni.</div>
           </div>
-          <input type="checkbox" id="m-char-exempt" style="width:auto;" onchange="toggleCharExempt()">
+          <label class="switch">
+            <input type="checkbox" id="m-char-exempt" onchange="toggleCharExempt()">
+            <span class="slider"></span>
+          </label>
         </div>
 
         <div class="section-title">Episodi</div>
@@ -621,15 +686,10 @@
       document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
       $('view-' + viewId).classList.add('active');
+      document.querySelector(`.tab[data-view="${viewId}"]`).classList.add('active');
 
-      // Highlight tab logic simple
-      const tabIndex = viewId === 'characters' ? 0 : 1;
-      document.querySelectorAll('.tab')[tabIndex].classList.add('active');
-
-      if (viewId === 'system') {
-        renderWifiPanel();
-        renderTimeLimitsPanel();
-      }
+      if (viewId === 'system') renderWifiPanel();
+      if (viewId === 'timelimits') renderTimeLimitsPanel();
     }
 
     function showToast(msg) {
@@ -1178,17 +1238,37 @@
     }
 
     /* --- LIMITI DI TEMPO --- */
+    function timeWindowRowHtml(start, end) {
+      return `
+        <div class="tl-window-row" style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+          <input type="time" class="tl-window-start" value="${start}" style="flex:1;">
+          <span style="color:var(--text-soft);">–</span>
+          <input type="time" class="tl-window-end" value="${end}" style="flex:1;">
+          <button type="button" class="btn btn-danger" style="padding:8px 12px;" onclick="this.closest('.tl-window-row').remove()">×</button>
+        </div>
+      `;
+    }
+
+    function addTimeWindow(day, start = '08:00', end = '19:00') {
+      document.querySelector(`.tl-windows[data-day="${day}"]`).insertAdjacentHTML('beforeend', timeWindowRowHtml(start, end));
+    }
+
     function buildTimeLimitsDaysHtml() {
       return DAY_KEYS.map(day => `
         <div class="list-item" style="flex-direction:column; align-items:stretch; gap:8px;">
           <div class="list-item-title">${DAY_LABELS[day]}</div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <input type="number" min="0" id="tl-${day}-minutes" placeholder="Minuti/giorno (illimitato)" style="flex:1; min-width:150px;">
-            <input type="time" id="tl-${day}-start" style="flex:1; min-width:100px;">
-            <input type="time" id="tl-${day}-end" style="flex:1; min-width:100px;">
-          </div>
+          <input type="number" min="0" id="tl-${day}-minutes" placeholder="Minuti/giorno (illimitato)">
+          <div class="tl-windows" data-day="${day}"></div>
+          <button type="button" class="btn" style="margin-top:6px;" onclick="addTimeWindow('${day}')">+ Aggiungi fascia oraria</button>
         </div>
       `).join('');
+    }
+
+    function applyTimeLimitsEnabledState() {
+      const enabled = $('tl-enabled').checked;
+      const container = $('time-limits-days');
+      container.classList.toggle('form-disabled', !enabled);
+      container.querySelectorAll('input, button').forEach(el => { el.disabled = !enabled; });
     }
 
     async function renderTimeLimitsPanel() {
@@ -1199,9 +1279,11 @@
         DAY_KEYS.forEach(day => {
           const d = cfg.days[day] || {};
           $(`tl-${day}-minutes`).value = (d.daily_limit_minutes === null || d.daily_limit_minutes === undefined) ? '' : d.daily_limit_minutes;
-          $(`tl-${day}-start`).value = d.window_start || '';
-          $(`tl-${day}-end`).value = d.window_end || '';
+          const windowsContainer = document.querySelector(`.tl-windows[data-day="${day}"]`);
+          windowsContainer.innerHTML = '';
+          (d.windows || []).forEach(w => addTimeWindow(day, w.start, w.end));
         });
+        applyTimeLimitsEnabledState();
       } catch (e) {
         showToast('Errore caricamento limiti: ' + e.message);
       }
@@ -1219,8 +1301,10 @@
         const limitTxt = (u.daily_limit_minutes !== null && u.daily_limit_minutes !== undefined)
           ? `${Math.round(u.minutes_used)}/${u.daily_limit_minutes} min oggi`
           : `${Math.round(u.minutes_used)} min oggi (nessun limite)`;
-        const windowTxt = (u.window_start && u.window_end) ? ` · permesso ${u.window_start}–${u.window_end}` : '';
-        el.textContent = limitTxt + windowTxt;
+        const windowsTxt = (u.windows && u.windows.length)
+          ? ' · permesso ' + u.windows.map(w => `${w.start}–${w.end}`).join(', ')
+          : '';
+        el.textContent = limitTxt + windowsTxt;
       } catch (e) {
         // non critico: lasciamo il testo precedente
       }
@@ -1232,14 +1316,26 @@
       btn.disabled = true;
 
       const days = {};
-      DAY_KEYS.forEach(day => {
-        const minutesVal = $(`tl-${day}-minutes`).value.trim();
-        days[day] = {
-          daily_limit_minutes: minutesVal === '' ? null : parseInt(minutesVal, 10),
-          window_start: $(`tl-${day}-start`).value || null,
-          window_end: $(`tl-${day}-end`).value || null,
-        };
-      });
+      try {
+        DAY_KEYS.forEach(day => {
+          const minutesVal = $(`tl-${day}-minutes`).value.trim();
+          const windows = Array.from(document.querySelectorAll(`.tl-windows[data-day="${day}"] .tl-window-row`)).map(row => {
+            const start = row.querySelector('.tl-window-start').value;
+            const end = row.querySelector('.tl-window-end').value;
+            if (!start || !end) throw new Error(`Fascia oraria incompleta per ${DAY_LABELS[day]}`);
+            return { start, end };
+          });
+          days[day] = {
+            daily_limit_minutes: minutesVal === '' ? null : parseInt(minutesVal, 10),
+            windows,
+          };
+        });
+      } catch (e) {
+        showToast(e.message);
+        btn.textContent = 'Salva limiti di tempo';
+        btn.disabled = false;
+        return;
+      }
 
       try {
         const res = await apiCall('/system/time-limits', 'POST', {

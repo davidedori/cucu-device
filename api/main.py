@@ -46,10 +46,13 @@ class TagCreate(BaseModel):
 class EpisodeRename(BaseModel):
     new_filename: str
 
+class TimeWindow(BaseModel):
+    start: str
+    end: str
+
 class DayLimitConfig(BaseModel):
     daily_limit_minutes: Optional[int] = None
-    window_start: Optional[str] = None
-    window_end: Optional[str] = None
+    windows: List[TimeWindow] = []
 
 class TimeLimitsConfig(BaseModel):
     enabled: bool = False
@@ -125,16 +128,10 @@ def _validate_time_limits(cfg: TimeLimitsConfig):
         if day_cfg.daily_limit_minutes is not None and day_cfg.daily_limit_minutes < 0:
             raise HTTPException(status_code=400, detail=f"Minuti giornalieri non validi per '{day_key}'.")
 
-        ws, we = day_cfg.window_start, day_cfg.window_end
-        if (ws is None) != (we is None):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Fascia oraria incompleta per '{day_key}': servono sia inizio che fine."
-            )
-        if ws is not None and we is not None:
-            if not _TIME_RE.match(ws) or not _TIME_RE.match(we):
+        for w in day_cfg.windows:
+            if not _TIME_RE.match(w.start) or not _TIME_RE.match(w.end):
                 raise HTTPException(status_code=400, detail=f"Orario non valido per '{day_key}' (formato HH:MM).")
-            if we <= ws:
+            if w.end <= w.start:
                 raise HTTPException(
                     status_code=400,
                     detail=f"L'orario di fine deve essere dopo l'inizio per '{day_key}'."
@@ -652,8 +649,7 @@ def get_time_limits_usage():
         "minutes_used": round(minutes_used, 1),
         "daily_limit_minutes": daily_limit,
         "remaining_minutes": round(remaining, 1) if remaining is not None else None,
-        "window_start": day_cfg.get("window_start"),
-        "window_end": day_cfg.get("window_end"),
+        "windows": day_cfg.get("windows", []),
     }
 
 @app.get("/characters/{name}/episodes")
