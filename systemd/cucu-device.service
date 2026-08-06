@@ -1,6 +1,13 @@
 [Unit]
 Description=cucu-device NFC reader
 After=network.target
+# Il timing di plymouth-quit.service (systemd) rispetto a network.target varia
+# da boot a boot (DHCP piu' o meno lento). Se plymouth-quit.service vince la
+# corsa e fa "plymouth quit" senza --retain-splash prima che il nostro
+# ExecStartPre giri, lo schermo va grigio prima che VLC sia pronto a
+# disegnare. Questo Before= forza systemd a completare l'avvio di questo
+# servizio (ExecStartPre incluso) prima di lanciare plymouth-quit.service.
+Before=plymouth-quit.service plymouth-quit-wait.service
 
 [Service]
 Type=simple
