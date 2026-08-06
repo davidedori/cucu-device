@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict
 from pathlib import Path
+from datetime import datetime
 from dotenv import dotenv_values
 import json
 import os
@@ -21,13 +22,19 @@ API_DIR = Path(__file__).resolve().parent
 
 app = FastAPI()
 
-# Percorsi base (stessi del tuo script NFC)
-BASE_DIR = API_DIR.parent
+# Percorsi base (stessi del tuo script NFC). Override via BASE_DIR per testare
+# l'API senza toccare i dati reali del dispositivo (vedi CLAUDE.md, sezione test).
+BASE_DIR = Path(os.environ.get("BASE_DIR") or API_DIR.parent)
 CHARACTERS_DIR = BASE_DIR / "characters"
 EPISODE_STATE_FILE = BASE_DIR / "episode_state.json"
 TAGS_FILE = BASE_DIR / "tags.json"
 CONFIG_ENV_FILE = BASE_DIR / "config.env"
 VERSION_FILE = BASE_DIR / "VERSION"
+LAST_SEEN_TAG_FILE = BASE_DIR / "last_seen_tag.json"
+TIME_LIMITS_FILE = BASE_DIR / "time_limits.json"
+DAILY_USAGE_FILE = BASE_DIR / "daily_usage.json"
+
+DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 class CharacterCreate(BaseModel):
     name: str
@@ -38,6 +45,19 @@ class TagCreate(BaseModel):
 
 class EpisodeRename(BaseModel):
     new_filename: str
+
+class DayLimitConfig(BaseModel):
+    daily_limit_minutes: Optional[int] = None
+    window_start: Optional[str] = None
+    window_end: Optional[str] = None
+
+class TimeLimitsConfig(BaseModel):
+    enabled: bool = False
+    days: Dict[str, DayLimitConfig] = {}
+    exempt_characters: List[str] = []
+
+class TimeLimitExempt(BaseModel):
+    exempt: bool
 
 def load_episode_state():
     if EPISODE_STATE_FILE.exists():
@@ -73,6 +93,52 @@ def save_tags(tags: dict):
             json.dump(tags, f)
     except Exception as e:
         print(f"Errore nel salvare {TAGS_FILE}: {e}")
+
+
+def load_time_limits():
+    default = {"enabled": False, "days": {}, "exempt_characters": []}
+    if TIME_LIMITS_FILE.exists():
+        try:
+            with TIME_LIMITS_FILE.open() as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Errore nel leggere {TIME_LIMITS_FILE}: {e}")
+            return default
+    return default
+
+def save_time_limits(data: dict):
+    try:
+        with TIME_LIMITS_FILE.open("w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f"Errore nel salvare {TIME_LIMITS_FILE}: {e}")
+
+_TIME_RE = re.compile(r'^([01]\d|2[0-3]):[0-5]\d$')
+
+def _validate_time_limits(cfg: TimeLimitsConfig):
+    for day_key, day_cfg in cfg.days.items():
+        if day_key not in DAY_KEYS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Giorno non valido: '{day_key}' (attesi: {', '.join(DAY_KEYS)})"
+            )
+        if day_cfg.daily_limit_minutes is not None and day_cfg.daily_limit_minutes < 0:
+            raise HTTPException(status_code=400, detail=f"Minuti giornalieri non validi per '{day_key}'.")
+
+        ws, we = day_cfg.window_start, day_cfg.window_end
+        if (ws is None) != (we is None):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Fascia oraria incompleta per '{day_key}': servono sia inizio che fine."
+            )
+        if ws is not None and we is not None:
+            if not _TIME_RE.match(ws) or not _TIME_RE.match(we):
+                raise HTTPException(status_code=400, detail=f"Orario non valido per '{day_key}' (formato HH:MM).")
+            if we <= ws:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"L'orario di fine deve essere dopo l'inizio per '{day_key}'."
+                )
 
 @app.get("/", response_class=HTMLResponse)
 def serve_frontend():
@@ -287,6 +353,16 @@ def rename_character(name: str, payload: CharacterRename):
         if updated_tags:
             save_tags(tags_map)
 
+        # 4. Aggiorna l'eventuale esenzione dai limiti di tempo
+        limits = load_time_limits()
+        exempt_list = limits.get("exempt_characters", [])
+        if name in exempt_list:
+            exempt_list.remove(name)
+            if safe_new_name not in exempt_list:
+                exempt_list.append(safe_new_name)
+            limits["exempt_characters"] = exempt_list
+            save_time_limits(limits)
+
     return {
         "old_name": name,
         "new_name": safe_new_name,
@@ -354,12 +430,15 @@ def get_character(name: str):
     
     display_name = state.get("display_name", name.replace("_", " ").title())
 
+    time_limits = load_time_limits()
+
     return {
         "name": name,
         "display_name": display_name,
         "active": True,  # in futuro potremo leggere/scrivere da una config
         "has_image": has_image,
         "image_url": image_url,
+        "time_limit_exempt": name in time_limits.get("exempt_characters", []),
 
         "tag_uids": tag_uids,
 
@@ -371,6 +450,29 @@ def get_character(name: str):
             "seen": seen_count,
         }
     }
+
+@app.put("/characters/{name}/time-limit-exempt")
+def set_character_time_limit_exempt(name: str, payload: TimeLimitExempt, background_tasks: BackgroundTasks):
+    """
+    Esclude (o reinclude) questo personaggio dai limiti di tempo globali.
+    Riavvia cucu-device.service per applicare subito, differendo il riavvio
+    se il player sta riproducendo/in pausa un video in questo momento.
+    """
+    char_dir = CHARACTERS_DIR / name
+    if not char_dir.exists() or not char_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Personaggio '{name}' non trovato")
+
+    limits = load_time_limits()
+    exempt_list = limits.setdefault("exempt_characters", [])
+    if payload.exempt and name not in exempt_list:
+        exempt_list.append(name)
+    elif not payload.exempt and name in exempt_list:
+        exempt_list.remove(name)
+    save_time_limits(limits)
+
+    restart = _schedule_restart(background_tasks)
+
+    return {"character": name, "time_limit_exempt": payload.exempt, "restart": restart}
 
 @app.get("/characters/{name}/tags")
 def get_character_tags(name: str):
@@ -462,8 +564,6 @@ def delete_character_tag(name: str, uid: str):
 
     return {"character": name, "uid": uid_norm, "status": "removed"}
 
-LAST_SEEN_TAG_FILE = BASE_DIR / "last_seen_tag.json"
-
 @app.get("/system/scan-tag")
 def scan_tag():
     """
@@ -490,6 +590,71 @@ def scan_tag():
     known_character = tags_map.get(uid)
 
     return {"uid": uid, "known_character": known_character}
+
+@app.get("/system/time-limits")
+def get_time_limits():
+    """Configurazione corrente dei limiti di tempo/fascia oraria."""
+    limits = load_time_limits()
+    return {
+        "enabled": limits.get("enabled", False),
+        "days": limits.get("days", {}),
+        "exempt_characters": limits.get("exempt_characters", []),
+    }
+
+@app.post("/system/time-limits")
+def set_time_limits(payload: TimeLimitsConfig, background_tasks: BackgroundTasks):
+    """
+    Salva la configurazione dei limiti di tempo e riavvia cucu-device.service
+    per applicarla — subito se il player è libero, altrimenti al termine
+    della visione in corso (non interrompiamo mai un episodio già avviato).
+    """
+    _validate_time_limits(payload)
+
+    data = {
+        "enabled": payload.enabled,
+        "days": {k: v.dict() for k, v in payload.days.items()},
+        "exempt_characters": payload.exempt_characters,
+    }
+    save_time_limits(data)
+
+    restart = _schedule_restart(background_tasks)
+
+    return {"status": "ok", "restart": restart}
+
+@app.get("/system/time-limits/usage")
+def get_time_limits_usage():
+    """
+    Stato di utilizzo per la giornata corrente (scritto da read_nfc.py), per
+    mostrare al genitore quanti minuti restano oggi e la fascia oraria attiva.
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    usage = {"date": today, "minutes": 0.0}
+    if DAILY_USAGE_FILE.exists():
+        try:
+            with DAILY_USAGE_FILE.open() as f:
+                loaded = json.load(f)
+            if loaded.get("date") == today:
+                usage = loaded
+        except Exception:
+            pass
+
+    limits = load_time_limits()
+    day_key = DAY_KEYS[datetime.now().weekday()]
+    day_cfg = limits.get("days", {}).get(day_key, {}) if limits.get("enabled") else {}
+
+    daily_limit = day_cfg.get("daily_limit_minutes")
+    minutes_used = usage.get("minutes", 0.0)
+    remaining = (daily_limit - minutes_used) if daily_limit is not None else None
+
+    return {
+        "date": today,
+        "enabled": limits.get("enabled", False),
+        "minutes_used": round(minutes_used, 1),
+        "daily_limit_minutes": daily_limit,
+        "remaining_minutes": round(remaining, 1) if remaining is not None else None,
+        "window_start": day_cfg.get("window_start"),
+        "window_end": day_cfg.get("window_end"),
+    }
 
 @app.get("/characters/{name}/episodes")
 def get_character_episodes(name: str):
@@ -805,6 +970,55 @@ def _restart_service_task():
         with log_file.open("a") as f:
              f.write(f"[{time.ctime()}] EXCEPTION: {e}\n")
 
+def _is_player_busy():
+    """
+    Legge il 'mode' scritto da read_nfc.py in last_seen_tag.json (ad ogni
+    tick del loop, 10Hz) per capire se un video è in playing/paused. Un dato
+    troppo vecchio (>5s) indica che il servizio non è verosimilmente in
+    esecuzione: in quel caso non c'è nulla da interrompere.
+    """
+    if not LAST_SEEN_TAG_FILE.exists():
+        return False
+    try:
+        with LAST_SEEN_TAG_FILE.open() as f:
+            data = json.load(f)
+    except Exception:
+        return False
+    ts = data.get("ts", 0)
+    if (time.time() - ts) > 5:
+        return False
+    return data.get("mode") in ("playing", "paused")
+
+def _restart_service_when_safe_task(max_wait_seconds=1800, poll_interval=5):
+    """
+    Come _restart_service_task, ma aspetta che il player non sia occupato
+    (playing/paused) prima di riavviare, per non interrompere un episodio in
+    corso. Se resta occupato oltre max_wait_seconds rinuncia: la config è già
+    salvata su disco e verrà applicata al prossimo riavvio naturale del
+    servizio (OTA, riavvio manuale, reboot), quindi non è mai persa.
+    """
+    log_file = BASE_DIR / "restart.log"
+    waited = 0
+    while _is_player_busy() and waited < max_wait_seconds:
+        time.sleep(poll_interval)
+        waited += poll_interval
+    if _is_player_busy():
+        try:
+            with log_file.open("a") as f:
+                f.write(f"[{time.ctime()}] Riavvio per limiti di tempo rinunciato dopo {waited}s: player ancora occupato.\n")
+        except Exception:
+            pass
+        return
+    _restart_service_task()
+
+def _schedule_restart(background_tasks: BackgroundTasks) -> str:
+    """Accoda il riavvio del player, subito o differito, e ritorna quale dei due."""
+    if _is_player_busy():
+        background_tasks.add_task(_restart_service_when_safe_task)
+        return "deferred"
+    background_tasks.add_task(_restart_service_task)
+    return "immediate"
+
 @app.delete("/characters/{name}")
 def delete_character(name: str):
     """
@@ -838,6 +1052,14 @@ def delete_character(name: str):
         for uid in uids_to_remove:
             del tags_map[uid]
         save_tags(tags_map)
+
+    # 3. Pulizia esenzione limiti di tempo
+    limits = load_time_limits()
+    exempt_list = limits.get("exempt_characters", [])
+    if name in exempt_list:
+        exempt_list.remove(name)
+        limits["exempt_characters"] = exempt_list
+        save_time_limits(limits)
 
     return {"status": "deleted", "name": name, "tags_removed": len(uids_to_remove)}
 
