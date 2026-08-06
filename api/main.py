@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from pathlib import Path
+from dotenv import dotenv_values
 import json
 import os
 import re
@@ -10,6 +11,8 @@ import shutil
 import subprocess
 import time
 import socket
+import urllib.request
+import urllib.error
 
 VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v"}
 IMAGE_EXT = {".png", ".jpg", ".jpeg"}
@@ -23,6 +26,8 @@ BASE_DIR = API_DIR.parent
 CHARACTERS_DIR = BASE_DIR / "characters"
 EPISODE_STATE_FILE = BASE_DIR / "episode_state.json"
 TAGS_FILE = BASE_DIR / "tags.json"
+CONFIG_ENV_FILE = BASE_DIR / "config.env"
+VERSION_FILE = BASE_DIR / "VERSION"
 
 class CharacterCreate(BaseModel):
     name: str
@@ -853,6 +858,90 @@ def restart_player(background_tasks: BackgroundTasks):
 
     background_tasks.add_task(_restart_service_task)
     return {"status": "ok", "message": "Riavvio in corso..."}
+
+
+def _version_tuple(v: str):
+    parts = v.strip().split(".")
+    nums = [int(p) if p.isdigit() else 0 for p in parts[:3]]
+    return tuple(nums + [0] * (3 - len(nums)))
+
+
+@app.get("/system/update-check")
+def check_update():
+    """
+    Confronta VERSION locale con version.json del branch remoto, con lo stesso
+    meccanismo usato da updater.sh, ma senza applicare nulla (sola lettura).
+    """
+    local_version = VERSION_FILE.read_text().strip() if VERSION_FILE.exists() else ""
+    local_version = local_version or "0.0.0"
+
+    cfg = dotenv_values(CONFIG_ENV_FILE) if CONFIG_ENV_FILE.exists() else {}
+    repo_url = (cfg.get("REPO_URL") or "").strip()
+    channel = (cfg.get("UPDATE_CHANNEL") or "stable").strip()
+
+    if not repo_url:
+        raise HTTPException(status_code=400, detail="REPO_URL non configurato in config.env")
+
+    branch = "dev" if channel == "beta" else "main"
+    repo_path = repo_url.rstrip("/")
+    if "github.com/" in repo_path:
+        repo_path = repo_path.split("github.com/", 1)[-1]
+    if repo_path.endswith(".git"):
+        repo_path = repo_path[:-4]
+
+    version_json_url = f"https://raw.githubusercontent.com/{repo_path}/{branch}/version.json"
+
+    try:
+        req = urllib.request.Request(version_json_url, headers={"Cache-Control": "no-cache"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            remote_data = json.loads(resp.read().decode())
+    except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as e:
+        raise HTTPException(status_code=502, detail=f"Impossibile controllare aggiornamenti: {e}")
+
+    remote_version = str(remote_data.get("version") or "").strip()
+    if not remote_version:
+        raise HTTPException(status_code=502, detail="version.json remoto non valido")
+
+    return {
+        "current_version": local_version,
+        "latest_version": remote_version,
+        "update_available": _version_tuple(remote_version) > _version_tuple(local_version),
+        "channel": channel,
+        "changelog": remote_data.get("changelog"),
+    }
+
+
+def _update_service_task():
+    """Avvia l'updater OTA con un piccolo ritardo per permettere all'API di rispondere."""
+    time.sleep(2)
+    log_file = BASE_DIR / "restart.log"
+    cmd = ["sudo", "systemctl", "start", "cucu-device-updater.service"]
+    try:
+        with log_file.open("a") as f:
+            f.write(f"[{time.ctime()}] Avvio aggiornamento OTA: {' '.join(cmd)}\n")
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        with log_file.open("a") as f:
+            f.write(f"[{time.ctime()}] cucu-device-updater.service avviato.\n")
+    except subprocess.CalledProcessError as e:
+        with log_file.open("a") as f:
+            f.write(f"[{time.ctime()}] ERRORE avvio updater: {e.stderr}\n")
+    except Exception as e:
+        with log_file.open("a") as f:
+            f.write(f"[{time.ctime()}] EXCEPTION avvio updater: {e}\n")
+
+
+@app.post("/system/update")
+def start_update(background_tasks: BackgroundTasks):
+    """
+    Avvia subito un aggiornamento OTA lanciando cucu-device-updater.service,
+    lo stesso oneshot usato dal timer notturno: gira come root e gestisce già
+    fetch/reset, backup di tags.json, restart servizi e rollback automatico
+    se l'health check fallisce.
+    """
+    background_tasks.add_task(_update_service_task)
+    return {"status": "ok", "message": "Aggiornamento avviato..."}
+
+
 # --- WIFI MANAGEMENT ---
 
 class WifiConnect(BaseModel):

@@ -440,6 +440,16 @@
 
       <h3 style="margin-top: 30px;">Comandi</h3>
       <button class="btn btn-block" onclick="handleRestartPlayer()">↺ Riavvia Lettore NFC</button>
+
+      <div class="list-item" style="margin-top:12px;">
+        <div class="list-item-content">
+          <div class="list-item-title" id="update-status-text">Aggiornamenti</div>
+          <div class="list-item-sub" id="update-detail-text">Non ancora controllato</div>
+        </div>
+        <button class="btn btn-sm" id="update-check-btn" onclick="handleCheckUpdate()">Controlla</button>
+      </div>
+      <button class="btn btn-block btn-primary hidden" id="update-apply-btn" style="margin-top:8px;"
+        onclick="handleApplyUpdate()">⬆ Aggiorna Ora</button>
     </div>
   </main>
 
@@ -1127,6 +1137,41 @@
       try {
         await fetch("/system/restart-player", { method: "POST" });
         showToast("Riavvio in corso...");
+        setTimeout(showReconnectOverlay, 1000);
+      } catch (e) { showToast("Errore comando: " + e.message); }
+    }
+
+    /* --- UPDATE CHECK / APPLY --- */
+    window.handleCheckUpdate = async function () {
+      const btn = $('update-check-btn');
+      const applyBtn = $('update-apply-btn');
+      btn.textContent = '...';
+      btn.disabled = true;
+      applyBtn.classList.add('hidden');
+      try {
+        const data = await apiCall("/system/update-check");
+        $('update-status-text').textContent = `Versione: ${data.current_version}`;
+        if (data.update_available) {
+          $('update-detail-text').textContent = `Nuova versione disponibile: ${data.latest_version} (canale ${data.channel})`;
+          applyBtn.textContent = `⬆ Aggiorna a v${data.latest_version}`;
+          applyBtn.classList.remove('hidden');
+        } else {
+          $('update-detail-text').textContent = `Già aggiornato (canale ${data.channel})`;
+        }
+      } catch (e) {
+        $('update-detail-text').textContent = 'Errore controllo aggiornamenti';
+        showToast("Errore: " + e.message);
+      } finally {
+        btn.textContent = 'Controlla';
+        btn.disabled = false;
+      }
+    }
+
+    window.handleApplyUpdate = async function () {
+      if (!confirm("Avviare l'aggiornamento ora? Il dispositivo si riavvierà al termine.")) return;
+      try {
+        await fetch("/system/update", { method: "POST" });
+        showToast("Aggiornamento avviato...");
         setTimeout(showReconnectOverlay, 1000);
       } catch (e) { showToast("Errore comando: " + e.message); }
     }

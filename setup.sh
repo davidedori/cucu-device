@@ -236,6 +236,9 @@ ${DEPLOY_USER} ALL=(ALL) NOPASSWD: /bin/systemctl restart cucu-device.service
 ${DEPLOY_USER} ALL=(ALL) NOPASSWD: /bin/systemctl stop cucu-device.service
 ${DEPLOY_USER} ALL=(ALL) NOPASSWD: /bin/systemctl start cucu-device.service
 
+# Aggiornamento OTA manuale dalla web UI (stesso oneshot del timer notturno)
+${DEPLOY_USER} ALL=(ALL) NOPASSWD: /bin/systemctl start cucu-device-updater.service
+
 # Gestione Wi-Fi tramite nmcli (usato dall'API web)
 ${DEPLOY_USER} ALL=(ALL) NOPASSWD: /usr/bin/nmcli con delete *
 ${DEPLOY_USER} ALL=(ALL) NOPASSWD: /usr/bin/nmcli con add *
