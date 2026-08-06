@@ -354,11 +354,13 @@ def is_viewing_allowed_now(character: str):
     return True, None
 
 def _compute_hourglass_level(character):
-    """Ritorna il livello clessidra (0=vuoto..9=pieno) da mostrare durante la
-    riproduzione, in base al limite più vicino (minuti residui oggi o tempo
-    residuo prima della fine della fascia oraria corrente). Ritorna None se
-    non c'è nessun limite attivo da segnalare (esente, limiti spenti, giorno
-    senza restrizioni)."""
+    """Ritorna il livello clessidra (0=vuoto..9=pieno) da mostrare, in base al
+    limite più vicino (minuti residui oggi o tempo residuo nella fascia oraria
+    corrente). Rispecchia esattamente la logica di is_viewing_allowed_now():
+    se oggi ci sono fasce configurate e l'ora corrente non è dentro nessuna,
+    la visione è già bloccata → clessidra vuota (0), indipendentemente dal
+    budget minuti residuo. Ritorna None se non c'è nessun limite da segnalare
+    (esente, limiti spenti, giorno senza restrizioni)."""
     if character in time_limits_config.get("exempt_characters", []):
         return None
     if not time_limits_config.get("enabled", False):
@@ -368,6 +370,24 @@ def _compute_hourglass_level(character):
     if not day_cfg:
         return None
 
+    now = datetime.now()
+    windows = day_cfg.get("windows", [])
+    active_window = None
+    if windows:
+        in_any_window = False
+        for w in windows:
+            try:
+                start_t = datetime.strptime(w.get("start", ""), "%H:%M").time()
+                end_t = datetime.strptime(w.get("end", ""), "%H:%M").time()
+            except ValueError:
+                continue
+            if start_t <= now.time() <= end_t:
+                in_any_window = True
+                active_window = (start_t, end_t)
+                break
+        if not in_any_window:
+            return 0  # fuori da tutte le fasce configurate: già bloccato
+
     candidates = []  # (minuti_residui, budget_totale_minuti)
 
     daily_limit = day_cfg.get("daily_limit_minutes")
@@ -375,20 +395,14 @@ def _compute_hourglass_level(character):
         _refresh_daily_usage_if_new_day()
         candidates.append((daily_limit - daily_usage.get("minutes", 0.0), daily_limit))
 
-    now = datetime.now()
-    for w in day_cfg.get("windows", []):
-        try:
-            start_t = datetime.strptime(w.get("start", ""), "%H:%M").time()
-            end_t = datetime.strptime(w.get("end", ""), "%H:%M").time()
-        except ValueError:
-            continue
-        if start_t <= now.time() <= end_t:
-            start_dt = datetime.combine(now.date(), start_t)
-            end_dt = datetime.combine(now.date(), end_t)
-            candidates.append((
-                (end_dt - now).total_seconds() / 60.0,
-                (end_dt - start_dt).total_seconds() / 60.0,
-            ))
+    if active_window:
+        start_t, end_t = active_window
+        start_dt = datetime.combine(now.date(), start_t)
+        end_dt = datetime.combine(now.date(), end_t)
+        candidates.append((
+            (end_dt - now).total_seconds() / 60.0,
+            (end_dt - start_dt).total_seconds() / 60.0,
+        ))
 
     if not candidates:
         return None
