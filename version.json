@@ -1,5 +1,5 @@
 {
-  "version": "0.1.7",
+  "version": "0.1.8",
   "min_version": "0.1.0",
-  "changelog": "Fix: plymouth quit --retain-splash silently failed (ran as unprivileged user, no access to the daemon control socket), leaving a grey screen instead of the frozen boot animation before the app takes over"
+  "changelog": "Fix: Plymouth's 8s DeviceTimeout was shorter than vc4-drm's init time on cold/unclean boots, causing a silent fallback to the text splash (the real 'grey screen'). Also: /boot/firmware is now read-only outside of OTA writes (unclean shutdowns were leaving it dirty and confusing the bootloader), and boot animation frames now play 2x faster"
 }

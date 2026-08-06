@@ -257,12 +257,45 @@ _apply_plymouth_theme() {
         warn "plymouth-set-default-theme fallito — il tema cucu potrebbe non essere attivo al prossimo boot"
     fi
 
+    # DeviceTimeout di default (8s) e' troppo corto su questo hardware: vc4-drm
+    # a volte non e' ancora "inizializzato" secondo udev quando scade, e
+    # Plymouth rinuncia al tema grafico per il fallback testuale (confermato
+    # via log plymouth.debug). Stesso fix di setup.sh, retrofit sui device
+    # esistenti che non lo rieseguono.
+    #
+    # L'inserimento DEVE andare dopo la riga "Theme=", non prima: l'hook
+    # initramfs-tools di plymouth chiama `plymouth-set-default-theme` senza
+    # argomenti per decidere quale tema includere, e quello script legge il
+    # tema con un awk che considera solo il PRIMO campo della sezione
+    # [Daemon] (assume sia "Theme="). Se DeviceTimeout finisce prima, quel
+    # parser ritorna vuoto e l'hook impacchetta "text" invece di "cucu"
+    # nell'initramfs — verificato dal vivo, non e' teorico.
+    local plymouthd_conf="/etc/plymouth/plymouthd.conf"
+    if grep -q '^DeviceTimeout' "$plymouthd_conf" 2>/dev/null; then
+        sed -i -E 's/^DeviceTimeout[[:blank:]]*=.*/DeviceTimeout=20/' "$plymouthd_conf" 2>>"$LOG_FILE" || true
+    else
+        sed -i -e '/^Theme=/a DeviceTimeout=20' "$plymouthd_conf" 2>>"$LOG_FILE" || true
+    fi
+    ok "plymouthd.conf: DeviceTimeout impostato a 20s"
+
+    # /boot/firmware (FAT32, non journalizzata) e' montata read-only fuori da
+    # questa finestra (vedi setup.sh) apposta per non lasciarla "dirty" se il
+    # dispositivo perde corrente: un dirty bit su questa partizione fa leggere
+    # al bootloader (che gira prima di Linux/fsck, con un suo driver FAT che
+    # ignora il dirty bit) un initramfs incoerente al boot successivo, con
+    # schermata grigia al posto dell'animazione. Riportarla rw solo per la
+    # scrittura riduce la finestra di rischio da "sempre" a "pochi secondi a
+    # notte".
+    mount -o remount,rw /boot/firmware 2>>"$LOG_FILE" || warn "remount rw di /boot/firmware fallito"
+
     log "Rigenerazione initramfs (30-60s)..."
     if update-initramfs -u 2>>"$LOG_FILE"; then
         ok "initramfs aggiornato"
     else
         warn "update-initramfs fallito — il tema Plymouth potrebbe non essere aggiornato al prossimo boot"
     fi
+
+    mount -o remount,ro /boot/firmware 2>>"$LOG_FILE" || warn "remount ro di /boot/firmware fallito"
 }
 
 # ---- HELPER: RIPRISTINA FILE UTENTE -----------------------------------------
