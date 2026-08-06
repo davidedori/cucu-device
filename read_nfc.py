@@ -288,16 +288,20 @@ def is_viewing_allowed_now(character: str):
         return True, None
 
     now_time = datetime.now().time()
-    window_start = day_cfg.get("window_start")
-    window_end = day_cfg.get("window_end")
-    if window_start and window_end:
-        try:
-            start_t = datetime.strptime(window_start, "%H:%M").time()
-            end_t = datetime.strptime(window_end, "%H:%M").time()
-            if not (start_t <= now_time <= end_t):
-                return False, None
-        except ValueError:
-            pass  # config malformata: non blocchiamo per un orario illeggibile
+    windows = day_cfg.get("windows", [])
+    if windows:
+        in_any_window = False
+        for w in windows:
+            try:
+                start_t = datetime.strptime(w.get("start", ""), "%H:%M").time()
+                end_t = datetime.strptime(w.get("end", ""), "%H:%M").time()
+                if start_t <= now_time <= end_t:
+                    in_any_window = True
+                    break
+            except ValueError:
+                continue  # finestra malformata: ignorata, non blocca
+        if not in_any_window:
+            return False, None
 
     daily_limit = day_cfg.get("daily_limit_minutes")
     if daily_limit is not None:
