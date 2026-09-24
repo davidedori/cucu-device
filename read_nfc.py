@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-import subprocess
 import json
-import re
 import time
 import random
 import sys
@@ -16,6 +14,8 @@ except ImportError:
     print("Esegui: sudo apt install python3-vlc")
     sys.exit(1)
 
+from nfc_reader import create_reader
+
 # --- CONFIG -------------------------------------------------------------
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -25,7 +25,6 @@ GRAPHICS_DIR = BASE_DIR / "graphics"
 TIME_LIMITS_PATH = BASE_DIR / "time_limits.json"
 DAILY_USAGE_PATH = BASE_DIR / "daily_usage.json"
 
-NFCLIST_PATH = "/usr/bin/nfc-list"
 IDLE_IMAGE = GRAPHICS_DIR / "idle.png"
 WAIT_NEXT_IMAGE = GRAPHICS_DIR / "wait_next.png"
 HOURGLASS_DIR = GRAPHICS_DIR / "hourglass"
@@ -503,22 +502,27 @@ def refresh_graphic(force_path=None):
 
 # --- LETTORE NFC --------------------------------------------------------
 
-def read_uid_once():
+def read_nfc_reader_mode():
+    """Legge NFC_READER da config.env (auto | pn532_i2c | acr122u). Parser
+    minimo KEY=VALUE: python-dotenv è solo nel venv dell'API, non qui."""
     try:
-        result = subprocess.run([NFCLIST_PATH, "-v"], capture_output=True, text=True, timeout=2)
-        out = result.stdout + result.stderr
-        m = re.search(r"UID \(NFCID1\):\s*(.*)", out)
-        if m:
-            return " ".join(m.group(1).strip().split())
-    except Exception:
+        with (BASE_DIR / "config.env").open() as f:
+            for line in f:
+                key, sep, value = line.strip().partition("=")
+                if sep and key.strip() == "NFC_READER":
+                    return value.strip().strip("\"'") or "auto"
+    except OSError:
         pass
-    return None
+    return "auto"
 
 # --- LOOP PRINCIPALE ----------------------------------------------------
 
 print("cucu-device player avviato.")
 load_episode_state()
 refresh_graphic(IDLE_IMAGE) # Avvio con idle
+# Dopo la grafica idle: il probe del PN532 può richiedere qualche istante e
+# lo schermo non deve restare grigio nel frattempo.
+reader = create_reader(read_nfc_reader_mode())
 
 last_tick_ts = time.time()
 usage_unsaved_seconds = 0.0
@@ -528,7 +532,7 @@ try:
         # 0. Accumulo minuti di riproduzione effettivi (esclusi personaggi
         # esenti e stato "paused"), basato sul tempo reale trascorso dal tick
         # precedente e non su un fisso 0.1s, per restare corretti anche se
-        # un'iterazione impiega più del previsto (es. subprocess nfc-list lento).
+        # un'iterazione impiega più del previsto (es. lettura NFC lenta).
         now_ts = time.time()
         elapsed = now_ts - last_tick_ts
         last_tick_ts = now_ts
@@ -559,7 +563,7 @@ try:
                 usage_unsaved_seconds = 0.0
 
         # 2. Lettura NFC
-        uid = read_uid_once()
+        uid = reader.read_uid()
         has_tag = uid is not None
 
         # Scrivi l'ultimo tag visto per il wizard di associazione della UI, e il

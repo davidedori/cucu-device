@@ -9,10 +9,25 @@ Dispositivo basato su Raspberry Pi che permette a un bambino di avviare video su
 | Componente | Note |
 |---|---|
 | Raspberry Pi 4 o 5 | Testato su RPi 4 Model B |
-| Lettore NFC | Compatibile con `libnfc` (es. ACR122U) |
+| Lettore NFC | PN532 su I2C (hardware v2) oppure ACR122U USB (hardware v1). Scelto da `NFC_READER` in `config.env`, default `auto` |
 | Schermo/TV | Collegato via HDMI, fullscreen automatico |
 | Scheda SD | 16 GB min, 32 GB consigliati (per i video) |
 | Tag NFC | Uno per personaggio (NTAG215 o simili) |
+
+### Collegamento PN532 (I2C)
+
+Imposta il DIP switch del modulo in modalità **I2C** (sui moduli Elechouse V3: SW1=ON, SW2=OFF; controlla la serigrafia del tuo modulo).
+
+| PN532 | Raspberry Pi (header GPIO) |
+|---|---|
+| VCC | 3V3 — pin 1 (**non 5V**: i pull-up I2C del modulo vanno a VCC) |
+| GND | GND — pin 6 |
+| SDA | GPIO2 / SDA — pin 3 |
+| SCL | GPIO3 / SCL — pin 5 |
+
+`setup.sh` abilita il bus I2C a 100 kHz (serve un riavvio). Per verificare: `i2cdetect -y 1` deve mostrare `24`. Il formato degli UID è identico a quello dell'ACR122U, quindi le statuette già associate continuano a funzionare.
+
+Un dispositivo v1 convertito a PN532 va aggiornato rieseguendo `sudo bash setup.sh`, perché l'aggiornamento OTA non abilita il bus I2C.
 
 ---
 
@@ -21,6 +36,7 @@ Dispositivo basato su Raspberry Pi che permette a un bambino di avviare video su
 ```
 cucu-device/
 ├── read_nfc.py                 # Script principale: NFC reader + VLC player
+├── nfc_reader.py               # Backend lettore NFC (PN532 I2C / ACR122U)
 ├── tags.json                   # Mapping UID NFC → personaggio (configurato via UI)
 ├── VERSION                     # Versione corrente (es. 0.1.0)
 ├── version.json                # Manifest OTA: versione remota + changelog

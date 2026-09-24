@@ -128,7 +128,8 @@ APT_PACKAGES=(
     python3-vlc        # binding Python per VLC (usato da read_nfc.py)
     vlc-bin            # core binaries VLC
     vlc-plugin-base    # plugin base VLC
-    libnfc-bin         # nfc-list (usato da read_nfc.py per leggere i tag)
+    libnfc-bin         # nfc-list (lettore ACR122U USB, hardware v1)
+    i2c-tools          # gruppo i2c + i2cdetect (lettore PN532 I2C, hardware v2)
     fbi                # framebuffer image viewer (usato come fallback)
     python3-venv       # per creare il venv dell'API
     python3-pip        # pip
@@ -176,13 +177,13 @@ chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "$PROJECT_DIR"
 step "Copia file di progetto"
 
 # Codice: sovrascrive sempre (è la fonte di verità)
-for f in read_nfc.py updater.sh VERSION requirements.txt; do
+for f in read_nfc.py nfc_reader.py updater.sh VERSION requirements.txt; do
     copy_file "$REPO_DIR/$f" "$PROJECT_DIR/$f"
 done
 copy_file "$REPO_DIR/api/main.py"    "$PROJECT_DIR/api/main.py"
 copy_file "$REPO_DIR/api/index.html" "$PROJECT_DIR/api/index.html"
 chmod +x "$PROJECT_DIR/read_nfc.py" "$PROJECT_DIR/updater.sh"
-ok "Copiati: read_nfc.py, updater.sh, VERSION, requirements.txt, api/main.py, api/index.html"
+ok "Copiati: read_nfc.py, nfc_reader.py, updater.sh, VERSION, requirements.txt, api/main.py, api/index.html"
 
 # Grafica: sovrascrive sempre (skip se repo == deploy dir)
 if [ "$(realpath "$REPO_DIR/graphics")" != "$(realpath "$PROJECT_DIR/graphics")" ]; then
@@ -418,6 +419,40 @@ if [ -f "$CONFIG_TXT" ]; then
     else
         ok "config.txt: disable_splash già presente"
     fi
+
+    # Bus I2C per il lettore PN532 (hardware v2). Innocuo sui device con
+    # ACR122U USB: nessun dispositivo sul bus e read_nfc.py ripiega su nfc-list.
+    # Baudrate 100kHz: il PN532 usa il clock stretching, che il controller I2C
+    # del Pi gestisce male a velocità più alte. Attivo dal prossimo riavvio.
+    # "[all]" evita che le righe finiscano dentro una sezione condizionale
+    # (es. [cm5]) lasciata aperta in fondo al file.
+    if ! grep -q "^dtparam=i2c_arm=on" "$CONFIG_TXT"; then
+        sed -i '/^dtparam=i2c_arm=/d' "$CONFIG_TXT"
+        printf '[all]\ndtparam=i2c_arm=on\n' >> "$CONFIG_TXT"
+        ok "config.txt: bus I2C abilitato (attivo dopo il riavvio)"
+    else
+        ok "config.txt: bus I2C già abilitato"
+    fi
+    if ! grep -q "^dtparam=i2c_arm_baudrate=100000" "$CONFIG_TXT"; then
+        sed -i '/^dtparam=i2c_arm_baudrate=/d' "$CONFIG_TXT"
+        printf '[all]\ndtparam=i2c_arm_baudrate=100000\n' >> "$CONFIG_TXT"
+        ok "config.txt: baudrate I2C impostato a 100kHz"
+    else
+        ok "config.txt: baudrate I2C già impostato"
+    fi
+fi
+
+# /dev/i2c-* esiste solo con il modulo i2c-dev caricato
+echo "i2c-dev" > /etc/modules-load.d/cucu-i2c.conf
+modprobe i2c-dev 2>/dev/null || true
+# Il gruppo i2c (creato da i2c-tools) dà accesso a /dev/i2c-* senza root.
+# Non usiamo SupplementaryGroups= nel .service: se il gruppo mancasse, il
+# servizio non partirebbe più al boot.
+if getent group i2c >/dev/null; then
+    usermod -aG i2c "$DEPLOY_USER"
+    ok "Utente $DEPLOY_USER aggiunto al gruppo i2c"
+else
+    warn "Gruppo i2c assente: il lettore PN532 non sarà accessibile"
 fi
 
 # Rigenera initramfs per includere Plymouth nell'immagine di avvio precoce.

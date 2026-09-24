@@ -1,5 +1,5 @@
 {
-  "version": "0.1.9",
+  "version": "0.2.0",
   "min_version": "0.1.0",
-  "changelog": "Added a manual OTA update check/apply control to the Sistema tab (Controlla / Aggiorna Ora), so an update no longer has to wait for the nightly timer."
+  "changelog": "Added support for the PN532 NFC reader over I2C (hardware v2) with a native driver; the reader is auto-detected at startup and the ACR122U USB reader keeps working."
 }
