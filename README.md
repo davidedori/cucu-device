@@ -16,14 +16,31 @@ Dispositivo basato su Raspberry Pi che permette a un bambino di avviare video su
 
 ### Collegamento PN532 (I2C)
 
-Imposta il DIP switch del modulo in modalità **I2C** (sui moduli Elechouse V3: SW1=ON, SW2=OFF; controlla la serigrafia del tuo modulo).
+Imposta il DIP switch del modulo in modalità **I2C**: tabellina serigrafata `I2C = 1 0`, cioè levetta 1 su ON e levetta 2 su OFF. Il chip legge il DIP switch solo all'accensione, quindi dopo averlo cambiato togli e ridai corrente.
+
+Sul modulo si usa solo la fila da 4 pin (`GND VCC SDA SCL`). La fila da 8 serve per SPI, IRQ e reset e non va collegata.
+
+Sul Pi Zero 2 W tutti i collegamenti stanno sulla **fila interna** del connettore GPIO (pin dispari, lato opposto al bordo della scheda). Il pin 1 ha la piazzola quadrata, dal lato della SD. Basta quindi un'unica fila di piedini, anche a 90°, saldata nei fori 1-3-5-7-9-11. Il pin 7 resta libero e il pin 11 è predisposto per un eventuale LED.
 
 | PN532 | Raspberry Pi (header GPIO) |
 |---|---|
-| VCC | 3V3 — pin 1 (**non 5V**: i pull-up I2C del modulo vanno a VCC) |
-| GND | GND — pin 6 |
-| SDA | GPIO2 / SDA — pin 3 |
-| SCL | GPIO3 / SCL — pin 5 |
+| VCC | 3V3, pin 1 (**non 5V**: i pull-up I2C del modulo vanno a VCC) |
+| SDA | GPIO2 / SDA, pin 3 |
+| SCL | GPIO3 / SCL, pin 5 |
+| GND | GND, pin 9 (è un GND come il pin 6, ma sta sulla fila interna) |
+
+Portata misurata attraverso il case: circa 3–4 cm. Materiale e spessore della zona di appoggio contano poco, ma vanno evitati i filamenti caricati con metallo o carbonio e le viti metalliche dentro la spira dell'antenna. Il LED rosso `PWR` del modulo è sempre acceso e non si può spegnere via software: se si vede attraverso il case, coprilo (nastro o smalto nero) o dissaldalo.
+
+### LED di stato (opzionale, non ancora gestito dal software)
+
+Predisposizione per un LED comandato dal software, da collegare **sempre con una resistenza in serie da 220–330 Ω**:
+
+```
+pin 11 (GPIO17) ── resistenza 330 Ω ── LED gamba lunga (+)
+                                       LED gamba corta (−) ── pin 25 (GND)
+```
+
+Si usa GPIO17 perché all'accensione è tenuto basso: il LED resta spento finché non lo comanda il software. GPIO4 (pin 7) invece è tenuto alto e il LED si accenderebbe debolmente durante il boot. Il pin 25 è un GND della fila interna, così tutti i piedini restano su un'unica fila.
 
 `setup.sh` abilita il bus I2C a 100 kHz (serve un riavvio). Per verificare: `i2cdetect -y 1` deve mostrare `24`. Il formato degli UID è identico a quello dell'ACR122U, quindi le statuette già associate continuano a funzionare.
 
