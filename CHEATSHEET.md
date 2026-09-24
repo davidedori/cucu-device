@@ -63,6 +63,18 @@ sudo systemctl status cucu-device.service
 sudo journalctl -u cucu-device.service -f
 ```
 
+**Lettore PN532 (I2C): verificare il cablaggio.** `24` deve comparire nella tabella:
+```bash
+i2cdetect -y 1
+```
+
+**Provare il lettore da solo, senza il servizio (stampa gli UID letti; CTRL+C per uscire):**
+```bash
+sudo systemctl stop cucu-device.service
+python3 ~/cucu-device/nfc_reader.py
+sudo systemctl start cucu-device.service
+```
+
 ---
 
 ## 📛 4. Gestione Identità ed Emergenze Reti
