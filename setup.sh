@@ -111,6 +111,14 @@ fi
 # =============================================================================
 step "Aggiornamento sistema (apt update / upgrade)"
 
+# Su un'installazione esistente /boot/firmware è montata read-only (vedi fstab
+# più sotto), ma gli upgrade di kernel/firmware/initramfs ci scrivono: senza
+# rw, dpkg fallisce ("Sub-process /usr/bin/dpkg returned an error code (1)").
+# Resta rw fino al remount ro in fondo allo script.
+mount -o remount,rw /boot/firmware 2>/dev/null || true
+# Completa eventuali pacchetti rimasti a metà da un run precedente fallito
+dpkg --configure -a
+
 apt-get update -y -q
 # --force-confold: mantiene i file di configurazione esistenti senza chiedere
 apt-get upgrade -y -q \
