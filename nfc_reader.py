@@ -31,7 +31,6 @@ CMD_GET_FIRMWARE_VERSION = 0x02
 CMD_SAM_CONFIGURATION = 0x14
 CMD_RF_CONFIGURATION = 0x32
 CMD_IN_LIST_PASSIVE_TARGET = 0x4A
-CMD_IN_RELEASE = 0x52
 
 ACK_FRAME = bytes([0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00])
 HOST_TO_PN532 = 0xD4
@@ -43,6 +42,11 @@ PN532_TO_HOST = 0xD5
 ERROR_HOLD_POLLS = 3
 # Dopo quanti errori di fila chiudere/riaprire il bus e reinizializzare il chip.
 REINIT_AFTER_ERRORS = 10
+# Una statuetta al limite della portata (es. dietro lo spessore del case)
+# può mancare un poll isolato, soprattutto mentre viene appoggiata. Il tag
+# viene dato per tolto solo dopo questo tempo di assenza continuativa,
+# altrimenti il video alterna pausa/ripresa ("a scatti").
+ABSENCE_CONFIRM_SEC = 0.5
 
 
 class Pn532Error(Exception):
@@ -130,6 +134,7 @@ class Pn532I2cReader:
         self.firmware = None
         self._last_uid = None
         self._errors = 0
+        self._absent_since = None
 
     # -- trasporto --
 
@@ -192,11 +197,12 @@ class Pn532I2cReader:
             self.firmware = f"{fw[1]}.{fw[2]}"
         # Normal mode, timeout 0x14 (1s), IRQ usato
         self._command(CMD_SAM_CONFIGURATION, bytes([0x01, 0x14, 0x01]))
-        # MaxRetries: MxRtyATR=0xFF, MxRtyPSL=0x01, MxRtyPassiveActivation=0x02.
+        # MaxRetries: MxRtyATR=0xFF, MxRtyPSL=0x01, MxRtyPassiveActivation=0x10.
         # Il default (0xFF) fa aspettare InListPassiveTarget all'infinito
-        # finché non arriva un tag: con pochi tentativi ritorna subito con
-        # NbTg=0 e il loop a 10Hz resta reattivo.
-        self._command(CMD_RF_CONFIGURATION, bytes([0x05, 0xFF, 0x01, 0x02]))
+        # finché non arriva un tag. 0x10 (17 tentativi) è il compromesso
+        # misurato con la statuetta dietro il case: 60/60 letture riuscite,
+        # ~40ms per poll con tag e ~110ms senza tag (con 0x02 ~90% di letture).
+        self._command(CMD_RF_CONFIGURATION, bytes([0x05, 0xFF, 0x01, 0x10]))
 
     def probe(self):
         """Apre il bus e inizializza il chip. Ritorna True se il PN532 risponde."""
@@ -214,12 +220,11 @@ class Pn532I2cReader:
 
     def _poll(self):
         data = self._command(CMD_IN_LIST_PASSIVE_TARGET, bytes([0x01, 0x00]))
-        uid = parse_passive_target_uid(data)
-        if uid is not None:
-            # Deseleziona il tag: il poll successivo lo riattiva da capo e
-            # così si accorge davvero se è stato tolto.
-            self._command(CMD_IN_RELEASE, bytes([0x00]))
-        return uid
+        # Niente InRelease dopo la lettura: mette il tag in HALT e, al limite
+        # della portata, il poll successivo spesso non riesce a riattivarlo
+        # (misurato: letture alternate 0101..., ~40% di successo). Senza
+        # rilascio la rimozione viene comunque rilevata al poll successivo.
+        return parse_passive_target_uid(data)
 
     def read_uid(self):
         try:
@@ -241,6 +246,13 @@ class Pn532I2cReader:
         if self._errors:
             print(f"[INFO] PN532 di nuovo operativo dopo {self._errors} errori.")
             self._errors = 0
+        if uid is None and self._last_uid is not None:
+            now = time.monotonic()
+            if self._absent_since is None:
+                self._absent_since = now
+            if now - self._absent_since < ABSENCE_CONFIRM_SEC:
+                return self._last_uid
+        self._absent_since = None
         self._last_uid = uid
         return uid
 
