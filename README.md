@@ -29,7 +29,7 @@ Sul Pi Zero 2 W tutti i collegamenti stanno sulla **fila interna** del connettor
 | SCL | GPIO3 / SCL, pin 5 |
 | GND | GND, pin 9 (è un GND come il pin 6, ma sta sulla fila interna) |
 
-Portata misurata attraverso il case: circa 3–4 cm. Materiale e spessore della zona di appoggio contano poco, ma vanno evitati i filamenti caricati con metallo o carbonio e le viti metalliche dentro la spira dell'antenna. Il LED rosso `PWR` del modulo è sempre acceso e non si può spegnere via software: se si vede attraverso il case, coprilo (nastro o smalto nero) o dissaldalo.
+**Distanza tra modulo e tag: almeno 5 mm, idealmente 6–8 mm, non oltre ~2 cm.** Alcuni tag (anche dello stesso modello degli altri) non rispondono quando sono troppo vicini all'antenna del PN532. Misurato su 7 statuette: 3 leggevano il 4–26% delle volte appoggiate a pochi mm dal modulo, e tutte il 99–100% con ~5 mm di spessore in più. Con l'ACR122U il problema non c'era, perché ha un'antenna diversa. La portata massima è circa 3–4 cm. Il materiale della zona di appoggio conta poco, ma vanno evitati i filamenti caricati con metallo o carbonio e le viti metalliche dentro la spira dell'antenna. Il LED rosso `PWR` del modulo è sempre acceso e non si può spegnere via software: se si vede attraverso il case, coprilo (nastro o smalto nero) o dissaldalo.
 
 ### LED di stato (opzionale, non ancora gestito dal software)
 
