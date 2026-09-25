@@ -101,10 +101,13 @@ class HardwarePwm:
 
     def open(self):
         deadline = time.monotonic() + PWM_WAIT_SEC
-        while not PWM_CHIP.exists():
+        # Partendo presto nel boot, il chip PWM può esistere ma essere ancora
+        # di root: udev lo assegna al gruppo gpio poco dopo (visto dal vivo:
+        # Permission denied su export ~2s dopo l'avvio del servizio).
+        while not os.access(PWM_CHIP / "export", os.W_OK):
             if time.monotonic() > deadline:
                 return False
-            time.sleep(0.5)
+            time.sleep(0.1)
         if not self.path.exists():
             with open(PWM_CHIP / "export", "w") as f:
                 f.write(str(PWM_CHANNEL))
