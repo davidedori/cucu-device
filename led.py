@@ -92,6 +92,8 @@ def read_state():
 class HardwarePwm:
     def __init__(self):
         self.path = PWM_CHIP / f"pwm{PWM_CHANNEL}"
+        self._duty_fd = None
+        self._last_duty = None
 
     def _write(self, name, value):
         with open(self.path / name, "w") as f:
@@ -115,11 +117,18 @@ class HardwarePwm:
         self._write("duty_cycle", 0)
         self._write("period", PWM_PERIOD_NS)
         self._write("enable", 1)
+        # Il file duty_cycle resta aperto: riaprirlo 50 volte al secondo
+        # costava ~5% di un core, non trascurabile con VLC che decodifica.
+        self._duty_fd = os.open(self.path / "duty_cycle", os.O_WRONLY)
         return True
 
     def set(self, percent):
         percent = max(0.0, min(100.0, percent))
-        self._write("duty_cycle", int(PWM_PERIOD_NS * percent / 100))
+        duty = int(PWM_PERIOD_NS * percent / 100)
+        if duty == self._last_duty:
+            return  # es. luce fissa durante il video: nessuna scrittura
+        os.pwrite(self._duty_fd, str(duty).encode(), 0)
+        self._last_duty = duty
 
     def off(self):
         try:
