@@ -20,7 +20,7 @@ Imposta il DIP switch del modulo in modalità **I2C**: tabellina serigrafata `I2
 
 Sul modulo si usa solo la fila da 4 pin (`GND VCC SDA SCL`). La fila da 8 serve per SPI, IRQ e reset e non va collegata.
 
-Sul Pi Zero 2 W tutti i collegamenti stanno sulla **fila interna** del connettore GPIO (pin dispari, lato opposto al bordo della scheda). Il pin 1 ha la piazzola quadrata, dal lato della SD. Basta quindi un'unica fila di piedini, anche a 90°, saldata nei fori 1-3-5-7-9-11. Il pin 7 resta libero e il pin 11 è predisposto per un eventuale LED.
+Sul Pi Zero 2 W tutti i collegamenti stanno sulla **fila interna** del connettore GPIO (pin dispari, lato opposto al bordo della scheda). Il pin 1 ha la piazzola quadrata, dal lato della SD. Basta quindi un'unica fila di piedini, anche a 90°, saldata nei fori 1-3-5-7-9-11 (i pin 7 e 11 restano liberi), più i due piedini singoli 25 e 33 per il LED di stato.
 
 | PN532 | Raspberry Pi (header GPIO) |
 |---|---|
@@ -31,16 +31,26 @@ Sul Pi Zero 2 W tutti i collegamenti stanno sulla **fila interna** del connettor
 
 **Distanza tra modulo e tag: almeno 5 mm, idealmente 6–8 mm, non oltre ~2 cm.** Alcuni tag (anche dello stesso modello degli altri) non rispondono quando sono troppo vicini all'antenna del PN532. Misurato su 7 statuette: 3 leggevano il 4–26% delle volte appoggiate a pochi mm dal modulo, e tutte il 99–100% con ~5 mm di spessore in più. Con l'ACR122U il problema non c'era, perché ha un'antenna diversa. La portata massima è circa 3–4 cm. Il materiale della zona di appoggio conta poco, ma vanno evitati i filamenti caricati con metallo o carbonio e le viti metalliche dentro la spira dell'antenna. Il LED rosso `PWR` del modulo è sempre acceso e non si può spegnere via software: se si vede attraverso il case, coprilo (nastro o smalto nero) o dissaldalo.
 
-### LED di stato (opzionale, non ancora gestito dal software)
+### LED di stato (opzionale)
 
-Predisposizione per un LED comandato dal software, da collegare **sempre con una resistenza in serie da 220–330 Ω**:
+LED da 5 mm con resistenza già integrata nel cavo, dimensionata per 5 V (es. Lumonic "LED con resistenza per 5V"). Pilotato a 3,3 V dal GPIO è già abbastanza luminoso, quindi non servono transistor né resistenze aggiuntive. Con un LED "nudo" va messa in serie una resistenza da 220–330 Ω.
 
 ```
-pin 11 (GPIO17) ── resistenza 330 Ω ── LED gamba lunga (+)
-                                       LED gamba corta (−) ── pin 25 (GND)
+pin 33 (GPIO13, PWM hardware) ── filo rosso (+)
+pin 25 (GND)                  ── filo nero (−)
 ```
 
-Si usa GPIO17 perché all'accensione è tenuto basso: il LED resta spento finché non lo comanda il software. GPIO4 (pin 7) invece è tenuto alto e il LED si accenderebbe debolmente durante il boot. Il pin 25 è un GND della fila interna, così tutti i piedini restano su un'unica fila.
+GPIO13 ha il PWM hardware, che rende l'effetto respiro fluido anche mentre VLC occupa la CPU (il PWM software tremola). All'accensione il pin è tenuto basso. `setup.sh` aggiunge `dtoverlay=pwm,pin=13,func=4` a `config.txt` (serve un riavvio).
+
+Il LED è gestito da `led.py` (servizio `cucu-led.service`), che parte presto nel boot, indipendente da rete e VLC:
+
+| Stato | LED |
+|---|---|
+| Avvio, oppure `read_nfc.py` fermo | respiro veloce |
+| Idle, pausa, fine episodio | respiro lento |
+| Video in corso, oppure visione bloccata dai limiti di tempo | fisso basso |
+
+Luminosità e velocità si regolano con le costanti in cima a `led.py`. Sui dispositivi senza LED o senza PWM il servizio esce subito, senza errori.
 
 `setup.sh` abilita il bus I2C a 100 kHz (serve un riavvio). Per verificare: `i2cdetect -y 1` deve mostrare `24`. Il formato degli UID è identico a quello dell'ACR122U, quindi le statuette già associate continuano a funzionare.
 
@@ -54,6 +64,7 @@ Un dispositivo v1 convertito a PN532 va aggiornato rieseguendo `sudo bash setup.
 cucu-device/
 ├── read_nfc.py                 # Script principale: NFC reader + VLC player
 ├── nfc_reader.py               # Backend lettore NFC (PN532 I2C / ACR122U)
+├── led.py                      # LED di stato (PWM hardware, servizio cucu-led)
 ├── tags.json                   # Mapping UID NFC → personaggio (configurato via UI)
 ├── VERSION                     # Versione corrente (es. 0.1.0)
 ├── version.json                # Manifest OTA: versione remota + changelog
@@ -78,6 +89,7 @@ cucu-device/
 └── systemd/
     ├── cucu-device.service     # Servizio NFC reader
     ├── cucu-device-api.service # Servizio API web
+    ├── cucu-led.service        # LED di stato
     ├── splashscreen.service    # Splash screen al boot
     ├── cucu-device-updater.service
     └── cucu-device-updater.timer
@@ -239,6 +251,7 @@ Configura le reti Wi-Fi dall'interfaccia web (`/api/wifi`).
 | Servizio | Avvio | Descrizione |
 |---|---|---|
 | `cucu-device.service` | boot | NFC reader + VLC player |
+| `cucu-led.service` | boot (presto) | LED di stato (hardware v2) |
 | `cucu-device-api.service` | boot | FastAPI su porta 80 |
 | `splashscreen.service` | sysinit | Splash PNG su framebuffer |
 | `cucu-device-updater.timer` | boot | Trigger OTA ogni notte alle 3:00 |

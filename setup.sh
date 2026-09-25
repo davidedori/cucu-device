@@ -185,13 +185,13 @@ chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "$PROJECT_DIR"
 step "Copia file di progetto"
 
 # Codice: sovrascrive sempre (è la fonte di verità)
-for f in read_nfc.py nfc_reader.py updater.sh VERSION requirements.txt; do
+for f in read_nfc.py nfc_reader.py led.py updater.sh VERSION requirements.txt; do
     copy_file "$REPO_DIR/$f" "$PROJECT_DIR/$f"
 done
 copy_file "$REPO_DIR/api/main.py"    "$PROJECT_DIR/api/main.py"
 copy_file "$REPO_DIR/api/index.html" "$PROJECT_DIR/api/index.html"
 chmod +x "$PROJECT_DIR/read_nfc.py" "$PROJECT_DIR/updater.sh"
-ok "Copiati: read_nfc.py, nfc_reader.py, updater.sh, VERSION, requirements.txt, api/main.py, api/index.html"
+ok "Copiati: read_nfc.py, nfc_reader.py, led.py, updater.sh, VERSION, requirements.txt, api/main.py, api/index.html"
 
 # Grafica: sovrascrive sempre (skip se repo == deploy dir)
 if [ "$(realpath "$REPO_DIR/graphics")" != "$(realpath "$PROJECT_DIR/graphics")" ]; then
@@ -273,6 +273,7 @@ step "Configurazione e abilitazione servizi systemd"
 SERVICES=(
     cucu-device.service
     cucu-device-api.service
+    cucu-led.service
     cucu-device-updater.service
     cucu-device-updater.timer
 )
@@ -295,7 +296,7 @@ ok "daemon-reload eseguito"
 
 # Abilita i servizi applicativi e il timer OTA
 # Il .service dell'updater NON viene abilitato direttamente (lo lancia il timer)
-for svc in cucu-device.service cucu-device-api.service; do
+for svc in cucu-device.service cucu-device-api.service cucu-led.service; do
     systemctl enable "$svc"
     ok "Abilitato all'avvio: $svc"
 done
@@ -447,6 +448,16 @@ if [ -f "$CONFIG_TXT" ]; then
         ok "config.txt: baudrate I2C impostato a 100kHz"
     else
         ok "config.txt: baudrate I2C già impostato"
+    fi
+
+    # PWM hardware su GPIO13 (pin 33) per il LED di stato (effetto respiro):
+    # il PWM software tremola nella parte bassa della curva, soprattutto con
+    # VLC che occupa la CPU. Innocuo se il LED non è collegato.
+    if ! grep -q "^dtoverlay=pwm,pin=13,func=4" "$CONFIG_TXT"; then
+        printf '[all]\ndtoverlay=pwm,pin=13,func=4\n' >> "$CONFIG_TXT"
+        ok "config.txt: PWM hardware su GPIO13 abilitato (attivo dopo il riavvio)"
+    else
+        ok "config.txt: PWM hardware su GPIO13 già abilitato"
     fi
 fi
 
