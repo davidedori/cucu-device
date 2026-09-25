@@ -48,7 +48,7 @@ Il LED è gestito da `led.py` (servizio `cucu-led.service`), che parte presto ne
 |---|---|
 | Avvio, oppure `read_nfc.py` fermo | respiro veloce |
 | Idle, pausa, fine episodio | respiro lento |
-| Video in corso, oppure visione bloccata dai limiti di tempo | fisso basso |
+| Video in corso, oppure visione bloccata dai limiti di tempo | fisso al 30% |
 
 Luminosità e velocità si regolano con le costanti in cima a `led.py`. Sui dispositivi senza LED o senza PWM il servizio esce subito, senza errori.
 

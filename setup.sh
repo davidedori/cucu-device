@@ -473,6 +473,18 @@ if [ -f "$CONFIG_TXT" ]; then
     else
         ok "config.txt: PWM hardware su GPIO13 già abilitato"
     fi
+
+    # LED acceso fisso (a piena luce: il firmware non ha PWM) già ~2s dopo
+    # l'accensione, prima della schermata di avvio. Il kernel riprende il
+    # pin quando carica il driver PWM (~14s), poi led.py avvia il respiro.
+    # Il pull-up interno (ip,pu) come luce fioca è stato provato: invisibile.
+    if ! grep -q "^gpio=13=op,dh" "$CONFIG_TXT"; then
+        sed -i '/^gpio=13=/d' "$CONFIG_TXT"
+        printf '[all]\ngpio=13=op,dh\n' >> "$CONFIG_TXT"
+        ok "config.txt: LED di stato acceso dal firmware all'avvio"
+    else
+        ok "config.txt: LED di stato già acceso dal firmware all'avvio"
+    fi
 fi
 
 # /dev/i2c-* esiste solo con il modulo i2c-dev caricato
