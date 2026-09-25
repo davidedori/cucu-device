@@ -106,6 +106,20 @@ else
     ok "Hostname già corretto: ${BOLD}${NEW_HOSTNAME}${NC}"
 fi
 
+# cloud-init serve solo al primo avvio di un'immagine creata con Raspberry Pi
+# Imager (utente, Wi-Fi, SSH). Poi resta attivo a ogni boot per ~7s senza
+# fare nulla, ritardando l'avvio di Cucù. Il Wi-Fi resta configurato in
+# NetworkManager, non dipende da cloud-init. Lo disattiviamo solo se il primo
+# avvio è già completato (boot-finished), altrimenti si perderebbe la config.
+if [ -d /etc/cloud ]; then
+    if [ -f /var/lib/cloud/instance/boot-finished ]; then
+        touch /etc/cloud/cloud-init.disabled
+        ok "cloud-init disattivato (boot più veloce di ~7s)"
+    else
+        warn "cloud-init non ha ancora completato il primo avvio: lasciato attivo"
+    fi
+fi
+
 # =============================================================================
 # STEP 2 — AGGIORNAMENTO SISTEMA
 # =============================================================================
