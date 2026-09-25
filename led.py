@@ -7,7 +7,7 @@ anima il LED a 50Hz con il PWM hardware, indipendentemente dal loop NFC.
 Comportamento:
 - avvio, o read_nfc.py fermo/bloccato → respiro veloce
 - idle, pausa, fine episodio          → respiro lento
-- video in corso, o visione bloccata  → fisso basso
+- video in corso, o visione bloccata  → fisso (30%)
   dai limiti di tempo
 
 Lo stato viene letto da last_seen_tag.json, che read_nfc.py riscrive ad ogni
@@ -37,9 +37,9 @@ PWM_PERIOD_NS = 100_000  # 10 kHz: nessuno sfarfallio visibile
 # Valori in % di duty cycle. Il LED da 5V pilotato a 3,3V è già attenuato
 # dalla sua resistenza integrata: questi valori sono stati scelti a occhio
 # sul prototipo v2.
-BREATH_MAX = 20.0        # picco del respiro
-BREATH_MIN = 8.0         # minimo del respiro (mai spento)
-STEADY = 8.0             # fisso durante la riproduzione / visione bloccata
+BREATH_MAX = 100.0       # picco del respiro
+BREATH_MIN = 30.0        # minimo del respiro (mai spento)
+STEADY = 30.0            # fisso durante la riproduzione / visione bloccata
 SLOW_PERIOD_SEC = 5.0    # respiro lento: idle, pausa
 FAST_PERIOD_SEC = 1.5    # respiro veloce: avvio, programma principale fermo
 FADE_SEC = 0.6           # dissolvenza tra un effetto e l'altro
