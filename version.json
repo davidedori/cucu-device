@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "min_version": "0.1.0",
-  "changelog": "Added support for the PN532 NFC reader over I2C (hardware v2) with a native driver; the reader is auto-detected at startup and the ACR122U USB reader keeps working."
+  "changelog": "Hardware v2 support: PN532 NFC reader over I2C with a native driver (auto-detected, ACR122U still supported), with reliable reads through the case and no more stuttering video from tags at the edge of range. New status LED on GPIO13 with hardware PWM: lit at power-on, fast breathing while booting, slow breathing when idle or paused, steady while playing or when viewing is blocked by time limits. Faster boot (cloud-init disabled after first boot). setup.sh fixes: apt no longer fails with /boot/firmware read-only."
 }
