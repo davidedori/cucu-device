@@ -206,7 +206,7 @@ rollback() {
 _apply_service_files() {
     local changed=0
     for svc in cucu-device.service cucu-device-api.service splashscreen.service \
-               cucu-device-updater.service cucu-device-updater.timer; do
+               cucu-led.service cucu-device-updater.service cucu-device-updater.timer; do
         if [ -f "$PROJECT_DIR/systemd/$svc" ]; then
             local _uid
             _uid="$(id -u "$DEPLOY_USER")"
@@ -221,6 +221,12 @@ _apply_service_files() {
     if [ "$changed" -eq 1 ]; then
         systemctl daemon-reload
         ok "File di servizio systemd aggiornati"
+    fi
+    # cucu-led.service è stato aggiunto dopo le prime installazioni: setup.sh
+    # non viene rieseguito dall'OTA, quindi lo abilitiamo qui (idempotente).
+    # Non è nel health check: sui device senza LED esce subito, senza errori.
+    if [ -f "$PROJECT_DIR/systemd/cucu-led.service" ]; then
+        systemctl enable cucu-led.service 2>>"$LOG_FILE" || true
     fi
 }
 
@@ -349,6 +355,7 @@ _apply_plymouth_theme
 log "Riavvio servizi..."
 systemctl restart cucu-device.service     2>>"$LOG_FILE" || true
 systemctl restart cucu-device-api.service 2>>"$LOG_FILE" || true
+systemctl restart cucu-led.service        2>>"$LOG_FILE" || true
 
 # Attende la stabilizzazione
 log "Attesa stabilizzazione servizi (10s)..."

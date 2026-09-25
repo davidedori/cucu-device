@@ -569,9 +569,12 @@ try:
         # Scrivi l'ultimo tag visto per il wizard di associazione della UI, e il
         # mode corrente: l'API lo legge per capire se il player è "occupato"
         # prima di riavviare il servizio (es. dopo un salvataggio dei limiti).
+        # "blocked" (visione bloccata ora dai limiti di tempo) e "ts" li usa
+        # led.py per scegliere l'effetto del LED di stato.
         try:
+            blocked = not is_viewing_allowed_now(None)[0]
             with (BASE_DIR / "last_seen_tag.json").open("w") as _f:
-                json.dump({"uid": uid, "ts": time.time(), "mode": mode}, _f)
+                json.dump({"uid": uid, "ts": time.time(), "mode": mode, "blocked": blocked}, _f)
         except Exception:
             pass
 

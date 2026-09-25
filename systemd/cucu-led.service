@@ -1,0 +1,23 @@
+[Unit]
+Description=cucu-device LED di stato
+# Parte il prima possibile nel boot (respiro veloce = "mi sto avviando"):
+# niente dipendenze di default da basic.target/rete, basta il filesystem
+# locale (per led.py) e udev (driver PWM + permessi del gruppo gpio).
+DefaultDependencies=no
+After=local-fs.target systemd-udev-trigger.service
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=simple
+User=davidedorigatti
+ExecStart=/usr/bin/python3 -u /home/davidedorigatti/cucu-device/led.py
+WorkingDirectory=/home/davidedorigatti/cucu-device
+StandardOutput=journal
+StandardError=journal
+# Esce con 0 (niente restart) sui dispositivi senza LED/PWM.
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

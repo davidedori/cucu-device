@@ -54,6 +54,8 @@ La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene carica
 
 **`api/index.html`** — frontend SPA single-file (912 righe, HTML/CSS/JS inline). Nessuna dipendenza da npm o bundler. Si aggiorna via git pull come tutto il resto.
 
+**`led.py`** — LED di stato (hardware v2), servizio `cucu-led.service` che parte presto nel boot (`DefaultDependencies=no`). Anima un LED su GPIO13 con il PWM hardware (sysfs `/sys/class/pwm`). Legge lo stato da `last_seen_tag.json` (`mode`, `blocked`, `ts`), che `read_nfc.py` riscrive ad ogni tick; se il file non viene aggiornato da 10 s → respiro veloce. Sui device senza PWM esce con 0. Non è nel health check OTA.
+
 **`updater.sh`** — script OTA. Legge `config.env`, scarica `version.json` da GitHub raw, confronta versioni semver, fa `git fetch + git reset --hard`, ripristina `tags.json`, aggiorna pip e systemd, health check + rollback automatico in caso di fallimento.
 
 **`setup.sh`** — script di installazione idempotente. Configura hostname, installa dipendenze, crea struttura, copia file, crea venv, configura sudoers, installa e abilita servizi systemd incluso il timer OTA.
@@ -65,6 +67,7 @@ Tutto il progetto vive in `/home/davidedorigatti/cucu-device/`. Questo path è h
 - `systemd/cucu-device-api.service` (WorkingDirectory, ExecStart venv)
 - `systemd/splashscreen.service` (ExecStart path grafica)
 - `systemd/cucu-device-updater.service` (ExecStart)
+- `systemd/cucu-led.service` (ExecStart, WorkingDirectory)
 - `read_nfc.py` riga `BASE_DIR`
 - `api/main.py` riga `BASE_DIR`
 
