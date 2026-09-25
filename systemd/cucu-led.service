@@ -1,10 +1,13 @@
 [Unit]
 Description=cucu-device LED di stato
 # Parte il prima possibile nel boot (respiro veloce = "mi sto avviando"):
-# niente dipendenze di default da basic.target/rete, basta il filesystem
-# locale (per led.py) e udev (driver PWM + permessi del gruppo gpio).
+# niente dipendenze di default da basic.target/rete. Basta la partizione
+# root (led.py sta in /home) e udev (driver PWM + permessi del gruppo gpio):
+# non local-fs.target, che aspetterebbe anche fsck + mount di /boot/firmware
+# (~1,5s su Pi Zero 2 W, misurato).
 DefaultDependencies=no
-After=local-fs.target systemd-udev-trigger.service
+RequiresMountsFor=/home
+After=systemd-udevd.service systemd-udev-trigger.service
 Conflicts=shutdown.target
 Before=shutdown.target
 
