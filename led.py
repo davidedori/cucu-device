@@ -100,30 +100,31 @@ class HardwarePwm:
             f.write(str(value))
 
     def open(self):
+        """Esporta e configura il canale PWM. Partendo presto nel boot, udev
+        assegna il gruppo gpio a export e ai file del canale solo poco dopo,
+        e un file alla volta (visti dal vivo: Permission denied sia su export
+        sia su duty_cycle, a boot diversi): su PermissionError si ritenta
+        tutto fino a PWM_WAIT_SEC."""
         deadline = time.monotonic() + PWM_WAIT_SEC
-        # Partendo presto nel boot, il chip PWM può esistere ma essere ancora
-        # di root: udev lo assegna al gruppo gpio poco dopo (visto dal vivo:
-        # Permission denied su export ~2s dopo l'avvio del servizio).
-        while not os.access(PWM_CHIP / "export", os.W_OK):
-            if time.monotonic() > deadline:
-                return False
-            time.sleep(0.1)
+        while True:
+            try:
+                self._configure()
+                return True
+            except (PermissionError, FileNotFoundError):
+                if time.monotonic() > deadline:
+                    return False
+                time.sleep(0.1)
+
+    def _configure(self):
         if not self.path.exists():
             with open(PWM_CHIP / "export", "w") as f:
                 f.write(str(PWM_CHANNEL))
-        # Dopo l'export udev assegna il gruppo gpio ai file del canale: fino
-        # ad allora non sono scrivibili dall'utente del servizio.
-        while not os.access(self.path / "period", os.W_OK):
-            if time.monotonic() > deadline:
-                return False
-            time.sleep(0.02)
         self._write("duty_cycle", 0)
         self._write("period", PWM_PERIOD_NS)
         self._write("enable", 1)
         # Il file duty_cycle resta aperto: riaprirlo 50 volte al secondo
         # costava ~5% di un core, non trascurabile con VLC che decodifica.
         self._duty_fd = os.open(self.path / "duty_cycle", os.O_WRONLY)
-        return True
 
     def set(self, percent):
         percent = max(0.0, min(100.0, percent))
