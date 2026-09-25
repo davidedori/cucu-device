@@ -188,6 +188,7 @@ rollback() {
 
     # Ripristina file utente
     _restore_volatile_files
+    sync  # vedi sync dopo il git reset nel flusso normale
 
     systemctl restart cucu-device.service     2>>"$LOG_FILE" || true
     systemctl restart cucu-device-api.service 2>>"$LOG_FILE" || true
@@ -335,6 +336,12 @@ ok "Codice aggiornato a $REMOTE_VERSION (commit: $(sudo -u "$DEPLOY_USER" git -C
 # ---- RIPRISTINA FILE CONFIGURAZIONE UTENTE ----------------------------------
 _restore_volatile_files
 
+# Forza la scrittura su SD di codice e oggetti git appena scaricati. Senza,
+# una perdita di corrente nei secondi successivi (i genitori staccano la
+# spina) può lasciare file e oggetti git VUOTI: visto dal vivo, con led.py a
+# 0 byte e "bad object HEAD", che blocca anche i successivi aggiornamenti OTA.
+sync
+
 # ---- AGGIORNA DIPENDENZE PYTHON ---------------------------------------------
 log "Verifica dipendenze Python..."
 if [ -f "$VENV_PIP" ]; then
@@ -381,6 +388,7 @@ fi
 
 # ---- COMPLETATO -------------------------------------------------------------
 ok "=================================================="
+sync
 ok "Aggiornamento completato: $LOCAL_VERSION → $REMOTE_VERSION"
 ok "=================================================="
 exit 0
