@@ -1,5 +1,5 @@
 {
-  "version": "0.3.0",
+  "version": "0.3.1",
   "min_version": "0.1.0",
-  "changelog": "Hardware v2 support: PN532 NFC reader over I2C with a native driver (auto-detected, ACR122U still supported), with reliable reads through the case and no more stuttering video from tags at the edge of range. New status LED on GPIO13 with hardware PWM: lit at power-on, fast breathing while booting, slow breathing when idle or paused, steady while playing or when viewing is blocked by time limits. Faster boot (cloud-init disabled after first boot). setup.sh fixes: apt no longer fails with /boot/firmware read-only."
+  "changelog": "Status LED fixes: it no longer fails to start at boot when udev sets the PWM permissions late, and it no longer flickers between states at boot because of the clock (the Pi has no RTC). OTA updates now flush writes to the SD card, so a power cut right after an update can no longer leave empty files or a corrupted git repository."
 }
