@@ -11,8 +11,9 @@ Comportamento:
   dai limiti di tempo
 
 Lo stato viene letto da last_seen_tag.json, che read_nfc.py riscrive ad ogni
-tick con "mode", "blocked" e "ts". Se il file non è aggiornato da
-STALE_AFTER_SEC, il programma principale non sta girando → respiro veloce.
+tick con "mode", "blocked" e "ts". Se "ts" non cambia da STALE_AFTER_SEC
+(misurati con il clock monotono di questo processo, NON confrontando "ts" con
+l'ora di sistema), il programma principale non sta girando → respiro veloce.
 
 Collegamento: LED su GPIO13 (pin 33), GND sul pin 25. Richiede in config.txt
 `dtoverlay=pwm,pin=13,func=4` (lo aggiunge setup.sh). Sui dispositivi senza
@@ -68,8 +69,8 @@ EFFECTS = {
 }
 
 
-def effect_for_state(state, now):
-    if state is None or now - state.get("ts", 0) > STALE_AFTER_SEC:
+def effect_for_state(state, alive):
+    if state is None or not alive:
         return "fast"
     if state.get("mode") == "playing" or state.get("blocked"):
         return "steady"
@@ -161,6 +162,13 @@ def main():
     print("LED di stato attivo.")
     t0 = time.monotonic()
     state = None
+    # Liveness di read_nfc.py: istante (monotono) in cui abbiamo visto "ts"
+    # cambiare l'ultima volta. Non si confronta "ts" con time.time(): il Pi
+    # non ha RTC, al boot l'ora riparte da quella dell'ultimo spegnimento e poi
+    # salta con NTP (visto dal vivo: fast/slow a caso nei primi ~50s). E il
+    # file rimasto dal boot precedente sembrerebbe "fresco". Finché non vediamo
+    # il primo aggiornamento, read_nfc.py è considerato fermo.
+    last_ts, last_change = None, None
     effect = "fast"
     fade_from, fade_start = None, 0.0
     output = 0.0
@@ -176,7 +184,13 @@ def main():
                 state = read_state()
             except ValueError:
                 pass
-            wanted = effect_for_state(state, time.time())
+            ts = state.get("ts") if state else None
+            if ts != last_ts:
+                if last_ts is not None:
+                    last_change = mono
+                last_ts = ts
+            alive = last_change is not None and mono - last_change < STALE_AFTER_SEC
+            wanted = effect_for_state(state, alive)
             if wanted != effect:
                 print(f"LED: {effect} → {wanted}")
                 effect = wanted
