@@ -1,5 +1,5 @@
 {
-  "version": "0.5.0",
+  "version": "0.6.0",
   "min_version": "0.1.0",
-  "changelog": "Figurines and episodes added from the web app now work right away, without restarting the player, and character names keep their capitals and accents. Removing a figurine from the web app works again. New in the web app: a 3-step wizard for new characters (name and photo, figurine, first episodes), moving a figurine from another character, names for figurines, watched/to-watch episodes with a 'start the round again' button, renaming episodes, an upload queue with per-file progress and cancel, and photos shrunk on the phone before upload. State files are now written atomically, so a power cut can no longer truncate them."
+  "changelog": "Web app: a 'Now on TV' card shows what the child is watching, pauses, end of episode, rest time and minutes used today. Time limits are easier to set: a week overview, quick minute choices, copy a day to other days, a plain-language summary and one save for all changes, with a warning before leaving unsaved. Optional parent PIN to protect the settings (reset by deleting ui_auth.json over SSH). Cucù can be added to the phone home screen with its own icon."
 }

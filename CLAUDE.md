@@ -54,6 +54,9 @@ La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene carica
 - `GET /system/info`: hostname, versione, canale OTA, spazio libero su disco
 - Statuine: `move: true` nel POST sposta una statuina da un altro personaggio; `PUT /characters/{name}/tags/{uid}/label` le dà un nome. Gli UID si confrontano senza distinguere maiuscole/minuscole (i lettori scrivono esadecimale minuscolo)
 - `POST /characters/{name}/episodes/reset-round`: tutti gli episodi tornano da vedere
+- `GET /system/now`: cosa succede sulla TV (legge `mode`, `character`, `episode`, `blocked` da `last_seen_tag.json`) + uso di oggi
+- PIN genitore facoltativo: `/auth/*` e il middleware ASGI `PinGuard` (puro ASGI, per non bufferizzare gli upload). Senza `ui_auth.json` non blocca nulla; con il PIN restano aperti solo `/`, `/static/*`, `/api`, `/manifest.webmanifest` e `/auth/*`. `updater.sh` e il suo health check non usano HTTP, quindi non ne sono toccati
+- `GET /manifest.webmanifest`: icona sulla schermata Home (niente service worker: su `http://*.local` non sarebbe disponibile)
 
 **`api/index.html`** — frontend SPA single-file (HTML/CSS/JS inline), mobile-first, con lo stile del sito (`cucu-website/DESIGN.md`): routing via hash (`#/personaggi`, `#/personaggi/<nome>`, `#/tempo`, `#/impostazioni`), DOM costruito con `h()` senza `innerHTML` sui dati utente. Nessuna dipendenza da npm o bundler. Si aggiorna via git pull come tutto il resto.
 
@@ -83,6 +86,7 @@ Tutto il progetto vive in `/home/davidedorigatti/cucu-device/`. Questo path è h
 | `tags.json` | Sì (default vuoto) | Mapping UID → personaggio, modificato dall'utente |
 | `episode_state.json` | No | Stato episodi visti, generato a runtime |
 | `tag_labels.json` | No | Nomi dati alle statuine dal genitore (UID → nome); `tags.json` resta UID → personaggio |
+| `ui_auth.json` | No | PIN genitore della web UI (hash PBKDF2 + chiave delle sessioni). Se manca, la UI è aperta. Per azzerare un PIN dimenticato basta cancellarlo |
 | `config.env` | No | Configurazione OTA specifica del dispositivo |
 | `config.env.template` | Sì | Template da cui generare `config.env` |
 | `VERSION` | Sì | Versione corrente (plain text, es. `0.1.0`) |

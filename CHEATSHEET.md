@@ -75,6 +75,11 @@ python3 ~/cucu-device/nfc_reader.py
 sudo systemctl start cucu-device.service
 ```
 
+**PIN della Web UI dimenticato:** cancellare il file del PIN (non serve riavviare; la UI torna aperta e il PIN si reimposta da Impostazioni):
+```bash
+rm ~/cucu-device/ui_auth.json
+```
+
 ---
 
 ## 📛 4. Gestione Identità ed Emergenze Reti

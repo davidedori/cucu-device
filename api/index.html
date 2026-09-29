@@ -8,7 +8,12 @@
   <meta name="theme-color" content="#f5f6f3">
   <meta name="color-scheme" content="light">
   <link rel="icon" type="image/png" href="/static/img/gufetto.png">
-  <link rel="apple-touch-icon" href="/static/img/gufetto.png">
+  <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Cucù">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="preload" href="/static/fonts/figtree-normal-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/static/fonts/fraunces-normal-latin.woff2" as="font" type="font/woff2" crossorigin>
 
@@ -605,28 +610,105 @@
     }
 
     .avatar.sm { width: 56px; height: 56px; font-size: 22px; background: var(--surface); color: var(--muted); }
+    .avatar.xs { width: 40px; height: 40px; font-size: 18px; }
     .avatar.sm svg { width: 24px; height: 24px; }
 
-    /* ---------- Limiti di tempo ---------- */
-    .day h2 { font-size: 19px; margin-bottom: 12px; }
-    .day .windows { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    /* ---------- Tempo ---------- */
+    .week { margin: 6px -18px 0; }
 
+    .week-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      min-height: 64px;
+      padding: 10px 10px 10px 18px;
+      border: 0;
+      border-top: 1px solid var(--line);
+      background: none;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .week-row:disabled { opacity: .45; cursor: default; }
+    .week-row .day-name { flex: none; width: 104px; font-family: var(--serif); font-variation-settings: "SOFT" 100; font-size: 18px; }
+    .week-row .day-sum { flex: 1; min-width: 0; color: var(--muted); font-size: 15px; }
+    .week-row > svg { flex: none; width: 20px; height: 20px; color: var(--muted); }
+    .tag.today { background: var(--blue); color: var(--blue-ink); margin-left: 0; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    .chip {
+      min-height: 42px;
+      padding: 6px 14px;
+      border: 1.5px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--ink);
+      font: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+    .chip.day { width: 44px; padding: 0; }
+    .chip.link { border-color: transparent; color: var(--orange-text); padding: 6px 8px; }
+
+    .stepper { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+    .stepper .value { flex: 1; text-align: center; font-family: var(--serif); font-variation-settings: "SOFT" 100; font-size: 24px; }
+    .stepper .icon-btn { width: 52px; height: 52px; background: var(--bg); color: var(--ink); }
+
+    .sheet-section + .sheet-section { margin-top: 22px; }
+    .sheet-section > .lbl { margin-bottom: 10px; }
+    .windows { display: flex; flex-direction: column; gap: 8px; }
     .window-row { display: flex; align-items: center; gap: 8px; }
     .window-row .field { flex: 1; min-width: 0; text-align: center; }
     .window-row .dash { color: var(--muted); }
-
-    .form-disabled { opacity: .45; }
+    .form-error { color: var(--danger); font-size: 15px; margin-top: 12px; }
 
     .save-bar {
       position: sticky;
       bottom: calc(var(--nav-h) + var(--safe-b) + 10px);
       z-index: 20;
+      display: flex;
+      gap: 10px;
       margin: 20px calc(-1 * var(--gutter)) 0;
       padding: 16px var(--gutter) 0;
       background: linear-gradient(rgba(245, 246, 243, 0), var(--bg) 16px);
     }
 
-    .usage { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .save-bar .btn-primary { flex: 1; }
+
+    /* ---------- Ora sulla TV ---------- */
+    .now {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 18px;
+      padding: 16px 18px;
+      background: var(--surface);
+      border-radius: var(--radius);
+    }
+
+    .now-lead { flex: none; width: 56px; height: 56px; display: grid; place-items: center; }
+    .now-lead img { width: 42px; height: auto; }
+    .now-lead .avatar { width: 56px; height: 56px; font-size: 24px; }
+    .now-main { flex: 1; min-width: 0; }
+    .now-title { font-family: var(--serif); font-variation-settings: "SOFT" 100; font-size: 19px; line-height: 1.25; overflow-wrap: anywhere; }
+    .now-sub { color: var(--muted); font-size: 15px; overflow-wrap: anywhere; }
+    .now-usage { margin-top: 10px; }
+    .now-usage .muted { margin-top: 4px; }
+
+    /* ---------- PIN ---------- */
+    .lock form { width: 100%; max-width: 320px; margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+    .field.pin { text-align: center; font-size: 26px; letter-spacing: .35em; padding-left: 20px; }
+    .field.pin::placeholder { letter-spacing: .35em; }
+    .how-to ol { margin: 8px 0 0; padding-left: 22px; color: var(--muted); }
+    .how-to li + li { margin-top: 4px; }
 
     /* ---------- Wi-Fi ---------- */
     .signal { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; }
@@ -838,6 +920,7 @@
       <div class="view-head">
         <h1 id="t-personaggi">Personaggi</h1>
       </div>
+      <div id="now" aria-live="polite"></div>
       <div id="characters"></div>
     </section>
 
@@ -859,22 +942,32 @@
 
       <div class="stack">
         <div class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>Minuti e orari</h2>
-              <div class="panel-sub" style="margin:4px 0 0" id="tl-usage">…</div>
-            </div>
+          <div class="panel-head" style="margin:0">
+            <h2>Minuti e orari</h2>
             <label class="switch">
               <input type="checkbox" id="tl-enabled" aria-label="Usa minuti e orari">
               <span class="slider"></span>
             </label>
           </div>
+          <div id="tl-today" class="panel-sub" style="margin:6px 0 0"></div>
         </div>
-        <div id="tl-days" class="stack"></div>
+
+        <div class="panel">
+          <h2>La settimana</h2>
+          <div class="panel-sub" style="margin-top:4px">Tocca un giorno per cambiarlo. Puoi copiare le stesse regole su altri giorni.</div>
+          <div class="week" id="tl-week"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Sempre disponibili</h2>
+          <div class="panel-sub" style="margin-top:4px">Questi cartoni possono partire a qualsiasi ora, anche oltre i minuti del giorno.</div>
+          <div class="rows" id="tl-exempt"></div>
+        </div>
       </div>
 
-      <div class="save-bar">
-        <button class="btn btn-primary btn-block" id="tl-save">Salva</button>
+      <div class="save-bar hidden" id="tl-savebar">
+        <button class="btn" id="tl-discard">Annulla</button>
+        <button class="btn btn-primary" id="tl-save">Salva le modifiche</button>
       </div>
     </section>
 
@@ -911,6 +1004,32 @@
         </div>
 
         <div class="panel">
+          <h2>Protezione</h2>
+          <div id="security"></div>
+        </div>
+
+        <div class="panel how-to" id="homescreen">
+          <h2>Cucù sulla schermata Home</h2>
+          <div class="panel-sub" style="margin-top:6px">Così lo apri come un'app, senza cercare l'indirizzo.</div>
+          <details class="more">
+            <summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Su iPhone</summary>
+            <ol>
+              <li>Apri questa pagina con Safari.</li>
+              <li>Tocca il pulsante Condividi (il quadrato con la freccia).</li>
+              <li>Scegli «Aggiungi alla schermata Home».</li>
+            </ol>
+          </details>
+          <details class="more">
+            <summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Su Android</summary>
+            <ol>
+              <li>Apri questa pagina con Chrome.</li>
+              <li>Tocca il menu (i tre puntini in alto a destra).</li>
+              <li>Scegli «Aggiungi a schermata Home».</li>
+            </ol>
+          </details>
+        </div>
+
+        <div class="panel">
           <h2 style="margin-bottom:8px">Informazioni</h2>
           <div id="info"></div>
         </div>
@@ -921,6 +1040,7 @@
   <div id="sheet-root"></div>
   <div id="toast-root" aria-live="polite"></div>
   <div id="reconnect-root"></div>
+  <div id="lock-root"></div>
 
 
   <script>
@@ -1028,6 +1148,12 @@
         opts.body = JSON.stringify(body);
       }
       const res = await fetch(path, opts);
+      if (res.status === 401) {
+        // Sessione scaduta o PIN cambiato da un altro telefono
+        authState = { pin_set: true, authenticated: false };
+        showLock();
+        throw new Error('Serve il PIN');
+      }
       if (!res.ok) throw new Error(await errorText(res));
       return res.json();
     }
@@ -1127,7 +1253,7 @@
 
     const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
     const DAY_LABELS = { mon: 'Lunedì', tue: 'Martedì', wed: 'Mercoledì', thu: 'Giovedì', fri: 'Venerdì', sat: 'Sabato', sun: 'Domenica' };
-    let exemptCache = [];
+    let lastSection = null;
 
     /* ================= Navigazione (hash) ================= */
     // #/personaggi, #/personaggi/<nome>, #/tempo, #/impostazioni:
@@ -1145,7 +1271,27 @@
 
     function route() {
       const r = parseRoute();
+
+      // Uscendo da Tempo con modifiche non salvate: si chiede prima di perderle
+      if (lastSection === 'tempo' && r.section !== 'tempo' && isTimeDirty()) {
+        const target = location.hash;
+        history.replaceState(null, '', '#/tempo');
+        confirmSheet({
+          title: 'Uscire senza salvare?',
+          text: 'Le modifiche a minuti e orari non sono ancora salvate.',
+          ok: 'Esci senza salvare',
+          danger: true,
+        }).then(ok => {
+          if (!ok) return;
+          tl.draft = clone(tl.saved);
+          location.hash = target;
+        });
+        return;
+      }
+      lastSection = r.section;
+
       stopTagScan();
+      stopNowPolling();
       closeSheet();
       document.querySelectorAll('.nav a').forEach(a => {
         if (a.dataset.nav === r.section) a.setAttribute('aria-current', 'page');
@@ -1159,6 +1305,7 @@
         showView('personaggi');
         current = null;
         loadCharacters();
+        startNowPolling();
       } else if (r.section === 'tempo') {
         showView('tempo');
         renderTimeLimits();
@@ -1166,6 +1313,7 @@
         showView('impostazioni');
         renderWifi();
         renderInfo();
+        renderSecurity();
         if (!updatesChecked) checkUpdates();
       }
       window.scrollTo(0, 0);
@@ -1991,7 +2139,131 @@
       if (isUploading()) { e.preventDefault(); e.returnValue = ''; }
     });
 
-    /* ================= Limiti di tempo ================= */
+    /* ================= Tempo ================= */
+    // La pagina lavora su una bozza: si salva tutto insieme (un solo riavvio del
+    // lettore) e si può annullare. saved = ultima configurazione letta dal Cucù
+
+    const tl = { saved: null, draft: null };
+    const DAY_SHORT = { mon: 'L', tue: 'M', wed: 'M', thu: 'G', fri: 'V', sat: 'S', sun: 'D' };
+    const todayKey = () => DAY_KEYS[(new Date().getDay() + 6) % 7];
+    const clone = (o) => JSON.parse(JSON.stringify(o));
+
+    function normalizeLimits(cfg) {
+      const days = {};
+      DAY_KEYS.forEach(k => {
+        const d = (cfg.days || {})[k] || {};
+        days[k] = {
+          daily_limit_minutes: d.daily_limit_minutes == null ? null : d.daily_limit_minutes,
+          windows: (d.windows || []).map(w => ({ start: w.start, end: w.end })),
+        };
+      });
+      return { enabled: !!cfg.enabled, days, exempt_characters: [...(cfg.exempt_characters || [])].sort() };
+    }
+
+    const isTimeDirty = () => !!tl.draft && JSON.stringify(tl.draft) !== JSON.stringify(tl.saved);
+
+    // "08:00" → "8:00"
+    const hm = (t) => t.replace(/^0(\d)/, '$1');
+
+    function describeDay(d) {
+      if (d.daily_limit_minutes === 0) return 'niente cartoni';
+      const parts = [];
+      if (d.daily_limit_minutes != null) parts.push(`fino a ${d.daily_limit_minutes} minuti`);
+      if (d.windows.length) parts.push(d.windows.map(w => `tra le ${hm(w.start)} e le ${hm(w.end)}`).join(' e '));
+      return parts.length ? parts.join(', ') : 'senza limiti';
+    }
+
+    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+    async function renderTimeLimits() {
+      // Con modifiche in sospeso si tiene la bozza, altrimenti si rilegge dal Cucù
+      if (!isTimeDirty()) {
+        try {
+          tl.saved = normalizeLimits(await api('/system/time-limits'));
+          tl.draft = clone(tl.saved);
+        } catch (e) {
+          toast('Non riesco a leggere minuti e orari: ' + e.message);
+          return;
+        }
+      }
+      if (!characters.length) characters = await api('/characters').catch(() => []);
+      drawTime();
+      refreshUsage();
+    }
+
+    function drawTime() {
+      const d = tl.draft;
+      if (!d) return;
+      $('tl-enabled').checked = d.enabled;
+
+      const today = todayKey();
+      $('tl-week').replaceChildren(...DAY_KEYS.map(k => {
+        const day = d.days[k];
+        return h('button', {
+          class: 'week-row', disabled: !d.enabled || null,
+          'aria-label': `${DAY_LABELS[k]}: ${describeDay(day)}. Modifica`,
+          onclick: () => openDayEditor(k),
+        },
+          h('span', { class: 'day-name' }, DAY_LABELS[k]),
+          h('span', { class: 'day-sum' },
+            k === today ? h('span', { class: 'tag today', text: 'Oggi' }) : null,
+            k === today ? ' ' : null,
+            cap(describeDay(day))),
+          icon('chevron'));
+      }));
+
+      const exempt = $('tl-exempt');
+      if (!characters.length) {
+        exempt.replaceChildren(h('div', { class: 'row-empty', text: 'Ancora nessun personaggio.' }));
+      } else {
+        exempt.replaceChildren(...characters.map((c, i) => {
+          const box = h('input', { type: 'checkbox', 'aria-label': `${c.display_name} sempre disponibile` });
+          box.checked = d.exempt_characters.includes(c.name);
+          box.addEventListener('change', () => {
+            const set = new Set(d.exempt_characters);
+            box.checked ? set.add(c.name) : set.delete(c.name);
+            d.exempt_characters = [...set].sort();
+            updateSaveBar();
+          });
+          const lead = avatar(c, i);
+          lead.classList.add('xs');
+          return h('div', { class: 'row' },
+            lead,
+            h('div', { class: 'row-main' }, h('div', { class: 'row-title', text: c.display_name })),
+            h('label', { class: 'switch', style: 'margin-right:8px' }, box, h('span', { class: 'slider' })));
+        }));
+      }
+
+      updateSaveBar();
+    }
+
+    function updateSaveBar() {
+      $('tl-savebar').classList.toggle('hidden', !isTimeDirty());
+      drawToday();
+    }
+
+    let lastUsage = null;
+
+    function drawToday() {
+      const el = $('tl-today');
+      const d = tl.draft;
+      if (!d) return;
+      if (!d.enabled) { el.textContent = 'Spenti: i cartoni possono partire sempre.'; return; }
+      const parts = [`Oggi ${describeDay(d.days[todayKey()])}.`];
+      if (lastUsage && lastUsage.enabled) parts.push(`Finora ${Math.round(lastUsage.minutes_used)} minuti.`);
+      el.textContent = parts.join(' ');
+    }
+
+    async function refreshUsage() {
+      try { lastUsage = await api('/system/time-limits/usage'); } catch (_) { /* non essenziale */ }
+      drawToday();
+    }
+
+    $('tl-enabled').addEventListener('change', (e) => {
+      if (!tl.draft) return;
+      tl.draft.enabled = e.target.checked;
+      drawTime();
+    });
 
     function windowRow(start, end) {
       const row = h('div', { class: 'window-row' },
@@ -2003,91 +2275,104 @@
       return row;
     }
 
-    function buildDays() {
-      $('tl-days').replaceChildren(...DAY_KEYS.map(day => {
-        const windows = h('div', { class: 'windows', 'data-day': day });
-        return h('div', { class: 'panel day' },
-          h('h2', { text: DAY_LABELS[day] }),
-          h('label', { class: 'lbl', for: `tl-${day}-min`, text: 'Minuti al giorno' }),
-          h('div', { class: 'field-wrap' },
-            h('input', { class: 'field', id: `tl-${day}-min`, type: 'number', min: '0', step: '5', inputmode: 'numeric', placeholder: 'Senza limite' }),
-            h('span', { class: 'suffix', text: 'min' })
-          ),
-          windows,
+    function openDayEditor(key) {
+      let minutes = tl.draft.days[key].daily_limit_minutes;
+      const applyTo = new Set([key]);
+
+      // Minuti: scelte rapide + passi da 5
+      const value = h('div', { class: 'value', 'aria-live': 'polite' });
+      const quick = [['Senza limite', null], ['30', 30], ['45', 45], ['60', 60], ['90', 90], ['Niente', 0]];
+      const quickChips = h('div', { class: 'chips' });
+      const drawMinutes = () => {
+        value.textContent = minutes == null ? 'Senza limite' : minutes === 0 ? 'Niente cartoni' : `${minutes} minuti`;
+        quickChips.replaceChildren(...quick.map(([label, v]) => h('button', {
+          class: 'chip', type: 'button', 'aria-pressed': String(minutes === v),
+          text: typeof v === 'number' && v > 0 ? `${label} min` : label,
+          onclick: () => { minutes = v; drawMinutes(); },
+        })));
+      };
+      const step = (delta) => {
+        minutes = minutes == null ? (delta > 0 ? 30 : 60) : Math.max(0, Math.min(720, minutes + delta));
+        drawMinutes();
+      };
+      drawMinutes();
+
+      const windows = h('div', { class: 'windows' },
+        tl.draft.days[key].windows.map(w => windowRow(w.start, w.end)));
+
+      // Applica anche ad altri giorni
+      const dayChips = h('div', { class: 'chips' });
+      const drawDays = () => dayChips.replaceChildren(
+        ...DAY_KEYS.map(k => h('button', {
+          class: 'chip day', type: 'button', 'aria-pressed': String(applyTo.has(k)),
+          'aria-label': DAY_LABELS[k], text: DAY_SHORT[k],
+          onclick: () => { if (k === key) return; applyTo.has(k) ? applyTo.delete(k) : applyTo.add(k); drawDays(); },
+        })));
+      const shortcuts = h('div', { class: 'chips', style: 'margin-top:6px;margin-left:-8px' },
+        [['Tutti i giorni', DAY_KEYS], ['Lun–Ven', DAY_KEYS.slice(0, 5)], ['Sab e Dom', ['sat', 'sun']]].map(([label, keys]) =>
           h('button', {
-            class: 'btn btn-quiet', type: 'button', style: 'margin-top:6px;margin-left:-12px',
-            onclick: () => windows.append(windowRow('16:00', '19:00')),
-          }, icon('plus'), 'Aggiungi una fascia oraria')
-        );
-      }));
+            class: 'chip link', type: 'button', text: label,
+            onclick: () => { applyTo.clear(); applyTo.add(key); keys.forEach(k => applyTo.add(k)); drawDays(); },
+          })));
+      drawDays();
+
+      const error = h('div', { class: 'form-error', role: 'alert' });
+
+      const done = () => {
+        const list = Array.from(windows.querySelectorAll('.window-row')).map(r => ({
+          start: r.querySelector('.tl-start').value,
+          end: r.querySelector('.tl-end').value,
+        }));
+        if (list.some(w => !w.start || !w.end)) { error.textContent = 'Completa tutte le fasce orarie.'; return; }
+        if (list.some(w => w.end <= w.start)) { error.textContent = 'In ogni fascia la fine deve venire dopo l\'inizio.'; return; }
+        list.sort((a, b) => a.start.localeCompare(b.start));
+        for (let i = 1; i < list.length; i++) {
+          if (list[i].start < list[i - 1].end) { error.textContent = 'Due fasce orarie si sovrappongono.'; return; }
+        }
+        applyTo.forEach(k => { tl.draft.days[k] = { daily_limit_minutes: minutes, windows: clone(list) }; });
+        closeSheet();
+        drawTime();
+        if (applyTo.size > 1) toast(`Copiato su ${plural(applyTo.size, 'giorno', 'giorni')}. Ricordati di salvare.`);
+      };
+
+      openSheet({
+        title: DAY_LABELS[key],
+        content: h('div', {},
+          h('div', { class: 'sheet-section' },
+            h('div', { class: 'lbl', text: 'Quanti minuti al giorno' }),
+            quickChips,
+            h('div', { class: 'stepper' },
+              h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Cinque minuti in meno', onclick: () => step(-5), html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>' }),
+              value,
+              h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Cinque minuti in più', onclick: () => step(5) }, icon('plus')))),
+          h('div', { class: 'sheet-section' },
+            h('div', { class: 'lbl', text: 'In quali orari (se non ne metti, a qualsiasi ora)' }),
+            windows,
+            h('button', {
+              class: 'btn btn-quiet', type: 'button', style: 'margin-left:-12px;margin-top:4px',
+              onclick: () => windows.append(windowRow('16:00', '19:00')),
+            }, icon('plus'), 'Aggiungi una fascia oraria')),
+          h('div', { class: 'sheet-section' },
+            h('div', { class: 'lbl', text: 'Vale anche per' }),
+            dayChips, shortcuts),
+          error,
+          h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary btn-block', text: 'Fatto', onclick: done }))
+        ),
+      });
     }
 
-    function applyEnabled() {
-      const enabled = $('tl-enabled').checked;
-      const days = $('tl-days');
-      days.classList.toggle('form-disabled', !enabled);
-      days.querySelectorAll('input, button').forEach(el => { el.disabled = !enabled; });
-    }
-
-    $('tl-enabled').addEventListener('change', applyEnabled);
-
-    async function renderTimeLimits() {
-      try {
-        const cfg = await api('/system/time-limits');
-        $('tl-enabled').checked = cfg.enabled;
-        exemptCache = cfg.exempt_characters || [];
-        DAY_KEYS.forEach(day => {
-          const d = cfg.days[day] || {};
-          $(`tl-${day}-min`).value = d.daily_limit_minutes == null ? '' : d.daily_limit_minutes;
-          const w = document.querySelector(`.windows[data-day="${day}"]`);
-          w.replaceChildren(...(d.windows || []).map(x => windowRow(x.start, x.end)));
-        });
-        applyEnabled();
-      } catch (e) {
-        toast('Non riesco a leggere minuti e orari: ' + e.message);
-      }
-      refreshUsage();
-    }
-
-    async function refreshUsage() {
-      try {
-        const u = await api('/system/time-limits/usage');
-        const el = $('tl-usage');
-        if (!u.enabled) { el.textContent = 'Spenti: i cartoni possono partire sempre.'; return; }
-        const used = Math.round(u.minutes_used);
-        let txt = u.daily_limit_minutes != null
-          ? `Oggi ${used} minuti su ${u.daily_limit_minutes}`
-          : `Oggi ${used} minuti, senza limite`;
-        if (u.windows && u.windows.length) txt += ', ' + u.windows.map(w => `${w.start}–${w.end}`).join(', ');
-        el.textContent = txt + '.';
-      } catch (_) { /* non essenziale */ }
-    }
+    $('tl-discard').addEventListener('click', () => {
+      tl.draft = clone(tl.saved);
+      drawTime();
+    });
 
     $('tl-save').addEventListener('click', async () => {
       const btn = $('tl-save');
-      const days = {};
-      try {
-        DAY_KEYS.forEach(day => {
-          const v = $(`tl-${day}-min`).value.trim();
-          const windows = Array.from(document.querySelectorAll(`.windows[data-day="${day}"] .window-row`)).map(row => {
-            const start = row.querySelector('.tl-start').value;
-            const end = row.querySelector('.tl-end').value;
-            if (!start || !end) throw new Error(`Completa la fascia oraria di ${DAY_LABELS[day].toLowerCase()}`);
-            return { start, end };
-          });
-          days[day] = { daily_limit_minutes: v === '' ? null : parseInt(v, 10), windows };
-        });
-      } catch (e) {
-        toast(e.message);
-        return;
-      }
-
       btn.disabled = true;
       try {
-        const res = await api('/system/time-limits', {
-          method: 'POST',
-          body: { enabled: $('tl-enabled').checked, days, exempt_characters: exemptCache },
-        });
+        const res = await api('/system/time-limits', { method: 'POST', body: tl.draft });
+        tl.saved = clone(tl.draft);
+        updateSaveBar();
         if (res.restart === 'immediate') showReconnect('Applico le modifiche', 'Il lettore si riavvia: ci vuole qualche secondo.');
         else toast('Salvato: vale dalla fine dell\'episodio in corso');
       } catch (e) {
@@ -2096,6 +2381,91 @@
         btn.disabled = false;
       }
     });
+
+    window.addEventListener('beforeunload', (e) => {
+      if (isTimeDirty()) { e.preventDefault(); e.returnValue = ''; }
+    });
+
+    /* ================= Ora sulla TV ================= */
+
+    let nowTimer = null;
+
+    function startNowPolling() {
+      stopNowPolling();
+      pollNow();
+      nowTimer = setInterval(() => { if (!document.hidden) pollNow(); }, 3000);
+    }
+
+    function stopNowPolling() {
+      clearInterval(nowTimer);
+      nowTimer = null;
+    }
+
+    async function pollNow() {
+      try { renderNow(await api('/system/now')); } catch (_) { /* si riprova al giro dopo */ }
+    }
+
+    function renderNow(n) {
+      const root = $('now');
+      if (!root) return;
+      const u = n.usage || {};
+      const ep = n.episode ? prettyEpisode(n.episode) : '';
+      let title, sub;
+
+      if (!n.alive) {
+        title = 'Il lettore non risponde';
+        sub = 'Se non si riprende da solo, prova a riavviarlo da Impostazioni.';
+      } else if (n.mode === 'playing') {
+        title = `Sta guardando ${n.display_name}`;
+        sub = ep;
+      } else if (n.mode === 'paused') {
+        title = `${n.display_name} è in pausa`;
+        sub = `Riparte quando torna la sua statuina.${ep ? ' ' + ep : ''}`;
+      } else if (n.mode === 'ended_wait_remove') {
+        title = 'Episodio finito';
+        sub = `Il prossimo parte dopo aver tolto e riappoggiato la statuina.`;
+      } else if (n.blocked) {
+        if (u.remaining_minutes != null && u.remaining_minutes <= 0) {
+          title = 'I minuti di oggi sono finiti';
+          sub = 'Domani si ricomincia.';
+        } else if (n.next_window_start) {
+          title = 'Il gufetto riposa';
+          sub = `Si riparte alle ${hm(n.next_window_start)}.`;
+        } else {
+          title = 'Il gufetto riposa';
+          sub = 'Per oggi gli orari sono finiti. Domani si ricomincia.';
+        }
+      } else {
+        title = 'Pronto';
+        sub = 'Appoggia una statuina sul Cucù per far partire un episodio.';
+      }
+
+      let lead;
+      const idx = n.character ? characters.findIndex(c => c.name === n.character) : -1;
+      if (idx >= 0) lead = avatar(characters[idx], idx);
+      else lead = h('img', { src: '/static/img/gufetto.png', alt: '' });
+
+      let usage = null;
+      if (n.alive && u.enabled) {
+        let used = Math.round(u.minutes_used || 0);
+        if (u.daily_limit_minutes != null && u.daily_limit_minutes > 0) {
+          used = Math.min(used, u.daily_limit_minutes); // l'ultimo episodio può sforare di poco
+          const pct = Math.min(100, Math.round(used / u.daily_limit_minutes * 100));
+          usage = h('div', { class: 'now-usage' },
+            h('div', { class: 'bar' }, h('div', { style: `width:${pct}%` })),
+            h('div', { class: 'muted small', text: `${used} di ${u.daily_limit_minutes} minuti oggi` }));
+        } else {
+          usage = h('div', { class: 'now-usage muted small', text: `Oggi ${used} minuti` });
+        }
+      }
+
+      root.replaceChildren(h('div', { class: 'now' },
+        h('div', { class: 'now-lead' }, lead),
+        h('div', { class: 'now-main' },
+          h('div', { class: 'now-title', text: title }),
+          sub ? h('div', { class: 'now-sub', text: sub }) : null,
+          usage)));
+    }
 
     /* ================= Wi-Fi ================= */
 
@@ -2339,12 +2709,209 @@
       }, 1000);
     }
 
+    /* ================= PIN genitore ================= */
+    // Facoltativo. Protegge le impostazioni da bambini e ospiti sulla rete di casa
+
+    let authState = { pin_set: false, authenticated: true };
+    let started = false;
+
+    async function loadAuth() {
+      try {
+        const res = await fetch('/auth/status', { cache: 'no-store' });
+        if (res.ok) authState = await res.json();
+      } catch (_) { /* API vecchia: nessun PIN */ }
+    }
+
+    function pinField(id, autocomplete) {
+      return h('input', {
+        class: 'field pin', id, type: 'password', inputmode: 'numeric', pattern: '[0-9]*',
+        maxlength: '8', autocomplete, placeholder: '••••', enterkeyhint: 'done',
+      });
+    }
+
+    function showLock() {
+      if ($('lock-root').firstChild) return;
+      closeSheet();
+      stopNowPolling();
+      stopTagScan();
+      const input = pinField('lock-pin', 'current-password');
+      const error = h('div', { class: 'form-error', role: 'alert' });
+      const btn = h('button', { class: 'btn btn-primary btn-block', text: 'Entra' });
+      const form = h('form', {}, input, btn, error);
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!input.value) { input.focus(); return; }
+        btn.disabled = true;
+        error.textContent = '';
+        try {
+          const res = await fetch('/auth/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pin: input.value }),
+          });
+          if (!res.ok) throw new Error(await errorText(res));
+          authState = { pin_set: true, authenticated: true };
+          $('lock-root').replaceChildren();
+          if (started) route(); else start();
+        } catch (err) {
+          error.textContent = err.message;
+          input.value = '';
+          input.focus();
+          btn.disabled = false;
+        }
+      });
+      $('lock-root').replaceChildren(h('div', { class: 'reconnect lock', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'lock-title' },
+        h('div', { class: 'deco a pop' }),
+        h('div', { class: 'deco b pop', style: 'animation-delay:.1s' }),
+        h('div', { class: 'deco c pop', style: 'animation-delay:.2s' }),
+        h('div', { class: 'peek' }, h('img', { src: '/static/img/gufetto.png', alt: '' })),
+        h('h2', { id: 'lock-title', text: 'Ciao! Serve il PIN' }),
+        h('p', { text: 'Le impostazioni del Cucù sono protette. Inserisci il PIN per entrare.' }),
+        form
+      ));
+      setTimeout(() => input.focus(), 100);
+    }
+
+    // Due campi (PIN e conferma) + eventuale PIN attuale, in un pannello dal basso
+    function pinSheet({ title, text, needCurrent, needNew = true, ok, danger, submit }) {
+      const current = needCurrent ? pinField('pin-current', 'current-password') : null;
+      const pin = needNew ? pinField('pin-new', 'new-password') : null;
+      const repeat = needNew ? pinField('pin-repeat', 'new-password') : null;
+      const error = h('div', { class: 'form-error', role: 'alert' });
+      const btn = h('button', { class: 'btn btn-block ' + (danger ? 'btn-danger-solid' : 'btn-primary'), text: ok });
+      const form = h('form', {},
+        text ? h('p', { class: 'sheet-text', text }) : null,
+        current ? h('label', { class: 'lbl', for: 'pin-current', text: 'PIN attuale' }) : null, current,
+        pin ? h('label', { class: 'lbl', for: 'pin-new', style: current ? 'margin-top:14px' : null, text: 'Nuovo PIN (da 4 a 8 cifre)' }) : null, pin,
+        repeat ? h('label', { class: 'lbl', for: 'pin-repeat', style: 'margin-top:14px', text: 'Ripeti il nuovo PIN' }) : null, repeat,
+        error,
+        h('div', { class: 'actions' }, btn)
+      );
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        error.textContent = '';
+        if (pin && !/^\d{4,8}$/.test(pin.value)) { error.textContent = 'Il PIN deve avere da 4 a 8 cifre.'; return; }
+        if (pin && pin.value !== repeat.value) { error.textContent = 'I due PIN non sono uguali.'; return; }
+        btn.disabled = true;
+        try {
+          await submit({ current: current && current.value, pin: pin && pin.value });
+          closeSheet();
+        } catch (err) {
+          error.textContent = err.message;
+          btn.disabled = false;
+        }
+      });
+      openSheet({ title, content: form });
+    }
+
+    async function postAuth(path, body) {
+      const res = await fetch(path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+      });
+      if (!res.ok) throw new Error(await errorText(res));
+      return res.json();
+    }
+
+    function setupPin() {
+      pinSheet({
+        title: 'Imposta un PIN',
+        text: 'Servirà per aprire queste impostazioni da ogni telefono. Su questo telefono resti dentro per tre mesi.',
+        ok: 'Imposta il PIN',
+        submit: async ({ pin }) => {
+          await postAuth('/auth/setup', { pin });
+          authState = { pin_set: true, authenticated: true };
+          renderSecurity();
+          toast('PIN impostato');
+        },
+      });
+    }
+
+    function changePin() {
+      pinSheet({
+        title: 'Cambia il PIN',
+        needCurrent: true,
+        ok: 'Cambia il PIN',
+        submit: async ({ current, pin }) => {
+          await postAuth('/auth/change', { current_pin: current, new_pin: pin });
+          toast('PIN cambiato: sugli altri telefoni andrà inserito di nuovo');
+        },
+      });
+    }
+
+    function removePin() {
+      pinSheet({
+        title: 'Togliere il PIN?',
+        text: 'Chiunque sia collegato al Wi-Fi di casa potrà di nuovo cambiare le impostazioni.',
+        needCurrent: true, needNew: false, danger: true,
+        ok: 'Togli il PIN',
+        submit: async ({ current }) => {
+          await postAuth('/auth/remove', { pin: current });
+          authState = { pin_set: false, authenticated: true };
+          renderSecurity();
+          toast('PIN tolto');
+        },
+      });
+    }
+
+    async function logout() {
+      try { await postAuth('/auth/logout'); } catch (_) { /* il cookie scade comunque */ }
+      authState.authenticated = false;
+      showLock();
+    }
+
+    function renderSecurity() {
+      const root = $('security');
+      if (authState.pin_set) {
+        root.replaceChildren(
+          h('div', { class: 'panel-sub', style: 'margin-top:6px', text: 'Le impostazioni sono protette da un PIN. Se lo dimentichi, si può azzerare dal computerino del Cucù.' }),
+          h('div', { class: 'stack' },
+            h('button', { class: 'btn btn-block', text: 'Cambia il PIN', onclick: changePin }),
+            h('button', { class: 'btn btn-block', text: 'Esci da questo telefono', onclick: logout }),
+            h('div', { style: 'text-align:center' },
+              h('button', { class: 'btn btn-quiet', style: 'color:var(--danger)', text: 'Togli il PIN', onclick: removePin })))
+        );
+      } else {
+        root.replaceChildren(
+          h('div', { class: 'panel-sub', style: 'margin-top:6px', text: 'Adesso chiunque sia collegato al Wi-Fi di casa può cambiare le impostazioni. Con un PIN puoi farlo solo tu.' }),
+          h('button', { class: 'btn btn-block', text: 'Imposta un PIN', onclick: setupPin })
+        );
+      }
+    }
+
+    // Al primo avvio senza PIN, una proposta gentile (una volta per telefono)
+    function maybeOfferPin() {
+      if (authState.pin_set) return;
+      let asked = false;
+      try { asked = localStorage.getItem('cucu-pin-offered') === '1'; } catch (_) { /* storage bloccato */ }
+      if (asked) return;
+      setTimeout(() => {
+        if ($('sheet-root').firstChild || parseRoute().name) return;
+        try { localStorage.setItem('cucu-pin-offered', '1'); } catch (_) { /* pazienza */ }
+        openSheet({
+          title: 'Un PIN per le impostazioni?',
+          content: h('div', {},
+            h('p', { class: 'sheet-text', text: 'Così solo tu puoi cambiare cartoni, statuine e orari. Puoi deciderlo anche dopo, da Impostazioni.' }),
+            h('div', { class: 'actions' },
+              h('button', { class: 'btn btn-primary btn-block', text: 'Imposta un PIN', onclick: setupPin }),
+              h('button', { class: 'btn btn-block', text: 'Non ora', onclick: closeSheet })))
+        });
+      }, 1500);
+    }
+
     /* ================= Avvio ================= */
 
-    buildDays();
-    loadInfo();
-    if (!location.hash) history.replaceState(null, '', '#/personaggi');
-    route();
+    function start() {
+      started = true;
+      loadInfo();
+      if (!location.hash) history.replaceState(null, '', '#/personaggi');
+      route();
+      maybeOfferPin();
+    }
+
+    (async () => {
+      await loadAuth();
+      if (authState.pin_set && !authState.authenticated) showLock();
+      else start();
+    })();
   </script>
 </body>
 
