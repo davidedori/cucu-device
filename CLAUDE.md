@@ -55,7 +55,8 @@ La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene carica
 - Statuine: `move: true` nel POST sposta una statuina da un altro personaggio; `PUT /characters/{name}/tags/{uid}/label` le dà un nome. Gli UID si confrontano senza distinguere maiuscole/minuscole (i lettori scrivono esadecimale minuscolo)
 - `POST /characters/{name}/episodes/reset-round`: tutti gli episodi tornano da vedere
 - `GET /characters/{name}/episodes/{filename}/thumb`: anteprima JPEG 320px, creata con ffmpeg alla prima richiesta e salvata in `characters/<nome>/.thumbs/` (valida finché è più recente del video). Una alla volta (lock), `nice 19`, `-threads 1`, e 503 + `Retry-After` se un episodio è in riproduzione. Rinomina/eliminazione episodio spostano/cancellano l'anteprima
-- `GET /system/now`: cosa succede sulla TV (legge `mode`, `character`, `episode`, `blocked` da `last_seen_tag.json`) + uso di oggi
+- `GET /system/now`: cosa succede sulla TV (legge `mode`, `character`, `episode`, `pos_ms`/`len_ms`, `blocked` da `last_seen_tag.json`) + statuina appoggiata, anteprima già pronta, giro e uso di oggi. Alimenta la pagina iniziale "Adesso" (TV disegnata come sul sito + render del dispositivo in `api/static/img/dispositivo.webp`)
+- Un thread dell'API (`_thumb_worker`) prepara in background le anteprime mancanti, una ogni pochi secondi e mai durante la riproduzione; i file illeggibili vengono segnati con `.failed` e non ritentati
 - PIN genitore facoltativo: `/auth/*` e il middleware ASGI `PinGuard` (puro ASGI, per non bufferizzare gli upload). Senza `ui_auth.json` non blocca nulla; con il PIN restano aperti solo `/`, `/static/*`, `/api`, `/manifest.webmanifest` e `/auth/*`. `updater.sh` e il suo health check non usano HTTP, quindi non ne sono toccati
 - `GET /manifest.webmanifest`: icona sulla schermata Home (niente service worker: su `http://*.local` non sarebbe disponibile)
 

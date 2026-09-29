@@ -712,25 +712,153 @@
 
     .save-bar .btn-primary { flex: 1; }
 
-    /* ---------- Ora sulla TV ---------- */
-    .now {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      margin-bottom: 18px;
-      padding: 16px 18px;
-      background: var(--surface);
-      border-radius: var(--radius);
+    /* ---------- Adesso: TV disegnata + dispositivo (come la demo del sito) ---------- */
+    .stage {
+      display: grid;
+      gap: 6px;
+      margin: 4px 0 18px;
     }
 
-    .now-lead { flex: none; width: 56px; height: 56px; display: grid; place-items: center; }
-    .now-lead img { width: 42px; height: auto; }
-    .now-lead .avatar { width: 56px; height: 56px; font-size: 24px; }
-    .now-main { flex: 1; min-width: 0; }
-    .now-title { font-family: var(--serif); font-variation-settings: "SOFT" 100; font-size: 19px; line-height: 1.25; overflow-wrap: anywhere; }
-    .now-sub { color: var(--muted); font-size: 15px; overflow-wrap: anywhere; }
-    .now-usage { margin-top: 10px; }
-    .now-usage .muted { margin-top: 4px; }
+    .tv { width: 100%; max-width: 30rem; margin: 0 auto; }
+
+    /* Lo schermo: fondo con il bordo fatto a mano (pseudo-elemento filtrato),
+       dentro l'anteprima dell'episodio o i messaggi, sempre nitidi */
+    .screen {
+      --scr: #dfe6ec;
+      position: relative;
+      isolation: isolate;
+      aspect-ratio: 16 / 10;
+      color: var(--ink);
+    }
+
+    .screen::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border-radius: 22px;
+      background: var(--scr);
+      transition: background-color .4s steps(3, jump-end);
+      filter: url(#mano-oggetto);
+    }
+
+    .scr-media {
+      position: absolute;
+      inset: 7px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #000;
+      opacity: 0;
+      transition: opacity .3s steps(3, jump-end);
+    }
+
+    .scr-media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .screen[data-media="1"] .scr-media { opacity: 1; }
+    .screen[data-state="pause"] .scr-media img { filter: grayscale(.4) brightness(.55); }
+    .screen[data-media="1"] .scr { color: #fff; }
+
+    .scr {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding: 18px;
+      text-align: center;
+    }
+
+    .scr-big { font-family: var(--serif); font-variation-settings: "SOFT" 100; font-size: clamp(26px, 8vw, 36px); font-weight: 600; line-height: 1.1; }
+    .scr-small { font-size: 15px; color: var(--muted); }
+    .screen[data-media="1"] .scr-small, .screen[data-media="1"] .scr-big { color: #fff; }
+
+    /* Senza anteprima: il personaggio che "balla" sullo schermo, come nella demo */
+    .scr-hero { width: 34%; aspect-ratio: 1; object-fit: contain; animation: bob 1.2s steps(4, jump-end) infinite alternate; }
+    .scr-hero.round { border-radius: 50%; object-fit: cover; }
+    .screen:not([data-state="play"]) .scr-hero { animation-play-state: paused; }
+    @keyframes bob { from { transform: translateY(4px) rotate(-4deg); } to { transform: translateY(-6px) rotate(4deg); } }
+
+    .pause-icon { width: 26px; height: 30px; border-left: 9px solid currentColor; border-right: 9px solid currentColor; margin-bottom: 6px; }
+
+    .scr-progress {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 16px;
+      height: 6px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, .55);
+    }
+
+    .scr-progress span { display: block; height: 100%; border-radius: inherit; background: var(--ink); transition: width .3s steps(3, jump-end); }
+    .screen[data-media="1"] .scr-progress span { background: #fff; }
+    .screen[data-media="1"] .scr-progress { background: rgba(255, 255, 255, .35); }
+
+    .tv-foot { width: 30%; height: 8px; margin: 10px auto 0; border-radius: 8px; background: var(--line); filter: url(#mano-oggetto); }
+
+    /* Il dispositivo: render del sito con le forme pastello dietro */
+    .device-wrap {
+      position: relative;
+      isolation: isolate;
+      width: min(78%, 22rem);
+      margin: 0 auto;
+    }
+
+    .device-wrap .device-img { display: block; width: 100%; height: auto; }
+
+    .hs { position: absolute; z-index: -2; left: var(--x); top: var(--y); width: var(--w); aspect-ratio: var(--ar, 1); translate: -50% -50%; rotate: var(--r, 0deg); background: var(--c); filter: url(#mano); }
+    .hs.round { border-radius: 50%; }
+    .hs.rect { border-radius: 18%; }
+
+    /* Alone dietro il dispositivo, come la luce di stato: verde in onda, giallo in pausa, arancio a fine episodio */
+    .device-glow {
+      position: absolute;
+      z-index: -1;
+      left: 12%;
+      right: 30%;
+      top: 18%;
+      bottom: 22%;
+      border-radius: 50%;
+      background: transparent;
+      filter: blur(22px);
+      transition: background-color .4s steps(4, jump-end);
+    }
+
+    .stage[data-state="play"] .device-glow { background: rgba(111, 191, 142, .5); }
+    .stage[data-state="pause"] .device-glow { background: rgba(240, 195, 92, .5); }
+    .stage[data-state="end"] .device-glow { background: rgba(233, 78, 27, .35); }
+
+    /* La statuina appoggiata: la base sta al centro del foro (36% · 39% del render) */
+    .figurine {
+      position: absolute;
+      left: 36.4%;
+      top: 40%;
+      width: 27%;
+      aspect-ratio: 1;
+      translate: -50% -100%;
+      display: grid;
+      place-items: end center;
+      pointer-events: none;
+    }
+
+    .figurine img { width: 100%; height: 100%; object-fit: contain; object-position: bottom; filter: drop-shadow(0 6px 4px rgba(0, 0, 0, .18)); }
+    .figurine .token { width: 78%; aspect-ratio: 1; border-radius: 50%; overflow: hidden; display: grid; place-items: center; font-family: var(--serif); font-size: 26px; box-shadow: 0 5px 6px rgba(0, 0, 0, .15); margin-bottom: 4%; }
+    .figurine .token img { filter: none; object-fit: cover; }
+    .figurine svg { width: 72%; height: auto; }
+    .figurine.drop { animation: posa .5s steps(5, end); }
+    @keyframes posa { from { transform: translateY(-30%) rotate(-6deg); opacity: 0; } 60% { opacity: 1; } to { transform: none; } }
+
+    .now-panel .now-title { font-family: var(--serif); font-variation-settings: "SOFT" 100; font-size: 24px; line-height: 1.2; overflow-wrap: anywhere; }
+    .now-panel .now-sub { color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+    .now-facts { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+    .now-facts:empty { display: none; }
+    .fact .muted { margin-top: 4px; }
+
+    @media (min-width: 768px) {
+      .stage { grid-template-columns: 1.35fr 1fr; align-items: end; gap: 24px; }
+      .device-wrap { width: 100%; margin-bottom: 12px; }
+    }
 
     /* ---------- PIN ---------- */
     .lock form { width: 100%; max-width: 320px; margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
@@ -909,6 +1037,10 @@
       <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="1" seed="3" />
       <feDisplacementMap in="SourceGraphic" scale="6" xChannelSelector="R" yChannelSelector="G" />
     </filter>
+    <filter id="mano-oggetto" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="1" seed="6" />
+      <feDisplacementMap in="SourceGraphic" scale="4" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
     <filter id="mano-btn" x="-10%" y="-30%" width="120%" height="160%">
       <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="1" seed="7" />
       <feDisplacementMap in="SourceGraphic" scale="4" xChannelSelector="R" yChannelSelector="G" />
@@ -920,7 +1052,7 @@
     <div class="deco b pop" style="animation-delay:.1s"></div>
     <div class="deco c pop" style="animation-delay:.2s"></div>
     <div class="header-inner">
-      <a class="brand" href="#/personaggi" aria-label="Cucù, torna ai personaggi">
+      <a class="brand" href="#/adesso" aria-label="Cucù, torna alla pagina iniziale">
         <img class="owl" src="/static/img/gufetto.png" alt="">
         <img class="word" src="/static/img/scritta.png" alt="cucù">
       </a>
@@ -929,6 +1061,10 @@
   </header>
 
   <nav class="nav" aria-label="Sezioni">
+    <a href="#/adesso" data-nav="adesso">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4" width="19" height="13" rx="3.5" fill="currentColor" opacity=".3"/><path d="M10 8.2v4.6l3.9-2.3Z" fill="currentColor"/><rect x="8" y="19" width="8" height="2.2" rx="1.1" fill="currentColor"/></svg>
+      Adesso
+    </a>
     <a href="#/personaggi" data-nav="personaggi">
       <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="20" rx="8" ry="2.4" fill="currentColor" opacity=".35"/><path d="M12 3.5c-3.3 0-5.5 3.2-5.5 7.6V19h11v-7.9c0-4.4-2.2-7.6-5.5-7.6Z" fill="currentColor"/></svg>
       Personaggi
@@ -944,12 +1080,38 @@
   </nav>
 
   <main>
+    <!-- Adesso: cosa succede sulla TV -->
+    <section id="view-adesso" class="view hidden" aria-labelledby="t-adesso">
+      <h1 id="t-adesso" class="sr-only">Adesso</h1>
+      <div class="stage" id="stage" data-state="idle">
+        <div class="tv">
+          <div class="screen" id="screen" data-state="idle" role="img" aria-label="La TV">
+            <div class="scr-media"><img id="scr-img" alt=""></div>
+            <div class="scr" id="scr-content"></div>
+          </div>
+          <div class="tv-foot"></div>
+        </div>
+        <figure class="device-wrap" style="margin:0 auto">
+          <i class="hs round" style="--x:28%;--y:36%;--w:44%;--c:var(--blue)"></i>
+          <i class="hs rect" style="--x:80%;--y:74%;--w:30%;--r:14deg;--c:var(--peach);--ar:.85"></i>
+          <i class="hs round" style="--x:9%;--y:78%;--w:18%;--c:var(--green)"></i>
+          <div class="device-glow"></div>
+          <img class="device-img" src="/static/img/dispositivo.webp" alt="Il Cucù" width="900" height="613">
+          <div class="figurine" id="figurine" aria-hidden="true"></div>
+        </figure>
+      </div>
+      <div class="panel now-panel" aria-live="polite">
+        <div class="now-title" id="now-title">…</div>
+        <div class="now-sub" id="now-sub"></div>
+        <div class="now-facts" id="now-facts"></div>
+      </div>
+    </section>
+
     <!-- Personaggi -->
-    <section id="view-personaggi" class="view" aria-labelledby="t-personaggi">
+    <section id="view-personaggi" class="view hidden" aria-labelledby="t-personaggi">
       <div class="view-head">
         <h1 id="t-personaggi">Personaggi</h1>
       </div>
-      <div id="now" aria-live="polite"></div>
       <div id="characters"></div>
     </section>
 
@@ -1290,7 +1452,7 @@
 
     function parseRoute() {
       const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
-      const section = ['personaggi', 'tempo', 'impostazioni'].includes(parts[0]) ? parts[0] : 'personaggi';
+      const section = ['adesso', 'personaggi', 'tempo', 'impostazioni'].includes(parts[0]) ? parts[0] : 'adesso';
       return { section, name: section === 'personaggi' ? parts[1] || null : null };
     }
 
@@ -1328,14 +1490,18 @@
         else a.removeAttribute('aria-current');
       });
 
-      if (r.section === 'personaggi' && r.name) {
+      if (r.section === 'adesso') {
+        showView('adesso');
+        current = null;
+        if (!characters.length) loadCharacters();
+        startNowPolling();
+      } else if (r.section === 'personaggi' && r.name) {
         showView('personaggio');
         openCharacter(r.name);
       } else if (r.section === 'personaggi') {
         showView('personaggi');
         current = null;
         loadCharacters();
-        startNowPolling();
       } else if (r.section === 'tempo') {
         showView('tempo');
         renderTimeLimits();
@@ -2540,14 +2706,18 @@
       if (isTimeDirty()) { e.preventDefault(); e.returnValue = ''; }
     });
 
-    /* ================= Ora sulla TV ================= */
+    /* ================= Adesso ================= */
+    // La TV disegnata mostra quello che mostra la TV vera: l'anteprima
+    // dell'episodio in onda (o il personaggio, se l'anteprima non c'è ancora),
+    // la pausa, la fine. Sul render del dispositivo compare la statuina appoggiata
 
     let nowTimer = null;
+    let lastNow = null;
 
     function startNowPolling() {
       stopNowPolling();
       pollNow();
-      nowTimer = setInterval(() => { if (!document.hidden) pollNow(); }, 3000);
+      nowTimer = setInterval(() => { if (!document.hidden) pollNow(); }, 2500);
     }
 
     function stopNowPolling() {
@@ -2556,69 +2726,193 @@
     }
 
     async function pollNow() {
-      try { renderNow(await api('/system/now')); } catch (_) { /* si riprova al giro dopo */ }
+      try {
+        lastNow = await api('/system/now');
+        renderAdesso(lastNow);
+      } catch (_) { /* si riprova al giro dopo */ }
     }
 
-    function renderNow(n) {
-      const root = $('now');
-      if (!root) return;
+    const fmtTime = (ms) => {
+      const s = Math.max(0, Math.round(ms / 1000));
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    };
+
+    // Le foto dei personaggi possono essere statuine scontornate (PNG trasparente)
+    // o foto normali: le prime stanno in piedi sul foro, le seconde in un gettone tondo
+    const cutoutCache = new Map();
+
+    function isCutout(url) {
+      if (!cutoutCache.has(url)) {
+        cutoutCache.set(url, new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const n = 24;
+              const c = h('canvas', { width: n, height: n });
+              const ctx = c.getContext('2d');
+              ctx.drawImage(img, 0, 0, n, n);
+              const d = ctx.getImageData(0, 0, n, n).data;
+              const corners = [0, (n - 1) * 4, n * (n - 1) * 4, (n * n - 1) * 4];
+              resolve(corners.some(i => d[i + 3] < 24));
+            } catch (_) { resolve(false); }
+          };
+          img.onerror = () => resolve(false);
+          img.src = url;
+        }));
+      }
+      return cutoutCache.get(url);
+    }
+
+    function charIndex(name) {
+      return characters.findIndex(c => c.name === name);
+    }
+
+    // Immagine del personaggio: scontornata "libera", altrimenti tonda; senza foto, l'iniziale
+    async function characterFigure(name, { onScreen } = {}) {
+      const i = charIndex(name);
+      const c = characters[i];
+      if (c && c.has_image) {
+        const url = `${c.image_url}?v=${imageVersion}`;
+        const cut = await isCutout(url);
+        if (onScreen) return h('img', { class: 'scr-hero' + (cut ? '' : ' round'), src: url, alt: '' });
+        return cut
+          ? h('img', { src: url, alt: '' })
+          : h('div', { class: 'token' }, h('img', { src: url, alt: '' }));
+      }
+      const [bg, fg] = TINTS[Math.max(0, i) % TINTS.length];
+      const letter = ((c && c.display_name) || name || '?').charAt(0).toUpperCase();
+      if (onScreen) return h('div', { class: 'scr-big', style: `color:${fg};font-size:clamp(52px, 16vw, 80px)`, text: letter });
+      return h('div', { class: 'token', style: `background:${bg};color:${fg}`, text: letter });
+    }
+
+    let figKey = null;
+
+    async function renderFigurine(n) {
+      const el = $('figurine');
+      // In pausa la statuina è stata tolta; a fine episodio resta finché non la si toglie
+      const key = n.alive && n.tag_present ? (n.tag_character || '?') : null;
+      if (key === figKey) return;
+      figKey = key;
+      if (!key) { el.replaceChildren(); el.classList.remove('drop'); return; }
+      const fig = key === '?'
+        ? h('svg', { viewBox: '0 0 80 90', html: FIGURE_SVG })
+        : await characterFigure(key);
+      if (figKey !== key) return; // cambiata nel frattempo
+      el.replaceChildren(fig);
+      el.classList.remove('drop');
+      void el.offsetWidth; // riparte l'animazione
+      el.classList.add('drop');
+    }
+
+    function describeNow(n) {
       const u = n.usage || {};
       const ep = n.episode ? prettyEpisode(n.episode) : '';
-      let title, sub;
+      if (!n.alive) return { state: 'off', title: 'Il lettore non risponde', sub: 'Se non si riprende da solo, prova a riavviarlo da Impostazioni.', big: 'Zzz', small: 'lettore spento' };
+      if (n.mode === 'playing') return { state: 'play', title: n.display_name, sub: ep };
+      if (n.mode === 'paused') return { state: 'pause', title: `${n.display_name} è in pausa`, sub: ep ? `${ep} · riparte quando torna la sua statuina` : 'Riparte quando torna la sua statuina.' };
+      if (n.mode === 'ended_wait_remove') return { state: 'end', title: 'Episodio finito', sub: `${n.display_name}: il prossimo parte dopo aver tolto e riappoggiato la statuina.`, big: 'Fine', small: 'togli la statuina' };
+      if (n.blocked) {
+        if (u.remaining_minutes != null && u.remaining_minutes <= 0) return { state: 'rest', title: 'I minuti di oggi sono finiti', sub: 'Domani si ricomincia.', big: 'A domani', small: 'i minuti di oggi sono finiti' };
+        const when = n.next_window_start ? `Si riparte alle ${hm(n.next_window_start)}.` : 'Per oggi gli orari sono finiti. Domani si ricomincia.';
+        return { state: 'rest', title: 'Il gufetto riposa', sub: when, big: 'Riposo', small: n.next_window_start ? `si riparte alle ${hm(n.next_window_start)}` : 'a domani' };
+      }
+      if (n.tag_present && !n.tag_character) return { state: 'idle', title: 'Statuina sconosciuta', sub: 'Questa statuina non è abbinata a nessun personaggio. Puoi abbinarla dalla scheda di un personaggio.', big: 'Cucù!', small: 'statuina sconosciuta' };
+      return { state: 'idle', title: 'Pronto', sub: 'Appoggia una statuina sul Cucù per far partire un episodio.', big: 'Cucù!', small: 'appoggia una statuina' };
+    }
 
-      if (!n.alive) {
-        title = 'Il lettore non risponde';
-        sub = 'Se non si riprende da solo, prova a riavviarlo da Impostazioni.';
-      } else if (n.mode === 'playing') {
-        title = `Sta guardando ${n.display_name}`;
-        sub = ep;
-      } else if (n.mode === 'paused') {
-        title = `${n.display_name} è in pausa`;
-        sub = `Riparte quando torna la sua statuina.${ep ? ' ' + ep : ''}`;
-      } else if (n.mode === 'ended_wait_remove') {
-        title = 'Episodio finito';
-        sub = `Il prossimo parte dopo aver tolto e riappoggiato la statuina.`;
-      } else if (n.blocked) {
-        if (u.remaining_minutes != null && u.remaining_minutes <= 0) {
-          title = 'I minuti di oggi sono finiti';
-          sub = 'Domani si ricomincia.';
-        } else if (n.next_window_start) {
-          title = 'Il gufetto riposa';
-          sub = `Si riparte alle ${hm(n.next_window_start)}.`;
-        } else {
-          title = 'Il gufetto riposa';
-          sub = 'Per oggi gli orari sono finiti. Domani si ricomincia.';
+    let screenKey = null;
+
+    async function renderScreen(n, d) {
+      const screen = $('screen');
+      const content = $('scr-content');
+      const img = $('scr-img');
+      const withEpisode = d.state === 'play' || d.state === 'pause';
+      screen.dataset.state = d.state;
+      $('stage').dataset.state = d.state;
+
+      // Colore dello schermo: tinta chiara del personaggio in onda, grigio azzurro altrimenti
+      const i = n.character ? charIndex(n.character) : -1;
+      screen.style.setProperty('--scr', withEpisode && i >= 0 ? TINTS[i % TINTS.length][0] : d.state === 'end' ? 'var(--apricot)' : '#dfe6ec');
+
+      const thumb = withEpisode && n.episode_thumb_v
+        ? `/characters/${enc(n.character)}/episodes/${enc(n.episode)}/thumb?v=${n.episode_thumb_v}`
+        : null;
+      screen.dataset.media = thumb ? '1' : '0';
+      if (thumb && img.getAttribute('src') !== thumb) img.src = thumb;
+      screen.setAttribute('aria-label', thumb ? `La TV: ${prettyEpisode(n.episode)}` : `La TV: ${d.big || d.title}`);
+
+      // Il contenuto si ricostruisce solo quando cambia davvero (non a ogni aggiornamento)
+      const key = [d.state, n.character, n.episode, !!thumb, d.big, d.small].join('|');
+      if (key !== screenKey) {
+        screenKey = key;
+        const parts = [];
+        if (withEpisode && !thumb) {
+          parts.push(await characterFigure(n.character, { onScreen: true }));
+          parts.push(h('span', { class: 'scr-small', text: prettyEpisode(n.episode || '') }));
         }
-      } else {
-        title = 'Pronto';
-        sub = 'Appoggia una statuina sul Cucù per far partire un episodio.';
+        if (d.state === 'pause') {
+          parts.unshift(h('span', { class: 'pause-icon' }));
+          parts.push(h('span', { class: 'scr-small', text: 'in pausa' }));
+        }
+        if (!withEpisode) {
+          parts.push(h('span', { class: 'scr-big', text: d.big }));
+          parts.push(h('span', { class: 'scr-small', text: d.small }));
+        }
+        content.replaceChildren(...parts, h('div', { class: 'scr-progress', id: 'scr-progress', hidden: !withEpisode || null }, h('span')));
       }
 
-      let lead;
-      const idx = n.character ? characters.findIndex(c => c.name === n.character) : -1;
-      if (idx >= 0) lead = avatar(characters[idx], idx);
-      else lead = h('img', { src: '/static/img/gufetto.png', alt: '' });
+      const bar = $('scr-progress');
+      if (bar && withEpisode && n.len_ms > 0) {
+        bar.hidden = false;
+        bar.firstChild.style.width = `${Math.min(100, Math.round(n.pos_ms / n.len_ms * 100))}%`;
+      } else if (bar) {
+        bar.hidden = true;
+      }
+    }
 
-      let usage = null;
+    function renderFacts(n, d) {
+      const facts = [];
+      const u = n.usage || {};
+
+      if ((d.state === 'play' || d.state === 'pause') && n.len_ms > 0) {
+        const left = Math.max(0, n.len_ms - n.pos_ms);
+        facts.push(h('div', { class: 'fact' },
+          h('div', { class: 'bar' }, h('div', { style: `width:${Math.min(100, Math.round(n.pos_ms / n.len_ms * 100))}%` })),
+          h('div', { class: 'muted small', text: `${fmtTime(n.pos_ms)} di ${fmtTime(n.len_ms)} · mancano ${Math.max(1, Math.round(left / 60000))} min` })));
+      }
+
+      if (n.round && n.round.total_episodes) {
+        facts.push(h('div', { class: 'fact muted small', text: `${n.round.watched_in_round} di ${n.round.total_episodes} episodi già visti in questo giro` }));
+      }
+
       if (n.alive && u.enabled) {
         let used = Math.round(u.minutes_used || 0);
         if (u.daily_limit_minutes != null && u.daily_limit_minutes > 0) {
           used = Math.min(used, u.daily_limit_minutes); // l'ultimo episodio può sforare di poco
-          const pct = Math.min(100, Math.round(used / u.daily_limit_minutes * 100));
-          usage = h('div', { class: 'now-usage' },
-            h('div', { class: 'bar' }, h('div', { style: `width:${pct}%` })),
-            h('div', { class: 'muted small', text: `${used} di ${u.daily_limit_minutes} minuti oggi` }));
+          facts.push(h('div', { class: 'fact' },
+            h('div', { class: 'bar' }, h('div', { style: `width:${Math.round(used / u.daily_limit_minutes * 100)}%;background:var(--blue-ink)` })),
+            h('div', { class: 'muted small', text: `${used} di ${u.daily_limit_minutes} minuti oggi` })));
         } else {
-          usage = h('div', { class: 'now-usage muted small', text: `Oggi ${used} minuti` });
+          facts.push(h('div', { class: 'fact muted small', text: `Oggi ${used} minuti di cartoni` }));
         }
       }
 
-      root.replaceChildren(h('div', { class: 'now' },
-        h('div', { class: 'now-lead' }, lead),
-        h('div', { class: 'now-main' },
-          h('div', { class: 'now-title', text: title }),
-          sub ? h('div', { class: 'now-sub', text: sub }) : null,
-          usage)));
+      if (n.character) {
+        facts.push(h('a', { class: 'btn btn-quiet', style: 'align-self:flex-start;margin-left:-12px', href: '#/personaggi/' + enc(n.character) },
+          `Apri ${n.display_name}`, icon('chevron')));
+      }
+
+      $('now-facts').replaceChildren(...facts);
+    }
+
+    function renderAdesso(n) {
+      if (!$('stage')) return;
+      const d = describeNow(n);
+      $('now-title').textContent = d.title;
+      $('now-sub').textContent = d.sub || '';
+      renderScreen(n, d);
+      renderFigurine(n);
+      renderFacts(n, d);
     }
 
     /* ================= Wi-Fi ================= */
@@ -3056,7 +3350,7 @@
     function start() {
       started = true;
       loadInfo();
-      if (!location.hash) history.replaceState(null, '', '#/personaggi');
+      if (!location.hash) history.replaceState(null, '', '#/adesso');
       route();
       maybeOfferPin();
     }
