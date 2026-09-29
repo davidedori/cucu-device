@@ -1,13 +1,16 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from pathlib import Path
 from datetime import datetime
 from dotenv import dotenv_values
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import re
 import shutil
 import subprocess
@@ -34,6 +37,7 @@ VERSION_FILE = BASE_DIR / "VERSION"
 LAST_SEEN_TAG_FILE = BASE_DIR / "last_seen_tag.json"
 TIME_LIMITS_FILE = BASE_DIR / "time_limits.json"
 TAG_LABELS_FILE = BASE_DIR / "tag_labels.json"
+UI_AUTH_FILE = BASE_DIR / "ui_auth.json"
 DAILY_USAGE_FILE = BASE_DIR / "daily_usage.json"
 
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -204,6 +208,216 @@ def serve_frontend():
 def api_root():
     return {"message": "cucu-device API attiva"}
 
+# --- PIN genitore ------------------------------------------------------------
+# Facoltativo: finché non viene impostato la UI resta aperta come prima.
+# Non è sicurezza contro un attaccante (la pagina viaggia in HTTP sulla rete di
+# casa): serve a evitare che bambini o ospiti cambino le impostazioni.
+# Il PIN si recupera cancellando ui_auth.json via SSH (vedi CHEATSHEET.md).
+
+SESSION_COOKIE = "cucu_session"
+SESSION_DAYS = 90
+PIN_ITERATIONS = 100_000  # PBKDF2: circa mezzo secondo sul Pi Zero 2 W, solo al login
+_PIN_RE = re.compile(r"^\d{4,8}$")
+
+# Percorsi sempre aperti: la pagina, i suoi asset e il login stesso
+_PUBLIC_PATHS = {"/", "/api", "/manifest.webmanifest", "/auth/status", "/auth/login", "/auth/setup", "/auth/logout"}
+
+_auth_cache = {"mtime": None, "data": None}
+
+def load_ui_auth():
+    """Contenuto di ui_auth.json (None se il PIN non è impostato), riletto solo se cambia."""
+    try:
+        mtime = UI_AUTH_FILE.stat().st_mtime_ns
+    except OSError:
+        _auth_cache.update(mtime=None, data=None)
+        return None
+    if mtime != _auth_cache["mtime"]:
+        try:
+            with UI_AUTH_FILE.open() as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"Errore nel leggere {UI_AUTH_FILE}: {e}")
+            data = None
+        _auth_cache.update(mtime=mtime, data=data)
+    return _auth_cache["data"]
+
+def _hash_pin(pin: str, salt: bytes, iterations: int) -> str:
+    return hashlib.pbkdf2_hmac("sha256", pin.encode(), salt, iterations).hex()
+
+def _pin_matches(auth: dict, pin: str) -> bool:
+    candidate = _hash_pin(pin, bytes.fromhex(auth["salt"]), auth.get("iterations", PIN_ITERATIONS))
+    return hmac.compare_digest(candidate, auth["hash"])
+
+def _save_pin(pin: str):
+    salt = secrets.token_bytes(16)
+    _write_json_atomic(UI_AUTH_FILE, {
+        "salt": salt.hex(),
+        "hash": _hash_pin(pin, salt, PIN_ITERATIONS),
+        "iterations": PIN_ITERATIONS,
+        # Chiave per firmare le sessioni: nuova a ogni cambio PIN, così le
+        # sessioni aperte con il PIN vecchio smettono di valere
+        "secret": secrets.token_hex(32),
+    })
+
+def _session_token(auth: dict) -> str:
+    expires = int(time.time()) + SESSION_DAYS * 86400
+    sig = hmac.new(bytes.fromhex(auth["secret"]), str(expires).encode(), "sha256").hexdigest()
+    return f"{expires}.{sig}"
+
+def _session_valid(auth: dict, token) -> bool:
+    if not token or "." not in token:
+        return False
+    expires, sig = token.split(".", 1)
+    if not expires.isdigit() or int(expires) < time.time():
+        return False
+    expected = hmac.new(bytes.fromhex(auth["secret"]), expires.encode(), "sha256").hexdigest()
+    return hmac.compare_digest(sig, expected)
+
+def _cookie_from_scope(scope) -> str:
+    for key, value in scope.get("headers", []):
+        if key == b"cookie":
+            for part in value.decode("latin-1").split(";"):
+                name, _, val = part.strip().partition("=")
+                if name == SESSION_COOKIE:
+                    return val
+    return ""
+
+class PinGuard:
+    """Middleware ASGI puro (non BaseHTTPMiddleware): lascia passare in streaming
+    gli upload dei video senza bufferizzarli."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            path = scope.get("path", "")
+            auth = load_ui_auth()
+            if auth and path not in _PUBLIC_PATHS and not path.startswith("/static/") \
+                    and not _session_valid(auth, _cookie_from_scope(scope)):
+                response = JSONResponse({"detail": "Serve il PIN"}, status_code=401)
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+app.add_middleware(PinGuard)
+
+# Tentativi sbagliati per indirizzo: dopo 5 errori si aspetta, sempre di più
+_login_failures: Dict[str, dict] = {}
+
+def _check_rate_limit(ip: str):
+    entry = _login_failures.get(ip)
+    if entry and entry["until"] > time.time():
+        wait = int(entry["until"] - time.time()) + 1
+        raise HTTPException(status_code=429, detail=f"Troppi tentativi. Riprova tra {wait} secondi.")
+
+def _register_failure(ip: str):
+    entry = _login_failures.setdefault(ip, {"count": 0, "until": 0})
+    entry["count"] += 1
+    if entry["count"] >= 5:
+        entry["until"] = time.time() + min(900, 30 * 2 ** (entry["count"] - 5))
+
+class PinPayload(BaseModel):
+    pin: str
+
+class PinChange(BaseModel):
+    current_pin: str
+    new_pin: str
+
+def _validate_new_pin(pin: str):
+    if not _PIN_RE.match(pin):
+        raise HTTPException(status_code=400, detail="Il PIN deve avere da 4 a 8 cifre.")
+
+def _with_session(payload: dict, auth: dict) -> JSONResponse:
+    resp = JSONResponse(payload)
+    resp.set_cookie(SESSION_COOKIE, _session_token(auth), max_age=SESSION_DAYS * 86400,
+                    httponly=True, samesite="strict", path="/")
+    return resp
+
+@app.get("/auth/status")
+def auth_status(request: Request):
+    auth = load_ui_auth()
+    return {
+        "pin_set": auth is not None,
+        "authenticated": auth is None or _session_valid(auth, request.cookies.get(SESSION_COOKIE)),
+    }
+
+@app.post("/auth/setup")
+def auth_setup(payload: PinPayload):
+    """Imposta il PIN la prima volta (dopo, solo /auth/change)."""
+    if load_ui_auth() is not None:
+        raise HTTPException(status_code=409, detail="Il PIN è già impostato.")
+    _validate_new_pin(payload.pin)
+    _save_pin(payload.pin)
+    return _with_session({"status": "ok"}, load_ui_auth())
+
+@app.post("/auth/login")
+def auth_login(payload: PinPayload, request: Request):
+    auth = load_ui_auth()
+    if auth is None:
+        return {"status": "ok"}
+    ip = request.client.host if request.client else "?"
+    _check_rate_limit(ip)
+    if not _pin_matches(auth, payload.pin):
+        _register_failure(ip)
+        raise HTTPException(status_code=403, detail="PIN sbagliato.")
+    _login_failures.pop(ip, None)
+    return _with_session({"status": "ok"}, auth)
+
+@app.post("/auth/logout")
+def auth_logout():
+    resp = JSONResponse({"status": "ok"})
+    resp.delete_cookie(SESSION_COOKIE, path="/")
+    return resp
+
+@app.post("/auth/change")
+def auth_change(payload: PinChange, request: Request):
+    auth = load_ui_auth()
+    if auth is None:
+        raise HTTPException(status_code=400, detail="Nessun PIN impostato.")
+    ip = request.client.host if request.client else "?"
+    _check_rate_limit(ip)
+    if not _pin_matches(auth, payload.current_pin):
+        _register_failure(ip)
+        raise HTTPException(status_code=403, detail="Il PIN attuale non è giusto.")
+    _validate_new_pin(payload.new_pin)
+    _save_pin(payload.new_pin)
+    return _with_session({"status": "ok"}, load_ui_auth())
+
+@app.post("/auth/remove")
+def auth_remove(payload: PinPayload, request: Request):
+    auth = load_ui_auth()
+    if auth is None:
+        return {"status": "ok"}
+    ip = request.client.host if request.client else "?"
+    _check_rate_limit(ip)
+    if not _pin_matches(auth, payload.pin):
+        _register_failure(ip)
+        raise HTTPException(status_code=403, detail="PIN sbagliato.")
+    UI_AUTH_FILE.unlink(missing_ok=True)
+    resp = JSONResponse({"status": "ok"})
+    resp.delete_cookie(SESSION_COOKIE, path="/")
+    return resp
+
+# --- Installabile sulla schermata Home -----------------------------------------
+
+@app.get("/manifest.webmanifest")
+def web_manifest():
+    return JSONResponse({
+        "name": "Cucù",
+        "short_name": "Cucù",
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#f5f6f3",
+        "theme_color": "#f5f6f3",
+        "lang": "it",
+        "icons": [
+            {"src": "/static/img/icon-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/static/img/icon-512.png", "sizes": "512x512", "type": "image/png"},
+            {"src": "/static/img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ],
+    }, media_type="application/manifest+json")
+
 @app.get("/system/info")
 def system_info():
     """Dati del dispositivo per la UI: nome in rete, versione, canale OTA, spazio libero."""
@@ -221,6 +435,42 @@ def system_info():
         "disk": disk_info,
     }
 
+
+@app.get("/system/now")
+def system_now():
+    """
+    Cosa succede adesso sulla TV, per la card "Ora sulla TV" della UI. Legge
+    last_seen_tag.json (riscritto da read_nfc.py a 10 Hz): se è fermo da più di
+    10 s il lettore non sta girando (stessa soglia di led.py).
+    """
+    data = {}
+    try:
+        with LAST_SEEN_TAG_FILE.open() as f:
+            data = json.load(f)
+    except Exception:
+        pass  # file assente o letto a metà scrittura: si considera fermo
+
+    alive = bool(data) and (time.time() - data.get("ts", 0)) <= 10
+    mode = data.get("mode") if alive else None
+    character = data.get("character") if mode in ("playing", "paused", "ended_wait_remove") else None
+
+    usage = get_time_limits_usage()
+
+    # Prossima fascia oraria di oggi, per dire "si riparte alle 16:00"
+    now_hm = datetime.now().strftime("%H:%M")
+    starts = sorted(w["start"] for w in usage.get("windows", []) if w.get("start", "") > now_hm)
+
+    return {
+        "alive": alive,
+        "mode": mode,
+        "blocked": bool(data.get("blocked")) if alive else False,
+        "tag_present": bool(data.get("uid")) if alive else False,
+        "character": character,
+        "display_name": _display_name(load_episode_state(), character) if character else None,
+        "episode": data.get("episode") if character else None,
+        "next_window_start": starts[0] if starts else None,
+        "usage": usage,
+    }
 
 @app.get("/characters")
 def list_characters():
