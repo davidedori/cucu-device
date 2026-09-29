@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import time
 import socket
+import threading
 import urllib.request
 import urllib.error
 
@@ -151,6 +152,86 @@ def save_tag_labels(labels: dict):
         _write_json_atomic(TAG_LABELS_FILE, labels)
     except Exception as e:
         print(f"Errore nel salvare {TAG_LABELS_FILE}: {e}")
+
+# --- Anteprime degli episodi -----------------------------------------------------
+# Un fotogramma per episodio, creato con ffmpeg alla prima richiesta e salvato in
+# characters/<nome>/.thumbs/ (read_nfc.py e l'API ignorano le cartelle: contano
+# solo i file video). Sul Pi Zero si genera una sola anteprima alla volta, a
+# bassa priorità, e mai mentre un episodio è in riproduzione.
+
+THUMB_DIR_NAME = ".thumbs"
+THUMB_WIDTH = 320
+_thumb_lock = threading.Lock()
+
+def _ffmpeg_available() -> bool:
+    return shutil.which("ffmpeg") is not None
+
+def _thumb_path(char_dir: Path, filename: str) -> Path:
+    return char_dir / THUMB_DIR_NAME / f"{filename}.jpg"
+
+def _thumb_version(char_dir: Path, video: Path):
+    """mtime dell'anteprima se è ancora valida (più recente del video), altrimenti None."""
+    thumb = _thumb_path(char_dir, video.name)
+    try:
+        t = thumb.stat().st_mtime
+        return int(t) if t >= video.stat().st_mtime else None
+    except OSError:
+        return None
+
+def _video_duration(path: Path):
+    try:
+        res = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=15,
+        )
+        return float(res.stdout.strip())
+    except Exception:
+        return None
+
+def _generate_thumb(char_dir: Path, video: Path) -> bool:
+    """Estrae un fotogramma (circa al 30% del video, massimo 90 s: dopo la sigla)."""
+    thumb = _thumb_path(char_dir, video.name)
+    thumb.parent.mkdir(exist_ok=True)
+    tmp = thumb.with_name(thumb.name + ".tmp.jpg")
+    duration = _video_duration(video)
+    positions = [min(90.0, duration * 0.3)] if duration else [60.0]
+    positions.append(3.0)  # ripiego per video più corti del previsto
+    for pos in positions:
+        try:
+            subprocess.run(
+                ["nice", "-n", "19", "ffmpeg", "-nostdin", "-loglevel", "error", "-threads", "1",
+                 "-ss", f"{pos:.1f}", "-i", str(video), "-frames:v", "1", "-an", "-sn",
+                 "-vf", f"scale={THUMB_WIDTH}:-2", "-q:v", "6", "-y", str(tmp)],
+                capture_output=True, timeout=60,
+            )
+        except Exception as e:
+            print(f"[thumb] ffmpeg fallito su {video.name}: {e}")
+            continue
+        if tmp.exists() and tmp.stat().st_size > 0:
+            os.replace(tmp, thumb)
+            return True
+    tmp.unlink(missing_ok=True)
+    return False
+
+def _player_playing() -> bool:
+    """True solo se un episodio sta andando adesso (in pausa la CPU è libera)."""
+    try:
+        with LAST_SEEN_TAG_FILE.open() as f:
+            data = json.load(f)
+    except Exception:
+        return False
+    return (time.time() - data.get("ts", 0)) <= 5 and data.get("mode") == "playing"
+
+def _generate_thumbs_task(char_dir: Path, filenames: List[str]):
+    """Background dopo un upload: anteprime dei nuovi episodi, se il lettore è libero."""
+    if not _ffmpeg_available():
+        return
+    for name in filenames:
+        video = char_dir / name
+        if _player_playing() or not video.exists() or _thumb_version(char_dir, video):
+            continue
+        with _thumb_lock:
+            _generate_thumb(char_dir, video)
 
 def _video_files(char_dir: Path):
     return [p for p in char_dir.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT]
@@ -433,6 +514,7 @@ def system_info():
         "version": version or None,
         "channel": (cfg.get("UPDATE_CHANNEL") or "stable").strip(),
         "disk": disk_info,
+        "thumbnails": _ffmpeg_available(),
     }
 
 
@@ -732,6 +814,7 @@ def get_character(name: str):
         episodes.append({
             "filename": fname,
             "size_bytes": p.stat().st_size,
+            "thumb_v": _thumb_version(char_dir, p),
             "watched": fname in known and fname not in remaining,
             "status": {
                 "known": fname in known,
@@ -1056,6 +1139,7 @@ def get_character_episodes(name: str):
 @app.post("/characters/{name}/episodes")
 async def upload_character_episodes(
     name: str,
+    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...)
 ):
     """
@@ -1125,6 +1209,8 @@ async def upload_character_episodes(
     episode_state[name] = new_state
     save_episode_state(episode_state)
 
+    background_tasks.add_task(_generate_thumbs_task, char_dir, saved_files)
+
     return {
         "character": name,
         "uploaded": saved_files,
@@ -1135,6 +1221,34 @@ async def upload_character_episodes(
         }
     }
 
+
+@app.get("/characters/{name}/episodes/{filename}/thumb")
+def get_episode_thumb(name: str, filename: str):
+    """
+    Anteprima dell'episodio. Se manca la crea (una alla volta): se il Cucù è
+    occupato risponde 503 e la UI riprova dopo qualche secondo.
+    """
+    char_dir = CHARACTERS_DIR / name
+    video = char_dir / os.path.basename(filename)
+    if not video.is_file() or video.suffix.lower() not in VIDEO_EXT:
+        raise HTTPException(status_code=404, detail="Episodio non trovato.")
+
+    if _thumb_version(char_dir, video) is None:
+        if not _ffmpeg_available():
+            raise HTTPException(status_code=404, detail="ffmpeg non installato: anteprime non disponibili.")
+        if _player_playing():
+            return JSONResponse({"detail": "Episodio in riproduzione: riprovo dopo."}, status_code=503, headers={"Retry-After": "20"})
+        if not _thumb_lock.acquire(blocking=False):
+            return JSONResponse({"detail": "Sto preparando un'altra anteprima."}, status_code=503, headers={"Retry-After": "3"})
+        try:
+            if _thumb_version(char_dir, video) is None and not _generate_thumb(char_dir, video):
+                raise HTTPException(status_code=404, detail="Non riesco a estrarre un fotogramma da questo video.")
+        finally:
+            _thumb_lock.release()
+
+    # L'URL cambia con la versione (?v=mtime), quindi il browser può tenerla a lungo
+    return FileResponse(_thumb_path(char_dir, video.name), media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 @app.post("/characters/{name}/episodes/reset-round")
 def reset_character_round(name: str):
@@ -1198,6 +1312,14 @@ def rename_character_episode(name: str, filename: str, payload: EpisodeRename):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore nel rinominare il file: {e}")
 
+    # l'anteprima segue il file
+    old_thumb = _thumb_path(char_dir, old_name)
+    if old_thumb.exists():
+        try:
+            os.replace(old_thumb, _thumb_path(char_dir, new_name))
+        except OSError:
+            pass
+
     episode_state = load_episode_state()
     state = episode_state.get(name, {"known": [], "remaining": [], "seen": []})
     known = [new_name if f == old_name else f for f in state.get("known", [])]
@@ -1240,6 +1362,7 @@ def delete_character_episode(name: str, filename: str):
         os.remove(file_path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore nell'eliminare il file: {e}")
+    _thumb_path(char_dir, file_name).unlink(missing_ok=True)
 
     episode_state = load_episode_state()
     state = episode_state.get(name, {"known": [], "remaining": [], "seen": []})
