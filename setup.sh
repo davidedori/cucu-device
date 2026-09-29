@@ -204,8 +204,13 @@ for f in read_nfc.py nfc_reader.py led.py updater.sh VERSION requirements.txt; d
 done
 copy_file "$REPO_DIR/api/main.py"    "$PROJECT_DIR/api/main.py"
 copy_file "$REPO_DIR/api/index.html" "$PROJECT_DIR/api/index.html"
+# Asset della web UI (font, logo): sovrascrive sempre, skip se repo == deploy dir
+if [ "$(realpath "$REPO_DIR/api/static")" != "$(realpath -m "$PROJECT_DIR/api/static")" ]; then
+    mkdir -p "$PROJECT_DIR/api/static"
+    cp -r "$REPO_DIR/api/static/." "$PROJECT_DIR/api/static/"
+fi
 chmod +x "$PROJECT_DIR/read_nfc.py" "$PROJECT_DIR/updater.sh"
-ok "Copiati: read_nfc.py, nfc_reader.py, led.py, updater.sh, VERSION, requirements.txt, api/main.py, api/index.html"
+ok "Copiati: read_nfc.py, nfc_reader.py, led.py, updater.sh, VERSION, requirements.txt, api/main.py, api/index.html, api/static/"
 
 # Grafica: sovrascrive sempre (skip se repo == deploy dir)
 if [ "$(realpath "$REPO_DIR/graphics")" != "$(realpath "$PROJECT_DIR/graphics")" ]; then

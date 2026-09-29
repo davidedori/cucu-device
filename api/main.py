@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from pathlib import Path
@@ -35,6 +36,10 @@ TIME_LIMITS_FILE = BASE_DIR / "time_limits.json"
 DAILY_USAGE_FILE = BASE_DIR / "daily_usage.json"
 
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+# Font e immagini della UI serviti in locale: niente CDN, così la pagina
+# funziona anche quando il telefono è collegato all'hotspot del Cucù (senza internet)
+app.mount("/static", StaticFiles(directory=API_DIR / "static"), name="static")
 
 class CharacterCreate(BaseModel):
     name: str
@@ -151,6 +156,23 @@ def serve_frontend():
 @app.get("/api")
 def api_root():
     return {"message": "cucu-device API attiva"}
+
+@app.get("/system/info")
+def system_info():
+    """Dati del dispositivo per la UI: nome in rete, versione, canale OTA, spazio libero."""
+    version = VERSION_FILE.read_text().strip() if VERSION_FILE.exists() else ""
+    cfg = dotenv_values(CONFIG_ENV_FILE) if CONFIG_ENV_FILE.exists() else {}
+    try:
+        disk = shutil.disk_usage(CHARACTERS_DIR if CHARACTERS_DIR.exists() else BASE_DIR)
+        disk_info = {"free_bytes": disk.free, "total_bytes": disk.total}
+    except OSError:
+        disk_info = None
+    return {
+        "hostname": socket.gethostname(),
+        "version": version or None,
+        "channel": (cfg.get("UPDATE_CHANNEL") or "stable").strip(),
+        "disk": disk_info,
+    }
 
 
 @app.get("/characters")
