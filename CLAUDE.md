@@ -50,9 +50,12 @@ La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene carica
 - Associazione tag NFC a personaggi
 - Riavvio del servizio NFC (`sudo systemctl restart cucu-device.service`)
 - Gestione rete Wi-Fi via nmcli (scan, connessione, hotspot)
-- Serve `index.html` come SPA alla root
+- Serve `index.html` come SPA alla root e gli asset in `api/static/` su `/static`
+- `GET /system/info`: hostname, versione, canale OTA, spazio libero su disco
 
-**`api/index.html`** — frontend SPA single-file (912 righe, HTML/CSS/JS inline). Nessuna dipendenza da npm o bundler. Si aggiorna via git pull come tutto il resto.
+**`api/index.html`** — frontend SPA single-file (HTML/CSS/JS inline), mobile-first, con lo stile del sito (`cucu-website/DESIGN.md`): routing via hash (`#/personaggi`, `#/personaggi/<nome>`, `#/tempo`, `#/impostazioni`), DOM costruito con `h()` senza `innerHTML` sui dati utente. Nessuna dipendenza da npm o bundler. Si aggiorna via git pull come tutto il resto.
+
+**`api/static/`** — font (Fraunces, Figtree) e logo serviti in locale da `/static`: la UI non deve dipendere da CDN, perché al primo setup il telefono è collegato all'hotspot del Cucù senza internet. `setup.sh` la copia insieme a `index.html`.
 
 **`led.py`** — LED di stato (hardware v2), servizio `cucu-led.service` che parte presto nel boot (`DefaultDependencies=no`). Anima un LED su GPIO13 con il PWM hardware (sysfs `/sys/class/pwm`). Legge lo stato da `last_seen_tag.json` (`mode`, `blocked`, `ts`), che `read_nfc.py` riscrive ad ogni tick; se il file non viene aggiornato da 10 s → respiro veloce. Sui device senza PWM esce con 0. Non è nel health check OTA.
 

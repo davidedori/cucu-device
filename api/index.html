@@ -4,1449 +4,2004 @@
 <head>
   <meta charset="UTF-8">
   <title>Cucù</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
-  <!-- Font Giocoso -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f6f3">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" type="image/png" href="/static/img/gufetto.png">
+  <link rel="apple-touch-icon" href="/static/img/gufetto.png">
+  <link rel="preload" href="/static/fonts/figtree-normal-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/fraunces-normal-latin.woff2" as="font" type="font/woff2" crossorigin>
 
   <style>
+    /* Font incorporati (da cucu-website/fonts): la UI deve funzionare anche
+       collegati all'hotspot del Cucù, quindi niente Google Fonts */
+    @font-face {
+      font-family: 'Figtree'; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url(/static/fonts/figtree-normal-latin-ext.woff2) format('woff2');
+      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+    }
+    @font-face {
+      font-family: 'Figtree'; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url(/static/fonts/figtree-normal-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: 'Fraunces'; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url(/static/fonts/fraunces-normal-latin-ext.woff2) format('woff2');
+      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+    }
+    @font-face {
+      font-family: 'Fraunces'; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url(/static/fonts/fraunces-normal-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+
+    /* Colori e caratteri del sito (cucu-website/DESIGN.md): un solo colore pieno,
+       l'arancione del logo, usato solo per le azioni. Il resto è grigio caldo e tinte tenui */
     :root {
-      /* Palette Toy Box */
-      --bg: #fdfbf7;
+      --bg: #f5f6f3;
       --surface: #ffffff;
-      --primary: #3b82f6;
-      /* Blu morbido */
-      --primary-soft: #eff6ff;
-      --accent: #f472b6;
-      /* Rosa */
-      --accent-soft: #fdf2f8;
-      --text: #334155;
-      --text-soft: #94a3b8;
-      --border: #e2e8f0;
-      --danger: #ef4444;
+      --ink: #3d3d3a;
+      --muted: #6e6e69;
+      --line: #e6e7e4;
+      --field: #fbfbfa;
+      --orange: #e94e1b;
+      --orange-text: #c7421a;
+      --danger: #b3261e;
+      --danger-soft: #fbe9e7;
+      --ok: #3d7049;
 
-      --radius: 20px;
-      --shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+      --peach: #f4dfcb;   --peach-ink: #9a6536;
+      --blue: #d8e6f3;    --blue-ink: #3d6690;
+      --green: #d5e8d8;   --green-ink: #3d7049;
+      --pink: #f5d8e2;    --pink-ink: #9c4867;
+      --apricot: #f9d8ca; --apricot-ink: #b0472a;
+
+      --serif: "Fraunces", Georgia, serif;
+      --sans: "Figtree", system-ui, -apple-system, sans-serif;
+
+      --radius: 22px;
+      --radius-sm: 14px;
+      --gutter: 16px;
+      --nav-h: 64px;
+      --safe-b: env(safe-area-inset-bottom, 0px);
+      --safe-t: env(safe-area-inset-top, 0px);
     }
 
-    * {
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-    }
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html { -webkit-text-size-adjust: 100%; }
+    html, body { overflow-x: clip; }
 
     body {
       margin: 0;
-      font-family: 'Nunito', sans-serif;
+      min-height: 100dvh;
       background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* --- Header & Tabs --- */
-    header {
-      background: var(--surface);
-      padding: 16px 20px 0 20px;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-    }
-
-    .logo {
-      font-size: 22px;
-      font-weight: 800;
-      color: var(--primary);
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .logo span {
-      background: var(--accent);
-      color: white;
-      padding: 2px 10px;
-      border-radius: 99px;
-      font-size: 14px;
-      transform: rotate(-3deg);
-    }
-
-    .tabs {
-      display: flex;
-      gap: 20px;
-    }
-
-    .tab {
-      padding: 12px 4px;
-      font-weight: 700;
-      color: var(--text-soft);
-      cursor: pointer;
-      border-bottom: 3px solid transparent;
-      transition: all 0.2s;
-    }
-
-    .tab.active {
-      color: var(--primary);
-      border-bottom-color: var(--primary);
-    }
-
-    /* --- Layout --- */
-    main {
-      flex: 1;
-      overflow-y: auto;
-      padding: 20px;
-      max-width: 800px;
-      margin: 0 auto;
-      width: 100%;
-    }
-
-    .view {
-      display: none;
-    }
-
-    .view.active {
-      display: block;
-    }
-
-    /* --- Card Grid --- */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 16px;
-    }
-
-    .card {
-      background: var(--surface);
-      border-radius: var(--radius);
-      padding: 16px;
-      box-shadow: var(--shadow);
-      border: 1px solid var(--border);
-      transition: transform 0.1s;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      position: relative;
-    }
-
-    .card:active {
-      transform: scale(0.96);
-    }
-
-    .card-icon {
-      font-size: 32px;
-      margin-bottom: 10px;
-      background: var(--primary-soft);
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .card-title {
-      font-weight: 800;
+      color: var(--ink);
+      font-family: var(--sans);
       font-size: 16px;
-      margin-bottom: 4px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: none;
     }
 
-    .card-subtitle {
-      font-size: 12px;
-      color: var(--text-soft);
-      font-weight: 600;
+    /* Grana fine come carta stampata (DESIGN §6), attenuata per uno strumento */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1000;
+      opacity: .09;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='1' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.24 0 0 0 0 0.24 0 0 0 0 0.23 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
     }
 
-    .card.add-card {
-      border: 2px dashed var(--border);
-      background: transparent;
-      box-shadow: none;
-      justify-content: center;
-      color: var(--text-soft);
+    h1, h2, h3 {
+      font-family: var(--serif);
+      font-variation-settings: "SOFT" 100, "WONK" 0;
+      font-weight: 500;
+      line-height: 1.15;
+      margin: 0;
     }
 
-    .card.add-card:hover {
-      border-color: var(--primary);
-      color: var(--primary);
+    h1 { font-size: 30px; }
+    h2 { font-size: 21px; }
+    p { margin: 0; }
+
+    button, input { font: inherit; color: inherit; }
+
+    :focus-visible {
+      outline: 2.5px solid var(--orange);
+      outline-offset: 2px;
+      border-radius: 10px;
     }
 
-    /* --- List Items --- */
-    .list-item {
-      background: var(--surface);
-      border-radius: 12px;
-      padding: 12px 16px;
-      margin-bottom: 10px;
+    .hidden { display: none !important; }
+    .muted { color: var(--muted); }
+    .small { font-size: 14px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+    /* ---------- Testata ---------- */
+    .app-header {
+      position: relative;
+      overflow: hidden;
+      padding: calc(14px + var(--safe-t)) var(--gutter) 12px;
+    }
+
+    .header-inner {
+      position: relative;
+      z-index: 1;
+      max-width: 760px;
+      margin: 0 auto;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border: 1px solid var(--border);
+      gap: 12px;
     }
 
-    .list-item-content {
+    .brand {
       display: flex;
-      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      text-decoration: none;
     }
 
-    .list-item-title {
-      font-weight: 700;
-      font-size: 14px;
-    }
+    .brand .owl { height: 40px; width: auto; }
+    .brand .word { height: 22px; width: auto; margin-bottom: 3px; }
 
-    .list-item-sub {
-      font-size: 12px;
-      color: var(--text-soft);
-    }
-
-    /* --- Buttons & Inputs --- */
-    .btn {
+    .device-pill {
       background: var(--surface);
-      border: 2px solid var(--border);
-      padding: 10px 16px;
-      border-radius: 12px;
-      font-weight: 700;
-      color: var(--text);
-      cursor: pointer;
-      font-family: inherit;
-      transition: all 0.1s;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 55vw;
     }
 
-    .btn:active {
-      transform: scale(0.96);
+    /* Forme sparse ai bordi della testata, mai dietro il logo (BRAND §4) */
+    .deco {
+      position: absolute;
+      pointer-events: none;
+      filter: url(#mano);
     }
 
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-      border-color: var(--primary);
-      box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
-    }
+    .app-header .deco.a { width: 150px; height: 130px; right: -58px; top: -64px; background: var(--blue); border-radius: 50%; }
+    .app-header .deco.b { width: 56px; height: 56px; right: 96px; top: -34px; background: var(--peach); border-radius: 16px; transform: rotate(18deg); }
+    .app-header .deco.c { width: 38px; height: 38px; right: 22px; bottom: -22px; background: var(--green); border-radius: 46% 54% 50% 50%; }
 
-    .btn-danger {
-      color: var(--danger);
-      border-color: #fee2e2;
-      background: #fef2f2;
-    }
-
-    .btn-block {
-      width: 100%;
-      display: block;
-      text-align: center;
-      margin-top: 10px;
-    }
-
-    input {
-      width: 100%;
-      padding: 12px;
-      border-radius: 12px;
-      border: 2px solid var(--border);
-      font-family: inherit;
-      outline: none;
-      background: #f8fafc;
-      font-weight: 600;
-    }
-
-    input:focus {
-      border-color: var(--primary);
-      background: white;
-    }
-
-    /* --- Modal --- */
-    .modal-overlay {
+    /* ---------- Navigazione ---------- */
+    .nav {
       position: fixed;
-      top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 100;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      backdrop-filter: blur(4px);
-      padding: 20px;
+      z-index: 50;
+      display: flex;
+      background: var(--surface);
+      border-top: 1px solid var(--line);
+      padding-bottom: var(--safe-b);
     }
 
-    .modal {
-      background: var(--bg);
-      border-radius: 24px;
-      width: 100%;
-      max-width: 400px;
-      max-height: 90vh;
-      overflow-y: auto;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    .nav a {
+      flex: 1;
+      height: var(--nav-h);
       display: flex;
       flex-direction: column;
-    }
-
-    .modal-header {
-      padding: 20px;
-      background: var(--surface);
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      justify-content: space-between;
       align-items: center;
-    }
-
-    .modal-title {
-      font-weight: 800;
-      font-size: 18px;
-    }
-
-    .modal-close {
-      background: #f1f5f9;
-      border: none;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .modal-body {
-      padding: 20px;
-    }
-
-    .section-title {
-      text-transform: uppercase;
-      font-size: 11px;
-      letter-spacing: 1px;
-      color: var(--text-soft);
-      font-weight: 800;
-      margin: 20px 0 10px 0;
-    }
-
-    /* --- Toast --- */
-    .toast {
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #1e293b;
-      color: white;
-      padding: 12px 24px;
-      border-radius: 99px;
+      justify-content: center;
+      gap: 3px;
+      text-decoration: none;
+      color: var(--muted);
+      font-size: 13px;
       font-weight: 600;
-      font-size: 14px;
-      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s;
-      z-index: 200;
-      width: max-content;
-      max-width: 90%;
     }
 
-    .toast.show {
-      opacity: 1;
+    .nav a svg { width: 24px; height: 24px; }
+    .nav a[aria-current="page"] { color: var(--orange-text); }
+
+    /* ---------- Layout ---------- */
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 4px var(--gutter) calc(var(--nav-h) + var(--safe-b) + 32px);
     }
 
-    /* --- Utility --- */
-    .badge {
-      background: var(--accent);
-      color: white;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-size: 10px;
-      font-weight: 800;
+    .view-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 8px 0 18px;
     }
 
-    .hidden {
-      display: none !important;
+    .lead { color: var(--muted); margin: -8px 0 20px; max-width: 36rem; }
+
+    .stack > * + * { margin-top: 16px; }
+
+    /* Riquadri bianchi: nitidi, sono lo "strumento" */
+    .panel {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 18px;
     }
 
-    /* --- Toggle Switch --- */
-    .switch {
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .panel-sub { color: var(--muted); font-size: 15px; margin-bottom: 10px; }
+
+    .rows { margin: 4px -18px 0; }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 60px;
+      padding: 8px 10px 8px 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    .row-main { flex: 1; min-width: 0; }
+    .row-title { font-weight: 600; overflow-wrap: anywhere; }
+    .row-sub { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+    .row-empty { padding: 14px 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 15px; }
+
+    .row-lead {
+      flex: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+    }
+
+    .row-lead svg { width: 20px; height: 20px; }
+
+    /* ---------- Pulsanti ---------- */
+    .btn {
       position: relative;
-      display: inline-block;
-      width: 46px;
-      height: 28px;
-      flex-shrink: 0;
+      isolation: isolate;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 48px;
+      padding: 10px 20px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: var(--bg);
+      color: var(--ink);
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+      text-decoration: none;
+      touch-action: manipulation;
     }
 
-    .switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
+    .btn svg { width: 20px; height: 20px; flex: none; }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .5; cursor: default; transform: none; }
+    .btn-block { display: flex; width: 100%; }
 
-    .switch .slider {
+    /* Pulsante principale: rettangolo arancione appena ruotato, bordo appena mosso.
+       Il filtro sta solo sul fondo, mai sul testo (DESIGN §5) */
+    .btn-primary { color: #fff; background: transparent; }
+
+    .btn-primary::before {
+      content: "";
       position: absolute;
       inset: 0;
+      z-index: -1;
+      background: var(--orange-text);
+      border-radius: var(--radius-sm);
+      filter: url(#mano-btn);
+      transform: rotate(-.8deg);
+    }
+
+    .btn-quiet { background: transparent; color: var(--orange-text); padding-left: 12px; padding-right: 12px; }
+    .btn-danger { background: var(--danger-soft); color: var(--danger); }
+    .btn-danger-solid { background: var(--danger); color: #fff; }
+
+    .icon-btn {
+      flex: none;
+      width: 44px;
+      height: 44px;
+      border: 0;
+      border-radius: 12px;
+      background: transparent;
+      color: var(--muted);
+      display: grid;
+      place-items: center;
       cursor: pointer;
-      background-color: var(--border);
-      transition: background-color 0.2s;
-      border-radius: 999px;
+      touch-action: manipulation;
     }
 
+    .icon-btn svg { width: 22px; height: 22px; }
+    .icon-btn:active { background: var(--bg); }
+    .icon-btn.danger { color: var(--danger); }
+
+    .link-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      min-height: 44px;
+      margin-left: -8px;
+      padding-right: 8px;
+      color: var(--orange-text);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .link-back svg { width: 22px; height: 22px; }
+
+    /* ---------- Campi ---------- */
+    .field {
+      width: 100%;
+      min-height: 48px;
+      padding: 10px 14px;
+      border: 1.5px solid var(--line);
+      border-radius: 12px;
+      background: var(--field);
+      font-size: 16px; /* 16px: iOS non fa zoom sul campo */
+      outline: none;
+    }
+
+    .field:focus { border-color: var(--orange); background: #fff; }
+    .field::placeholder { color: #a3a39e; }
+
+    .field-wrap { position: relative; }
+    .field-wrap .suffix { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+    .field-wrap .field { padding-right: 56px; }
+
+    label.lbl { display: block; font-size: 14px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+
+    .switch { position: relative; flex: none; width: 52px; height: 32px; }
+    .switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+    .switch .slider { position: absolute; inset: 0; background: #d6d7d3; border-radius: 999px; transition: background-color .2s; }
     .switch .slider::before {
-      position: absolute;
       content: "";
-      height: 22px;
-      width: 22px;
+      position: absolute;
+      width: 26px;
+      height: 26px;
       left: 3px;
-      bottom: 3px;
-      background-color: white;
-      transition: transform 0.2s;
+      top: 3px;
+      background: #fff;
       border-radius: 50%;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+      transition: transform .2s;
+    }
+    .switch input:checked + .slider { background: var(--orange-text); }
+    .switch input:checked + .slider::before { transform: translateX(20px); }
+    .switch input:focus-visible + .slider { outline: 2.5px solid var(--orange); outline-offset: 2px; }
+    .switch input:disabled + .slider { opacity: .5; }
+
+    details.more > summary {
+      list-style: none;
+      cursor: pointer;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 600;
+    }
+    details.more > summary::-webkit-details-marker { display: none; }
+    details.more > summary svg { width: 18px; height: 18px; transition: transform .2s; }
+    details.more[open] > summary svg { transform: rotate(90deg); }
+
+    /* ---------- Personaggi ---------- */
+    .char-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 14px;
     }
 
-    .switch input:checked+.slider {
-      background-color: var(--primary);
+    .char-card {
+      position: relative;
+      isolation: isolate;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 10px;
+      padding: 20px 12px 16px;
+      text-decoration: none;
+      color: inherit;
+      border-radius: var(--radius);
     }
 
-    .switch input:checked+.slider::before {
-      transform: translateX(18px);
+    /* Card bianca con il bordo fatto a mano: il filtro tocca solo il fondo */
+    .char-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: var(--surface);
+      border-radius: var(--radius);
+      filter: url(#mano-card);
     }
 
-    .switch input:disabled+.slider {
-      opacity: 0.5;
-      cursor: not-allowed;
+    .char-card:active { transform: scale(.97); }
+
+    .char-name { font-family: var(--serif); font-variation-settings: "SOFT" 100; font-size: 19px; font-weight: 500; line-height: 1.2; overflow-wrap: anywhere; }
+    .char-meta { font-size: 14px; color: var(--muted); }
+    .char-hint { font-size: 13px; color: var(--apricot-ink); background: var(--apricot); border-radius: 999px; padding: 2px 10px; }
+
+    .avatar {
+      position: relative;
+      width: 92px;
+      height: 92px;
+      display: grid;
+      place-items: center;
+      font-family: var(--serif);
+      font-variation-settings: "SOFT" 100;
+      font-size: 38px;
+      font-weight: 500;
+      background-size: cover;
+      background-position: center;
+      flex: none;
     }
 
-    /* --- Form disabilitato (es. programmazione limiti di tempo quando spenti) --- */
-    .form-disabled {
-      opacity: 0.45;
-      pointer-events: none;
+    .avatar.lg { width: 116px; height: 116px; font-size: 48px; }
+
+    .add-card .avatar { background: var(--bg); color: var(--orange-text); }
+    .add-card .avatar svg { width: 36px; height: 36px; }
+    .add-card .char-name { color: var(--orange-text); font-family: var(--sans); font-size: 16px; font-weight: 600; }
+
+    /* Stato vuoto */
+    .empty {
+      position: relative;
+      text-align: center;
+      padding: 48px 16px 40px;
     }
 
-    /* Scan Tag Wizard */
-    @keyframes scan-pulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.15); opacity: 0.7; }
+    .empty h2 { margin-bottom: 8px; }
+    .empty p { color: var(--muted); max-width: 22rem; margin: 0 auto 22px; }
+    .empty .deco.a { width: 90px; height: 80px; left: -30px; top: 6px; background: var(--pink); border-radius: 50%; }
+    .empty .deco.b { width: 60px; height: 60px; right: -12px; top: 40px; background: var(--green); border-radius: 18px; transform: rotate(-14deg); }
+    .empty .deco.c { width: 44px; height: 44px; right: 30%; bottom: -6px; background: var(--peach); border-radius: 50%; }
+    .empty > *:not(.deco) { position: relative; }
+
+    /* ---------- Dettaglio personaggio ---------- */
+    .char-hero {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin: 4px 0 22px;
     }
 
-    .scan-icon {
-      font-size: 48px;
-      display: inline-block;
-      animation: scan-pulse 1.4s ease-in-out infinite;
+    .avatar-btn {
+      position: relative;
+      border: 0;
+      padding: 0;
+      background: none;
+      cursor: pointer;
+      flex: none;
     }
 
-    .scan-panel {
-      background: var(--primary-soft);
-      border-radius: 16px;
-      padding: 20px;
+    .avatar-btn .badge-cam {
+      position: absolute;
+      right: 0;
+      bottom: 2px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--surface);
+      color: var(--ink);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 1px 0 var(--line);
+    }
+
+    .avatar-btn .badge-cam svg { width: 20px; height: 20px; }
+
+    .hero-text { min-width: 0; flex: 1; }
+    .hero-title { display: flex; align-items: center; gap: 2px; }
+    .hero-title h1 { overflow-wrap: anywhere; }
+
+    .rename-form { display: flex; flex-direction: column; gap: 8px; }
+    .rename-form .actions { display: flex; gap: 8px; }
+
+    /* Pannello di scansione della statuina */
+    .scan {
+      background: var(--bg);
+      border-radius: 18px;
+      padding: 18px 16px 16px;
       text-align: center;
       margin-top: 12px;
     }
 
-    .scan-status {
-      font-size: 13px;
-      margin: 6px 0 0 0;
-      color: var(--text-soft);
-      min-height: 18px;
+    .scan-visual { position: relative; width: 120px; height: 104px; margin: 0 auto 8px; }
+    .scan-visual svg.fig { position: absolute; left: 50%; bottom: 0; width: 64px; transform: translateX(-50%); }
+
+    .scan-visual .ring {
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      width: 110px;
+      height: 32px;
+      margin-left: -55px;
+      border-radius: 50%;
+      border: 3px solid var(--blue);
+      opacity: 0;
+      animation: onda 1.6s steps(8, end) infinite;
     }
 
-    /* Upload Progress */
-    .progress-bar {
-      height: 6px;
-      background: #e2e8f0;
-      border-radius: 4px;
+    .scan-visual .ring:nth-child(2) { animation-delay: .5s; }
+    .scan-visual .ring:nth-child(3) { animation-delay: 1s; }
+
+    @keyframes onda {
+      0% { transform: scale(.45); opacity: 1; }
+      100% { transform: scale(1.1); opacity: 0; }
+    }
+
+    .scan .btn { background: var(--surface); }
+    .scan-title { font-weight: 600; }
+    .scan-status { font-size: 15px; color: var(--muted); min-height: 24px; margin-top: 2px; }
+    .scan-status.warn { color: var(--apricot-ink); }
+    .scan-status.ok { color: var(--ok); }
+    .scan-status.error { color: var(--danger); }
+
+    /* Upload */
+    .progress { margin-top: 12px; }
+    .progress-label { font-size: 14px; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+    .progress-label span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; }
+    .bar > div { height: 100%; width: 0; background: var(--orange-text); border-radius: 999px; transition: width .15s; }
+
+    .danger-zone { margin-top: 28px; text-align: center; }
+
+    /* ---------- Limiti di tempo ---------- */
+    .day h2 { font-size: 19px; margin-bottom: 12px; }
+    .day .windows { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+
+    .window-row { display: flex; align-items: center; gap: 8px; }
+    .window-row .field { flex: 1; min-width: 0; text-align: center; }
+    .window-row .dash { color: var(--muted); }
+
+    .form-disabled { opacity: .45; }
+
+    .save-bar {
+      position: sticky;
+      bottom: calc(var(--nav-h) + var(--safe-b) + 10px);
+      z-index: 20;
+      margin: 20px calc(-1 * var(--gutter)) 0;
+      padding: 16px var(--gutter) 0;
+      background: linear-gradient(rgba(245, 246, 243, 0), var(--bg) 16px);
+    }
+
+    .usage { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+
+    /* ---------- Wi-Fi ---------- */
+    .signal { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; }
+    .signal i { display: block; width: 4px; border-radius: 2px; background: var(--line); }
+    .signal i:nth-child(1) { height: 25%; }
+    .signal i:nth-child(2) { height: 50%; }
+    .signal i:nth-child(3) { height: 75%; }
+    .signal i:nth-child(4) { height: 100%; }
+    .signal i.on { background: var(--blue-ink); }
+
+    .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 2px; }
+    .tag.known { background: var(--green); color: var(--green-ink); }
+
+    .kv { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; }
+    .kv:first-of-type { border-top: 0; }
+    .kv span:last-child { text-align: right; overflow-wrap: anywhere; }
+
+    /* ---------- Sheet (pannello dal basso) ---------- */
+    .sheet-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(61, 61, 58, .38);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .sheet {
+      width: 100%;
+      max-width: 520px;
+      max-height: 92dvh;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      background: var(--surface);
+      border-radius: 26px 26px 0 0;
+      padding: 10px 20px calc(20px + var(--safe-b));
+      animation: sale .3s steps(3, end) both;
+    }
+
+    .sheet-grip { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 12px; }
+
+    .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .sheet-head h2 { padding-top: 8px; }
+    .sheet p.sheet-text { color: var(--muted); margin-bottom: 16px; }
+    .sheet .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+
+    @keyframes sale {
+      from { transform: translateY(40px); opacity: 0; }
+      to { transform: none; opacity: 1; }
+    }
+
+    /* ---------- Toast ---------- */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(var(--nav-h) + var(--safe-b) + 14px);
+      z-index: 300;
+      transform: translateX(-50%);
+      width: max-content;
+      max-width: calc(100% - 32px);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--ink);
+      color: #fff;
+      border-radius: 16px;
+      padding: 12px 12px 12px 18px;
+      font-size: 15px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, .18);
+    }
+
+    .toast:not(:has(button)) { padding-right: 18px; }
+    .toast button { background: none; border: 0; color: #ffc9b5; font-weight: 600; min-height: 36px; padding: 0 8px; cursor: pointer; }
+
+    /* ---------- Riconnessione ---------- */
+    .reconnect {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
       overflow: hidden;
-      margin-top: 10px;
-      display: none;
     }
 
-    .progress-fill {
-      height: 100%;
-      background: var(--primary);
-      width: 0%;
-      transition: width 0.1s;
+    .reconnect h2 { font-size: 26px; margin: 18px 0 8px; }
+    .reconnect p { color: var(--muted); max-width: 22rem; }
+    .reconnect .timer { font-family: var(--serif); font-size: 20px; margin-top: 14px; color: var(--muted); }
+    .reconnect .deco.a { width: 220px; height: 200px; left: -90px; top: -60px; background: var(--peach); border-radius: 50%; }
+    .reconnect .deco.b { width: 120px; height: 120px; right: -40px; top: 30%; background: var(--blue); border-radius: 28px; transform: rotate(20deg); }
+    .reconnect .deco.c { width: 160px; height: 150px; left: 12%; bottom: -80px; background: var(--green); border-radius: 46% 54% 50% 50%; }
+    .reconnect > *:not(.deco) { position: relative; }
+
+    /* Il gufetto fa "cucù": sbuca da una linea invisibile, si inclina e si ferma */
+    .peek { width: 96px; height: 114px; clip-path: inset(-60px -60px 0 -60px); }
+    .peek img { display: block; width: 88px; margin: 0 auto; transform-origin: 50% 100%; animation: cucu 1.2s steps(12, end) .2s both; }
+
+    @keyframes cucu {
+      0% { transform: translateY(100%); }
+      45% { transform: translateY(-4%) rotate(0); }
+      65% { transform: translateY(0) rotate(-7deg); }
+      85% { transform: rotate(3deg); }
+      100% { transform: none; }
+    }
+
+    /* ---------- Comparse a scatti (10 fps, come uno stop-motion) ---------- */
+    .appear { animation: comparsa .4s steps(4, end) both; animation-delay: calc(var(--i, 0) * 100ms); }
+
+    @keyframes comparsa {
+      0% { opacity: 0; transform: translateY(12px) rotate(var(--r, 1.2deg)); }
+      60% { opacity: 1; transform: translateY(-2px) rotate(calc(var(--r, 1.2deg) * -.4)); }
+      100% { opacity: 1; transform: none; }
+    }
+
+    .deco.pop { animation: spunta .4s steps(4, end) both; }
+    @keyframes spunta { from { scale: .2; } to { scale: 1; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+
+    /* ---------- Desktop / tablet ---------- */
+    @media (min-width: 768px) {
+      :root { --gutter: 24px; }
+
+      .nav {
+        position: static;
+        max-width: 760px;
+        margin: 4px auto 0;
+        padding: 0 var(--gutter);
+        background: transparent;
+        border: 0;
+        gap: 6px;
+      }
+
+      .nav a { flex: none; flex-direction: row; height: 44px; padding: 0 16px; border-radius: 999px; gap: 8px; font-size: 15px; }
+      .nav a svg { width: 20px; height: 20px; }
+      .nav a[aria-current="page"] { background: var(--surface); }
+
+      main { padding-bottom: 48px; padding-top: 12px; }
+      .save-bar { bottom: 16px; }
+      .toast { bottom: 24px; }
+      .char-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+
+      .sheet-backdrop { align-items: center; padding: 24px; }
+      .sheet { border-radius: 26px; padding-bottom: 22px; max-width: 460px; }
+      .sheet-grip { display: none; }
+      h1 { font-size: 34px; }
     }
   </style>
 </head>
 
 <body>
+  <!-- Filtri "fatti a mano" del sito (cucu-website/index.html), usati solo sui fondi -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <filter id="mano" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="1" seed="4" />
+      <feDisplacementMap in="SourceGraphic" scale="14" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+    <filter id="mano-card" x="-6%" y="-6%" width="112%" height="112%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="1" seed="3" />
+      <feDisplacementMap in="SourceGraphic" scale="6" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+    <filter id="mano-btn" x="-10%" y="-30%" width="120%" height="160%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="1" seed="7" />
+      <feDisplacementMap in="SourceGraphic" scale="4" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+  </svg>
 
-  <header>
-    <div class="logo">Cucù <span>v0.1.0</span></div>
-    <div class="tabs">
-      <div class="tab active" data-view="characters" onclick="switchTab('characters')">Personaggi</div>
-      <div class="tab" data-view="timelimits" onclick="switchTab('timelimits')">Limiti di tempo</div>
-      <div class="tab" data-view="system" onclick="switchTab('system')">Sistema</div>
+  <header class="app-header">
+    <div class="deco a pop"></div>
+    <div class="deco b pop" style="animation-delay:.1s"></div>
+    <div class="deco c pop" style="animation-delay:.2s"></div>
+    <div class="header-inner">
+      <a class="brand" href="#/personaggi" aria-label="Cucù, torna ai personaggi">
+        <img class="owl" src="/static/img/gufetto.png" alt="">
+        <img class="word" src="/static/img/scritta.png" alt="cucù">
+      </a>
+      <div class="device-pill" id="device-pill" hidden></div>
     </div>
   </header>
 
+  <nav class="nav" aria-label="Sezioni">
+    <a href="#/personaggi" data-nav="personaggi">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="20" rx="8" ry="2.4" fill="currentColor" opacity=".35"/><path d="M12 3.5c-3.3 0-5.5 3.2-5.5 7.6V19h11v-7.9c0-4.4-2.2-7.6-5.5-7.6Z" fill="currentColor"/></svg>
+      Personaggi
+    </a>
+    <a href="#/tempo" data-nav="tempo">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="currentColor" opacity=".3"/><path d="M12 6.5V12l3.8 2.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Tempo
+    </a>
+    <a href="#/impostazioni" data-nav="impostazioni">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="3" rx="1.5" fill="currentColor" opacity=".3"/><rect x="3" y="15.5" width="18" height="3" rx="1.5" fill="currentColor" opacity=".3"/><circle cx="15.5" cy="7" r="3.2" fill="currentColor"/><circle cx="8.5" cy="17" r="3.2" fill="currentColor"/></svg>
+      Impostazioni
+    </a>
+  </nav>
+
   <main>
-    <!-- View: Personaggi -->
-    <div id="view-characters" class="view active">
-      <div class="grid" id="characters-grid">
-        <!-- JS Grid Injection -->
+    <!-- Personaggi -->
+    <section id="view-personaggi" class="view" aria-labelledby="t-personaggi">
+      <div class="view-head">
+        <h1 id="t-personaggi">Personaggi</h1>
       </div>
-    </div>
+      <div id="characters"></div>
+    </section>
 
-    <!-- View: Limiti di tempo -->
-    <div id="view-timelimits" class="view">
-      <div class="list-item">
-        <div class="list-item-content">
-          <div class="list-item-title">Attiva limiti di tempo</div>
-          <div class="list-item-sub" id="tl-usage-text">—</div>
+    <!-- Dettaglio personaggio -->
+    <section id="view-personaggio" class="view hidden">
+      <a class="link-back" href="#/personaggi">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Personaggi
+      </a>
+      <div id="character"></div>
+    </section>
+
+    <!-- Limiti di tempo -->
+    <section id="view-tempo" class="view hidden" aria-labelledby="t-tempo">
+      <div class="view-head">
+        <h1 id="t-tempo">Tempo</h1>
+      </div>
+      <p class="lead">Scegli quanti minuti e in quali orari si possono guardare i cartoni. Le modifiche valgono dalla fine dell'episodio in corso.</p>
+
+      <div class="stack">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Minuti e orari</h2>
+              <div class="panel-sub" style="margin:4px 0 0" id="tl-usage">…</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="tl-enabled" aria-label="Usa minuti e orari">
+              <span class="slider"></span>
+            </label>
+          </div>
         </div>
-        <label class="switch">
-          <input type="checkbox" id="tl-enabled" onchange="applyTimeLimitsEnabledState()">
-          <span class="slider"></span>
-        </label>
+        <div id="tl-days" class="stack"></div>
       </div>
-      <div id="time-limits-days"></div>
-      <button class="btn btn-block btn-primary" id="tl-save-btn" style="margin-top:8px;"
-        onclick="saveTimeLimits()">Salva limiti di tempo</button>
-    </div>
 
-    <!-- View: Sistema -->
-    <div id="view-system" class="view">
-      <h3>WiFi</h3>
-      <div class="list-item">
-        <div class="list-item-content">
-          <div class="list-item-title" id="wifi-status-text">Analisi...</div>
-          <div class="list-item-sub" id="wifi-detail-text">NetworkManager</div>
+      <div class="save-bar">
+        <button class="btn btn-primary btn-block" id="tl-save">Salva</button>
+      </div>
+    </section>
+
+    <!-- Impostazioni -->
+    <section id="view-impostazioni" class="view hidden" aria-labelledby="t-impostazioni">
+      <div class="view-head">
+        <h1 id="t-impostazioni">Impostazioni</h1>
+      </div>
+
+      <div class="stack">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Wi-Fi</h2>
+            <button class="icon-btn" id="wifi-refresh" aria-label="Cerca di nuovo le reti">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.1-5M19 4.5V9h-4.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+          <div id="wifi"></div>
         </div>
-        <button class="btn btn-sm" onclick="renderWifiPanel()">↺</button>
-      </div>
 
-      <div id="wifi-list-container"></div>
-
-      <h3 style="margin-top: 30px;">Comandi</h3>
-      <button class="btn btn-block" onclick="handleRestartPlayer()">↺ Riavvia Lettore NFC</button>
-
-      <div class="list-item" style="margin-top:12px;">
-        <div class="list-item-content">
-          <div class="list-item-title" id="update-status-text">Aggiornamenti</div>
-          <div class="list-item-sub" id="update-detail-text">Non ancora controllato</div>
+        <div class="panel">
+          <h2>Aggiornamenti</h2>
+          <div class="panel-sub" style="margin-top:6px" id="update-text">Il Cucù si aggiorna da solo di notte. Puoi anche controllare adesso.</div>
+          <div class="stack">
+            <button class="btn btn-block" id="update-check">Controlla aggiornamenti</button>
+            <button class="btn btn-primary btn-block hidden" id="update-apply">Aggiorna ora</button>
+          </div>
         </div>
-        <button class="btn btn-sm" id="update-check-btn" onclick="handleCheckUpdate()">Controlla</button>
+
+        <div class="panel">
+          <h2>Se qualcosa non va</h2>
+          <div class="panel-sub" style="margin-top:6px">Se la statuina non fa partire il cartone, prova a riavviare il lettore. I video e le statuine restano come sono.</div>
+          <button class="btn btn-block" id="restart-player">Riavvia il lettore</button>
+        </div>
+
+        <div class="panel">
+          <h2 style="margin-bottom:8px">Informazioni</h2>
+          <div id="info"></div>
+        </div>
       </div>
-      <button class="btn btn-block btn-primary hidden" id="update-apply-btn" style="margin-top:8px;"
-        onclick="handleApplyUpdate()">⬆ Aggiorna Ora</button>
-    </div>
+    </section>
   </main>
 
-  <!-- MODAL: Dettaglio Personaggio -->
-  <div class="modal-overlay" id="char-modal">
-    <div class="modal">
-      <div class="modal-header">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <div class="modal-title" id="m-char-title">Personaggio</div>
-          <button class="btn btn-sm" style="font-size:12px; padding:2px 8px;" onclick="renameCharacter()">✎</button>
-        </div>
-        <button class="modal-close" onclick="closeModal()">✕</button>
-      </div>
-      <div class="modal-body">
+  <div id="sheet-root"></div>
+  <div id="toast-root" aria-live="polite"></div>
+  <div id="reconnect-root"></div>
 
-        <!-- Stats Chips -->
-        <div style="display:flex; gap:8px; margin-bottom:20px;">
-          <div class="badge" id="m-char-episodes">0 ep</div>
-          <div class="badge" style="background:var(--primary)" id="m-char-tags">0 tag</div>
-        </div>
-
-        <div class="section-title">Aspetto</div>
-        <div style="display:flex; align-items:center; gap:15px; margin-bottom:10px;">
-          <div id="m-char-img-preview"
-            style="width:60px; height:60px; background-color:var(--primary-soft); border-radius:50%; background-size:cover; background-position:center; border:1px solid var(--border);">
-          </div>
-          <div>
-            <input type="file" id="m-input-img" accept=".png,.jpg,.jpeg" style="display:none"
-              onchange="uploadProfileImage()">
-            <button class="btn btn-sm" onclick="document.getElementById('m-input-img').click()">Cambia Foto</button>
-          </div>
-        </div>
-
-        <div class="section-title">Tag NFC</div>
-        <div id="m-tags-list"></div>
-        <div id="m-tag-manual-row" style="display:flex; gap:8px; margin-top:10px;">
-          <input type="text" id="m-input-tag" placeholder="UID Tag" style="font-size:14px; padding:8px;">
-          <button class="btn btn-primary" onclick="addTagFromModal()">+</button>
-        </div>
-        <button class="btn btn-block" style="margin-top:8px;" onclick="startAddTagWizard()">Scansiona Tag</button>
-
-        <!-- Pannello scan inline (visibile solo durante wizard) -->
-        <div id="m-tag-scan-panel" class="scan-panel hidden">
-          <div class="scan-icon">📡</div>
-          <p style="font-weight:700; margin:10px 0 4px 0; font-size:14px;">Avvicina il tag al lettore</p>
-          <p class="scan-status" id="m-scan-status">In ascolto...</p>
-          <button class="btn" style="margin-top:12px; font-size:13px; padding:6px 14px;" onclick="stopTagScan()">Annulla</button>
-        </div>
-
-        <div class="section-title">Limiti di tempo</div>
-        <div class="list-item" style="padding:10px 12px;">
-          <div class="list-item-content">
-            <div class="list-item-title" style="font-size:13px;">Escludi dai limiti di tempo</div>
-            <div class="list-item-sub">Questo personaggio potrà sempre partire, senza restrizioni.</div>
-          </div>
-          <label class="switch">
-            <input type="checkbox" id="m-char-exempt" onchange="toggleCharExempt()">
-            <span class="slider"></span>
-          </label>
-        </div>
-
-        <div class="section-title">Episodi</div>
-        <div id="m-episodes-list" style="max-height: 200px; overflow-y: auto;"></div>
-
-        <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
-          <input type="file" id="m-input-files" multiple accept=".mp4,.mkv,.avi,.mov,.m4v" style="display:none"
-            onchange="uploadEpisodesFromModal()">
-          <button class="btn btn-block" onclick="document.getElementById('m-input-files').click()">Carica Video</button>
-
-          <div class="progress-bar" id="upload-progress">
-            <div class="progress-fill" id="upload-fill"></div>
-          </div>
-        </div>
-
-        <div style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 20px;">
-          <button class="btn btn-danger btn-block" onclick="deleteCharacter()">Elimina Personaggio</button>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: Nuovo Personaggio (wizard 2 step) -->
-  <div class="modal-overlay" id="new-char-modal">
-    <div class="modal" style="max-width:360px;">
-      <div class="modal-header">
-        <div class="modal-title" id="new-char-modal-title">Nuovo Personaggio</div>
-        <button class="modal-close" onclick="closeNewCharModal()">✕</button>
-      </div>
-      <div class="modal-body">
-
-        <!-- Step 1: nome -->
-        <div id="new-char-step1">
-          <p style="margin-top:0; color:var(--text-soft); font-size:14px;">Dai un nome al personaggio.</p>
-          <input type="text" id="new-char-name" placeholder="Es. Peppa Pig" onkeydown="if(event.key==='Enter') submitNewChar()">
-          <button class="btn btn-primary btn-block" style="margin-top:12px;" onclick="submitNewChar()">Crea Personaggio</button>
-        </div>
-
-        <!-- Step 2: scan tag -->
-        <div id="new-char-step2" class="hidden">
-          <div class="scan-panel">
-            <div class="scan-icon">📡</div>
-            <p style="font-weight:700; margin:10px 0 4px 0; font-size:15px;">Avvicina il tag al lettore</p>
-            <p class="scan-status" id="nc-scan-status">In ascolto...</p>
-          </div>
-          <button class="btn btn-block" style="margin-top:12px;" onclick="skipTagScan()">Salta — aggiungi il tag dopo</button>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: WiFi Connect -->
-  <div class="modal-overlay" id="wifi-modal">
-    <div class="modal" style="max-width:300px; height:auto;">
-      <div class="modal-header">
-        <div class="modal-title">Connetti WiFi</div>
-        <button class="modal-close" onclick="closeWifiModal()">✕</button>
-      </div>
-      <div class="modal-body">
-        <h4 id="w-ssid-title" style="margin:0 0 10px 0;">Network</h4>
-        <input type="password" id="w-password" placeholder="Password WPA2">
-        <button class="btn btn-primary btn-block" id="w-connect-btn" onclick="connectWifiConfirm()">Connetti</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Toast -->
-  <div id="toast" class="toast">Messaggio</div>
-
-  <!-- Overlay Reconnect -->
-  <div id="reconnect-overlay"
-    style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:999; flex-direction:column; align-items:center; justify-content:center; color:white;">
-    <h2>Riavvio in corso...</h2>
-    <div id="reconnect-timer"></div>
-  </div>
+  <input type="file" id="file-image" accept="image/png,image/jpeg" hidden>
+  <input type="file" id="file-videos" accept=".mp4,.mkv,.avi,.mov,.m4v,video/*" multiple hidden>
 
   <script>
-    /* --- STATE --- */
-    const apiBase = "";
-    let characters = [];
-    let selectedCharName = null;
-    let pendingWifiSsid = null;
+    'use strict';
 
-    // Tag scan wizard
-    let tagScanInterval = null;
-    let tagScanTargetChar = null;
-    let tagScanMode = null; // 'new-char' | 'add-tag'
-    let tagScanKnownUids = new Set();
+    /* ================= Utilità ================= */
 
-    // Limiti di tempo
-    const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-    const DAY_LABELS = { mon: 'Lunedì', tue: 'Martedì', wed: 'Mercoledì', thu: 'Giovedì', fri: 'Venerdì', sat: 'Sabato', sun: 'Domenica' };
-    let timeLimitsExemptCache = [];
-
-    /* --- UI HELPERS --- */
     const $ = (id) => document.getElementById(id);
+    const enc = encodeURIComponent;
 
-    function switchTab(viewId) {
-      document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-      document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-      $('view-' + viewId).classList.add('active');
-      document.querySelector(`.tab[data-view="${viewId}"]`).classList.add('active');
-
-      if (viewId === 'system') renderWifiPanel();
-      if (viewId === 'timelimits') renderTimeLimitsPanel();
+    // Costruisce elementi DOM senza innerHTML: i nomi (personaggi, file, reti)
+    // arrivano dall'utente e non devono mai essere interpretati come HTML
+    function h(tag, props, ...children) {
+      const el = tag === 'svg'
+        ? document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        : document.createElement(tag);
+      for (const [k, v] of Object.entries(props || {})) {
+        if (v === null || v === undefined || v === false) continue;
+        if (k === 'class') el.setAttribute('class', v);
+        else if (k === 'text') el.textContent = v;
+        else if (k === 'style') el.style.cssText = v;
+        else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+        else if (k === 'html') el.innerHTML = v; // solo per SVG statici di questo file
+        else el.setAttribute(k, v === true ? '' : v);
+      }
+      for (const c of children.flat()) {
+        if (c === null || c === undefined || c === false) continue;
+        el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+      }
+      return el;
     }
 
-    function showToast(msg) {
-      const t = $('toast');
-      t.textContent = msg;
-      t.classList.add('show');
-      setTimeout(() => t.classList.remove('show'), 3000);
+    const ICONS = {
+      plus: '<path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
+      remove: '<path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+      edit: '<path d="M4.5 19.5h4l10-10a2.8 2.8 0 0 0-4-4l-10 10v4Z" fill="currentColor" opacity=".3"/><path d="M13.5 6.5l4 4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+      camera: '<path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.8l1.4-2h4.6l1.4 2h1.8A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5Z" fill="currentColor" opacity=".3"/><circle cx="12" cy="12.5" r="3.4" fill="currentColor"/>',
+      upload: '<path d="M12 15.5V5M7.5 9.5 12 5l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><rect x="4" y="17" width="16" height="3" rx="1.5" fill="currentColor" opacity=".35"/>',
+      figure: '<ellipse cx="12" cy="20" rx="8" ry="2.4" fill="currentColor" opacity=".45"/><path d="M12 3.5c-3.3 0-5.5 3.2-5.5 7.6V19h11v-7.9c0-4.4-2.2-7.6-5.5-7.6Z" fill="currentColor"/>',
+      film: '<rect x="3.5" y="5" width="17" height="14" rx="3" fill="currentColor" opacity=".35"/><path d="M10 9.2v5.6l4.6-2.8Z" fill="currentColor"/>',
+      lock: '<rect x="5" y="10.5" width="14" height="10" rx="3" fill="currentColor"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" fill="none" stroke="currentColor" stroke-width="2.2"/>',
+      chevron: '<path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
+      eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" fill="currentColor" opacity=".3"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/>',
+    };
+
+    const icon = (name) => h('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true', html: ICONS[name] });
+
+    // Tinte tenui del brand, in sequenza (mai due uguali vicine) con il tono scuro abbinato
+    const TINTS = [
+      ['var(--peach)', 'var(--peach-ink)'],
+      ['var(--blue)', 'var(--blue-ink)'],
+      ['var(--green)', 'var(--green-ink)'],
+      ['var(--pink)', 'var(--pink-ink)'],
+      ['var(--apricot)', 'var(--apricot-ink)'],
+    ];
+
+    // Forme "a sasso" per gli avatar: tonde ma mai perfette
+    const PEBBLES = [
+      '50% 46% 52% 48% / 48% 52% 46% 54%',
+      '46% 54% 48% 52% / 54% 46% 52% 48%',
+      '52% 48% 54% 46% / 46% 50% 50% 54%',
+      '48% 52% 46% 54% / 52% 48% 54% 46%',
+    ];
+
+    function avatar(char, index, large) {
+      const [bg, fg] = TINTS[index % TINTS.length];
+      const el = h('div', { class: 'avatar' + (large ? ' lg' : '') });
+      el.style.borderRadius = PEBBLES[index % PEBBLES.length];
+      if (char.has_image) {
+        el.style.backgroundImage = `url("${char.image_url}?v=${imageVersion}")`;
+        el.setAttribute('role', 'img');
+        el.setAttribute('aria-label', 'Foto di ' + char.display_name);
+      } else {
+        el.style.background = bg;
+        el.style.color = fg;
+        el.textContent = (char.display_name || '?').trim().charAt(0).toUpperCase();
+      }
+      return el;
     }
 
-    /* --- BASIC API --- */
-    async function apiCall(path, method = "GET", body = null) {
-      const opts = { method };
-      if (body) {
-        opts.headers = { "Content-Type": "application/json" };
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+    function formatBytes(b) {
+      if (b == null) return '—';
+      const gb = b / 1e9;
+      return gb >= 1 ? `${gb.toFixed(1).replace('.', ',')} GB` : `${Math.round(b / 1e6)} MB`;
+    }
+
+    /* ================= API ================= */
+
+    async function errorText(res) {
+      const t = await res.text();
+      try {
+        const j = JSON.parse(t);
+        if (typeof j.detail === 'string') return j.detail;
+        if (Array.isArray(j.detail)) return j.detail.map(d => d.msg).join(', ');
+      } catch (_) { /* non JSON */ }
+      return t || `Errore ${res.status}`;
+    }
+
+    async function api(path, { method = 'GET', body, keepalive } = {}) {
+      const opts = { method, keepalive };
+      if (body !== undefined) {
+        opts.headers = { 'Content-Type': 'application/json' };
         opts.body = JSON.stringify(body);
       }
-      const res = await fetch(apiBase + path, opts);
-      if (!res.ok) throw new Error(await res.text());
+      const res = await fetch(path, opts);
+      if (!res.ok) throw new Error(await errorText(res));
       return res.json();
     }
 
-    /* --- CHARACTERS LOGIC --- */
-    async function loadCharacters() {
-      try {
-        characters = await apiCall("/characters");
-        renderGrid();
-      } catch (e) { console.error(e); showToast("Errore caricamento"); }
+    /* ================= Toast ================= */
+
+    let toastTimer = null;
+
+    function toast(msg, action) {
+      const root = $('toast-root');
+      clearTimeout(toastTimer);
+      root.replaceChildren();
+      const el = h('div', { class: 'toast', role: 'status' }, h('span', { text: msg }));
+      if (action) {
+        el.append(h('button', {
+          text: action.label,
+          onclick: () => { action.run(); root.replaceChildren(); },
+        }));
+      }
+      root.append(el);
+      toastTimer = setTimeout(() => root.replaceChildren(), action ? 5000 : 3200);
     }
 
-    function renderGrid() {
-      const grid = $('characters-grid');
-      grid.innerHTML = '';
+    /* ================= Sheet (pannelli dal basso) ================= */
 
-      // Add "New" Card
-      const addCard = document.createElement('div');
-      addCard.className = 'card add-card';
-      addCard.innerHTML = '<div style="font-size:30px;">+</div><div>Nuovo</div>';
-      addCard.onclick = openNewCharModal;
-      grid.appendChild(addCard);
+    let sheetOnClose = null;
 
-      characters.forEach(char => {
-        const el = document.createElement('div');
-        el.className = 'card';
-        el.onclick = () => openCharModal(char.name);
+    function openSheet({ title, content, onClose }) {
+      closeSheet();
+      sheetOnClose = onClose || null;
+      const titleId = 'sheet-title';
+      const sheet = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId },
+        h('div', { class: 'sheet-grip' }),
+        h('div', { class: 'sheet-head' },
+          h('h2', { id: titleId, text: title }),
+          h('button', { class: 'icon-btn', 'aria-label': 'Chiudi', onclick: closeSheet }, icon('remove'))
+        ),
+        content
+      );
+      const backdrop = h('div', {
+        class: 'sheet-backdrop',
+        onclick: (e) => { if (e.target === backdrop) closeSheet(); },
+      }, sheet);
+      $('sheet-root').append(backdrop);
+      const first = sheet.querySelector('input, .actions button');
+      if (first) setTimeout(() => first.focus(), 60);
+      return sheet;
+    }
 
-        const iconContent = char.has_image
-          ? `<div style="width:100%; height:100%; border-radius:50%; background:url('${char.image_url}?v=${Date.now()}') center/cover no-repeat;"></div>`
-          : char.display_name[0].toUpperCase();
+    function closeSheet() {
+      const root = $('sheet-root');
+      if (!root.firstChild) return;
+      root.replaceChildren();
+      const cb = sheetOnClose;
+      sheetOnClose = null;
+      if (cb) cb();
+    }
 
-        el.innerHTML = `
-                <div class="card-icon">${iconContent}</div>
-                <div class="card-title">${char.display_name}</div>
-                <div class="card-subtitle">${char.stats.known || 0} ep · ${char.tags_count} tag</div>
-            `;
-        grid.appendChild(el);
+    function setSheetTitle(text) {
+      const t = $('sheet-title');
+      if (t) t.textContent = text;
+    }
+
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+
+    // Conferma in un pannello al posto di confirm(): testo chiaro e pulsanti grandi
+    function confirmSheet({ title, text, ok, danger }) {
+      return new Promise((resolve) => {
+        let done = false;
+        const finish = (v) => { if (!done) { done = true; resolve(v); } };
+        openSheet({
+          title,
+          onClose: () => finish(false),
+          content: h('div', {},
+            text ? h('p', { class: 'sheet-text', text }) : null,
+            h('div', { class: 'actions' },
+              h('button', {
+                class: 'btn btn-block ' + (danger ? 'btn-danger-solid' : 'btn-primary'),
+                text: ok,
+                onclick: () => { finish(true); closeSheet(); },
+              }),
+              h('button', { class: 'btn btn-block', text: 'Annulla', onclick: closeSheet })
+            )
+          ),
+        });
       });
     }
 
-    /* --- NUOVO PERSONAGGIO WIZARD --- */
+    /* ================= Stato ================= */
 
-    function openNewCharModal() {
-      $('new-char-step1').classList.remove('hidden');
-      $('new-char-step2').classList.add('hidden');
-      $('new-char-modal-title').textContent = 'Nuovo Personaggio';
-      $('new-char-name').value = '';
-      $('new-char-modal').style.display = 'flex';
-      setTimeout(() => $('new-char-name').focus(), 100);
+    let characters = [];
+    let info = null;
+    let imageVersion = Date.now();
+    let current = null;          // scheda del personaggio aperto
+    let uploading = false;
+
+    const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    const DAY_LABELS = { mon: 'Lunedì', tue: 'Martedì', wed: 'Mercoledì', thu: 'Giovedì', fri: 'Venerdì', sat: 'Sabato', sun: 'Domenica' };
+    let exemptCache = [];
+
+    /* ================= Navigazione (hash) ================= */
+    // #/personaggi, #/personaggi/<nome>, #/tempo, #/impostazioni:
+    // il tasto indietro del telefono chiude il dettaglio invece di uscire
+
+    function parseRoute() {
+      const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
+      const section = ['personaggi', 'tempo', 'impostazioni'].includes(parts[0]) ? parts[0] : 'personaggi';
+      return { section, name: section === 'personaggi' ? parts[1] || null : null };
     }
 
-    function closeNewCharModal() {
-      stopTagScanInterval();
-      $('new-char-modal').style.display = 'none';
-      tagScanTargetChar = null;
-      tagScanMode = null;
+    function showView(id) {
+      document.querySelectorAll('.view').forEach(v => v.classList.toggle('hidden', v.id !== 'view-' + id));
     }
 
-    async function submitNewChar() {
-      const name = $('new-char-name').value.trim();
-      if (!name) return;
-      try {
-        const char = await apiCall("/characters", "POST", { name });
-        showToast("Personaggio creato!");
+    function route() {
+      const r = parseRoute();
+      stopTagScan();
+      closeSheet();
+      document.querySelectorAll('.nav a').forEach(a => {
+        if (a.dataset.nav === r.section) a.setAttribute('aria-current', 'page');
+        else a.removeAttribute('aria-current');
+      });
+
+      if (r.section === 'personaggi' && r.name) {
+        showView('personaggio');
+        openCharacter(r.name);
+      } else if (r.section === 'personaggi') {
+        showView('personaggi');
+        current = null;
         loadCharacters();
-        // Passa allo step 2: scan tag
-        $('new-char-modal-title').textContent = char.display_name || name;
-        $('new-char-step1').classList.add('hidden');
-        $('new-char-step2').classList.remove('hidden');
-        startTagScan(char.name, 'new-char');
+      } else if (r.section === 'tempo') {
+        showView('tempo');
+        renderTimeLimits();
+      } else {
+        showView('impostazioni');
+        renderWifi();
+        renderInfo();
+      }
+      window.scrollTo(0, 0);
+    }
+
+    window.addEventListener('hashchange', route);
+
+    /* ================= Informazioni dispositivo ================= */
+
+    async function loadInfo() {
+      try {
+        info = await api('/system/info');
+        const pill = $('device-pill');
+        pill.textContent = [info.hostname, info.version && 'v' + info.version].filter(Boolean).join(' · ');
+        pill.hidden = false;
+      } catch (_) { /* API vecchia o non raggiungibile: la testata resta senza */ }
+    }
+
+    function renderInfo() {
+      const root = $('info');
+      const kv = (k, v) => h('div', { class: 'kv' }, h('span', { class: 'muted', text: k }), h('span', { text: v }));
+      if (!info) {
+        root.replaceChildren(h('p', { class: 'muted', text: 'Informazioni non disponibili.' }));
+        return;
+      }
+      root.replaceChildren(
+        kv('Nome', info.hostname),
+        kv('Indirizzo', `${info.hostname}.local`),
+        kv('Versione', info.version ? `${info.version} (${info.channel === 'beta' ? 'prova' : 'stabile'})` : '—'),
+        kv('Spazio libero', info.disk ? `${formatBytes(info.disk.free_bytes)} su ${formatBytes(info.disk.total_bytes)}` : '—'),
+      );
+    }
+
+    /* ================= Personaggi ================= */
+
+    async function loadCharacters() {
+      try {
+        characters = await api('/characters');
+        renderCharacters();
       } catch (e) {
-        showToast("Errore: " + e.message);
+        $('characters').replaceChildren(h('p', { class: 'muted', text: 'Non riesco a leggere i personaggi: ' + e.message }));
       }
     }
 
-    function skipTagScan() {
-      const charName = tagScanTargetChar;
-      closeNewCharModal();
-      if (charName) openCharModal(charName);
-    }
+    function renderCharacters() {
+      const root = $('characters');
 
-    /* --- TAG SCAN WIZARD (condiviso) --- */
-
-    async function startTagScan(charName, mode) {
-      tagScanTargetChar = charName;
-      tagScanMode = mode;
-      setScanStatus('In ascolto...');
-
-      // Raccoglie gli UID già associati al personaggio prima di iniziare
-      try {
-        const data = await apiCall(`/characters/${charName}`);
-        tagScanKnownUids = new Set(data.tag_uids.map(t => t.uid));
-      } catch (e) {
-        tagScanKnownUids = new Set();
+      if (!characters.length) {
+        root.replaceChildren(h('div', { class: 'empty' },
+          h('div', { class: 'deco a pop' }),
+          h('div', { class: 'deco b pop', style: 'animation-delay:.1s' }),
+          h('div', { class: 'deco c pop', style: 'animation-delay:.2s' }),
+          h('h2', { text: 'Qui arrivano i cartoni di casa' }),
+          h('p', { text: 'Crea un personaggio, abbina la sua statuina e carica qualche episodio.' }),
+          h('button', { class: 'btn btn-primary', onclick: openNewCharacter }, icon('plus'), 'Crea il primo personaggio')
+        ));
+        return;
       }
 
-      tagScanInterval = setInterval(pollTagScan, 600);
+      const grid = h('div', { class: 'char-grid' });
+      characters.forEach((c, i) => {
+        const eps = c.stats.known || 0;
+        let hint = null;
+        if (!c.tags_count) hint = 'Manca la statuina';
+        else if (!eps) hint = 'Mancano gli episodi';
+        const card = h('a', {
+          class: 'char-card appear',
+          href: '#/personaggi/' + enc(c.name),
+          style: `--i:${Math.min(i, 8)};--r:${i % 2 ? -1.2 : 1.2}deg`,
+        },
+          avatar(c, i),
+          h('div', { class: 'char-name', text: c.display_name }),
+          h('div', { class: 'char-meta', text: `${plural(eps, 'episodio', 'episodi')} · ${plural(c.tags_count, 'statuina', 'statuine')}` }),
+          hint ? h('div', { class: 'char-hint', text: hint }) : null
+        );
+        grid.append(card);
+      });
+
+      grid.append(h('button', {
+        class: 'char-card add-card appear',
+        style: `--i:${Math.min(characters.length, 8)};border:0;background:none;cursor:pointer;font:inherit`,
+        onclick: openNewCharacter,
+      },
+        (() => { const a = h('div', { class: 'avatar' }, icon('plus')); a.style.borderRadius = PEBBLES[1]; return a; })(),
+        h('div', { class: 'char-name', text: 'Nuovo personaggio' })
+      ));
+
+      root.replaceChildren(grid);
     }
 
-    async function pollTagScan() {
-      try {
-        const data = await apiCall('/system/scan-tag');
+    /* ---------- Nuovo personaggio: nome, poi statuina ---------- */
 
-        if (!data.uid) {
-          setScanStatus('In ascolto...');
-          return;
-        }
+    function openNewCharacter() {
+      const input = h('input', {
+        class: 'field', id: 'nc-name', type: 'text', placeholder: 'Es. il gufo Bubo',
+        autocomplete: 'off', enterkeyhint: 'done',
+        onkeydown: (e) => { if (e.key === 'Enter') submit(); },
+      });
+      const btn = h('button', { class: 'btn btn-primary btn-block', text: 'Crea personaggio', onclick: () => submit() });
+      const body = h('div', {},
+        h('p', { class: 'sheet-text', text: 'Come si chiama? Usa il nome che userebbe il bambino.' }),
+        h('label', { class: 'lbl', for: 'nc-name', text: 'Nome' }),
+        input,
+        h('div', { class: 'actions' }, btn)
+      );
 
-        // Tag già associato a questo personaggio
-        if (tagScanKnownUids.has(data.uid)) {
-          setScanStatus('Tag già associato a questo personaggio.', 'warn');
-          return;
-        }
-
-        // Tag già usato da un altro personaggio
-        if (data.known_character && data.known_character !== tagScanTargetChar) {
-          setScanStatus(`Tag già usato per "${data.known_character}" — avvicinane un altro.`, 'warn');
-          return;
-        }
-
-        // Tag nuovo: associa!
-        stopTagScanInterval();
-        setScanStatus('Tag rilevato! Associazione in corso...', 'ok');
-
+      async function submit() {
+        const name = input.value.trim();
+        if (!name) { input.focus(); return; }
+        btn.disabled = true;
         try {
-          await apiCall(`/characters/${tagScanTargetChar}/tags`, 'POST', { uid: data.uid });
-          showToast('Tag aggiunto!');
-
-          if (tagScanMode === 'new-char') {
-            const charName = tagScanTargetChar;
-            closeNewCharModal();
-            openCharModal(charName);
-          } else if (tagScanMode === 'add-tag') {
-            stopTagScan();
-            openCharModal(tagScanTargetChar);
-          }
+          const char = await api('/characters', { method: 'POST', body: { name } });
+          loadCharacters();
+          // Secondo passo: abbinare la statuina
+          setSheetTitle(char.display_name || name);
+          const scan = scanPanel({
+            title: 'Appoggia la statuina sul Cucù',
+            onCancel: () => { closeSheet(); location.hash = '#/personaggi/' + enc(char.name); },
+            cancelLabel: 'Lo faccio dopo',
+          });
+          body.replaceChildren(scan.el);
+          startTagScan(char.name, scan, () => {
+            closeSheet();
+            location.hash = '#/personaggi/' + enc(char.name);
+          });
         } catch (e) {
-          setScanStatus('Errore: ' + e.message, 'error');
+          toast(e.message);
+          btn.disabled = false;
         }
-      } catch (e) {
-        // Ignore errori di rete durante il polling
       }
+
+      openSheet({ title: 'Nuovo personaggio', content: body, onClose: stopTagScan });
     }
 
-    function stopTagScanInterval() {
-      if (tagScanInterval) {
-        clearInterval(tagScanInterval);
-        tagScanInterval = null;
-      }
+    /* ---------- Scansione statuina (condivisa) ---------- */
+
+    const FIGURE_SVG = '<ellipse cx="40" cy="82" rx="30" ry="7" fill="#e6e7e4"/><path d="M26 22 L30 8 L36 19 Z M54 22 L50 8 L44 19 Z" fill="#6f9cc4"/><path d="M18 78 C16 40 24 16 40 16 C56 16 64 40 62 78 Z" fill="#8db6d8"/><ellipse cx="40" cy="58" rx="13" ry="15" fill="#dbe8f4"/><circle cx="32" cy="35" r="3.3" fill="#3d3d3a"/><circle cx="48" cy="35" r="3.3" fill="#3d3d3a"/><path d="M37 41 L43 41 L40 45.5 Z" fill="#e2a67c"/>';
+
+    function scanPanel({ title, onCancel, cancelLabel }) {
+      const status = h('div', { class: 'scan-status', text: 'In ascolto…' });
+      const el = h('div', { class: 'scan' },
+        h('div', { class: 'scan-visual', 'aria-hidden': 'true' },
+          h('span', { class: 'ring' }), h('span', { class: 'ring' }), h('span', { class: 'ring' }),
+          h('svg', { class: 'fig', viewBox: '0 0 80 90', html: FIGURE_SVG })
+        ),
+        h('div', { class: 'scan-title', text: title }),
+        status,
+        h('button', { class: 'btn', style: 'margin-top:10px', text: cancelLabel || 'Annulla', onclick: onCancel })
+      );
+      return {
+        el,
+        setStatus(msg, kind) {
+          status.textContent = msg;
+          status.className = 'scan-status' + (kind ? ' ' + kind : '');
+        },
+      };
+    }
+
+    let scanTimer = null;
+
+    async function startTagScan(charName, panel, onDone) {
+      stopTagScan();
+      let known = new Set();
+      try {
+        const data = await api(`/characters/${enc(charName)}`);
+        known = new Set(data.tag_uids.map(t => t.uid));
+      } catch (_) { /* si parte comunque */ }
+
+      let busy = false;
+      scanTimer = setInterval(async () => {
+        if (busy || document.hidden) return;
+        busy = true;
+        try {
+          const data = await api('/system/scan-tag');
+          if (!data.uid) { panel.setStatus('In ascolto…'); return; }
+          if (known.has(data.uid)) { panel.setStatus('Questa statuina è già sua.', 'warn'); return; }
+          if (data.known_character && data.known_character !== charName) {
+            const other = characters.find(c => c.name === data.known_character);
+            panel.setStatus(`Questa statuina è già di ${other ? other.display_name : data.known_character}. Provane un'altra.`, 'warn');
+            return;
+          }
+          stopTagScan();
+          panel.setStatus('Trovata! Un attimo…', 'ok');
+          try {
+            await api(`/characters/${enc(charName)}/tags`, { method: 'POST', body: { uid: data.uid } });
+            toast('Statuina abbinata');
+            onDone();
+          } catch (e) {
+            panel.setStatus('Errore: ' + e.message, 'error');
+          }
+        } catch (_) {
+          // errori di rete durante l'ascolto: si riprova al giro dopo
+        } finally {
+          busy = false;
+        }
+      }, 600);
     }
 
     function stopTagScan() {
-      stopTagScanInterval();
-      $('m-tag-scan-panel').classList.add('hidden');
-      tagScanTargetChar = null;
-      tagScanMode = null;
+      if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
     }
 
-    function setScanStatus(msg, type) {
-      const elId = tagScanMode === 'new-char' ? 'nc-scan-status' : 'm-scan-status';
-      const el = $(elId);
-      if (!el) return;
-      el.textContent = msg;
-      el.style.color = type === 'warn' ? 'var(--danger)'
-                      : type === 'ok' ? '#16a34a'
-                      : 'var(--text-soft)';
+    /* ---------- Dettaglio personaggio ---------- */
+
+    async function openCharacter(name) {
+      const root = $('character');
+      if (!current || current.name !== name) root.replaceChildren(h('p', { class: 'muted', text: 'Carico…' }));
+      try {
+        current = await api(`/characters/${enc(name)}`);
+        if (!characters.length) characters = await api('/characters').catch(() => []);
+        renderCharacter();
+      } catch (e) {
+        root.replaceChildren(h('p', { class: 'muted', text: 'Personaggio non trovato.' }));
+      }
     }
 
-    async function startAddTagWizard() {
-      if (!selectedCharName) return;
-      $('m-tag-scan-panel').classList.remove('hidden');
-      $('m-tag-scan-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      await startTagScan(selectedCharName, 'add-tag');
+    function refreshCharacter() {
+      if (current) openCharacter(current.name);
     }
 
-    /* --- MODAL LOGIC --- */
-    async function openCharModal(name) {
-      selectedCharName = name;
-      const modal = $('char-modal');
-      modal.style.display = 'flex';
+    function renderCharacter() {
+      const c = current;
+      const index = Math.max(0, characters.findIndex(x => x.name === c.name));
+      const root = $('character');
 
-      // Load details
-      const data = await apiCall(`/characters/${name}`);
+      // Intestazione: foto tappabile, nome modificabile
+      const titleBox = h('div', { class: 'hero-text' });
+      const renderTitle = () => titleBox.replaceChildren(
+        h('div', { class: 'hero-title' },
+          h('h1', { text: c.display_name }),
+          h('button', { class: 'icon-btn', 'aria-label': 'Cambia nome', onclick: startRename }, icon('edit'))
+        ),
+        h('div', { class: 'muted', text: `${plural(c.stats.total_episodes, 'episodio', 'episodi')} · ${plural(c.tag_uids.length, 'statuina', 'statuine')}` })
+      );
 
-      $('m-char-title').textContent = data.display_name;
-      $('m-char-episodes').textContent = data.stats.total_episodes + ' ep';
-      $('m-char-tags').textContent = data.tag_uids.length + ' tag';
-      $('m-char-exempt').checked = !!data.time_limit_exempt;
-
-      // Update Image Preview
-      const imgPreview = $('m-char-img-preview');
-      if (data.has_image) {
-        imgPreview.style.backgroundImage = `url('${data.image_url}?v=${Date.now()}')`;
-        imgPreview.textContent = '';
-      } else {
-        imgPreview.style.backgroundImage = 'none';
-        imgPreview.style.display = 'flex';
-        imgPreview.style.alignItems = 'center';
-        imgPreview.style.justifyContent = 'center';
-        imgPreview.style.fontWeight = '800';
-        imgPreview.style.color = 'var(--primary)';
-        imgPreview.textContent = data.display_name[0].toUpperCase();
+      function startRename() {
+        const input = h('input', { class: 'field', type: 'text', value: c.display_name, 'aria-label': 'Nuovo nome' });
+        const save = h('button', { class: 'btn btn-primary', text: 'Salva' });
+        const form = h('form', { class: 'rename-form' }, input,
+          h('div', { class: 'actions' }, save, h('button', { class: 'btn', type: 'button', text: 'Annulla', onclick: renderTitle })));
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const newName = input.value.trim();
+          if (!newName || newName === c.display_name) { renderTitle(); return; }
+          save.disabled = true;
+          try {
+            const res = await api(`/characters/${enc(c.name)}`, { method: 'PUT', body: { new_name: newName } });
+            toast('Nome cambiato');
+            characters = [];
+            if (res.new_name !== c.name) location.replace('#/personaggi/' + enc(res.new_name));
+            else refreshCharacter();
+          } catch (err) {
+            toast(err.message);
+            save.disabled = false;
+          }
+        });
+        titleBox.replaceChildren(form);
+        input.focus();
+        input.select();
       }
 
-      // Render Tags
-      const tagsList = $('m-tags-list');
-      tagsList.innerHTML = '';
-      data.tag_uids.forEach(t => {
-        const div = document.createElement('div');
-        div.className = 'list-item';
-        div.style.padding = '8px';
-        div.innerHTML = `
-                <code style="font-size:12px;">${t.uid}</code>
-                <button class="btn btn-danger" style="padding:4px 8px; font-size:12px;" onclick="deleteTag('${t.uid}')">×</button>
-            `;
-        tagsList.appendChild(div);
+      renderTitle();
+
+      const hero = h('div', { class: 'char-hero' },
+        h('button', { class: 'avatar-btn', 'aria-label': 'Cambia foto', onclick: () => $('file-image').click() },
+          avatar(c, index, true),
+          h('span', { class: 'badge-cam' }, icon('camera'))
+        ),
+        titleBox
+      );
+
+      // Statuine
+      const tagRows = h('div', { class: 'rows' });
+      if (!c.tag_uids.length) {
+        tagRows.append(h('div', { class: 'row-empty', text: 'Ancora nessuna statuina: abbinane una per far partire i suoi episodi.' }));
+      }
+      c.tag_uids.forEach((t, i) => {
+        const [bg, fg] = TINTS[(index + i) % TINTS.length];
+        const row = h('div', { class: 'row' },
+          h('div', { class: 'row-lead', style: `background:${bg};color:${fg}` }, icon('figure')),
+          h('div', { class: 'row-main' },
+            h('div', { class: 'row-title', text: `Statuina ${i + 1}` }),
+            h('div', { class: 'row-sub mono', text: t.uid })
+          ),
+          h('button', {
+            class: 'icon-btn danger', 'aria-label': `Togli statuina ${i + 1}`,
+            onclick: () => deferredDelete(row, 'Statuina tolta', () =>
+              api(`/characters/${enc(c.name)}/tags/${enc(t.uid)}`, { method: 'DELETE', keepalive: true })),
+          }, icon('remove'))
+        );
+        tagRows.append(row);
       });
 
-      // Render Episodes
-      const epsList = $('m-episodes-list');
-      epsList.innerHTML = '';
-      data.episodes.forEach(ep => {
-        const div = document.createElement('div');
-        div.className = 'list-item';
-        div.style.padding = '8px';
-        div.innerHTML = `
-                <div class="list-item-title" style="font-size:12px; overflow:hidden; text-overflow:ellipsis;">${ep.filename}</div>
-                <button class="btn btn-danger" style="padding:4px 8px; font-size:12px;" onclick="deleteEpisode('${ep.filename}')">×</button>
-            `;
-        epsList.appendChild(div);
+      const scanSlot = h('div');
+      const addTagBtn = h('button', { class: 'btn btn-block', style: 'margin-top:14px' }, icon('plus'), 'Abbina una statuina');
+      addTagBtn.addEventListener('click', () => {
+        addTagBtn.classList.add('hidden');
+        const panel = scanPanel({
+          title: 'Appoggia la statuina sul Cucù',
+          onCancel: () => { stopTagScan(); scanSlot.replaceChildren(); addTagBtn.classList.remove('hidden'); },
+        });
+        scanSlot.replaceChildren(panel.el);
+        panel.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        startTagScan(c.name, panel, refreshCharacter);
+      });
+
+      const manualInput = h('input', { class: 'field mono', type: 'text', placeholder: '04 a1 b2 c3', 'aria-label': 'Codice della statuina', autocomplete: 'off' });
+      const manual = h('details', { class: 'more', style: 'margin-top:6px' },
+        h('summary', {}, icon('chevron'), 'Inserisci il codice a mano'),
+        h('form', {
+          style: 'display:flex;gap:8px;margin-top:4px',
+          onsubmit: async (e) => {
+            e.preventDefault();
+            const uid = manualInput.value.trim();
+            if (!uid) return;
+            try {
+              await api(`/characters/${enc(c.name)}/tags`, { method: 'POST', body: { uid } });
+              toast('Statuina abbinata');
+              refreshCharacter();
+            } catch (err) { toast(err.message); }
+          },
+        }, manualInput, h('button', { class: 'btn', text: 'Aggiungi' }))
+      );
+
+      const tagsPanel = h('div', { class: 'panel' },
+        h('h2', { text: 'Statuine' }),
+        h('div', { class: 'panel-sub', style: 'margin-top:4px', text: 'Appoggiane una sul Cucù per far partire un episodio.' }),
+        tagRows, scanSlot, addTagBtn, manual
+      );
+
+      // Episodi
+      const epRows = h('div', { class: 'rows' });
+      if (!c.episodes.length) {
+        epRows.append(h('div', { class: 'row-empty', text: 'Ancora nessun episodio.' }));
+      }
+      c.episodes
+        .slice()
+        .sort((a, b) => a.filename.localeCompare(b.filename, 'it', { numeric: true }))
+        .forEach((ep) => {
+          const row = h('div', { class: 'row' },
+            h('div', { class: 'row-lead', style: 'background:var(--bg);color:var(--muted)' }, icon('film')),
+            h('div', { class: 'row-main' }, h('div', { class: 'row-title', style: 'font-weight:400', text: ep.filename })),
+            h('button', {
+              class: 'icon-btn danger', 'aria-label': 'Elimina ' + ep.filename,
+              onclick: () => deferredDelete(row, 'Episodio eliminato', () =>
+                api(`/characters/${enc(c.name)}/episodes/${enc(ep.filename)}`, { method: 'DELETE', keepalive: true })),
+            }, icon('remove'))
+          );
+          epRows.append(row);
+        });
+
+      const epPanel = h('div', { class: 'panel' },
+        h('h2', { text: 'Episodi' }),
+        h('div', { class: 'panel-sub', style: 'margin-top:4px', text: 'Partono uno alla volta, senza ripetizioni finché non li ha visti tutti.' }),
+        epRows,
+        h('div', { id: 'upload-slot' }),
+        h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => $('file-videos').click() }, icon('upload'), 'Aggiungi episodi'),
+        info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.free_bytes)}` }) : null
+      );
+
+      // Orari
+      const exempt = h('input', { type: 'checkbox', 'aria-label': 'Sempre disponibile' });
+      exempt.checked = !!c.time_limit_exempt;
+      exempt.addEventListener('change', () => toggleExempt(exempt));
+      const timePanel = h('div', { class: 'panel' },
+        h('div', { class: 'panel-head', style: 'margin:0' },
+          h('div', {},
+            h('h2', { text: 'Sempre disponibile' }),
+            h('div', { class: 'panel-sub', style: 'margin:4px 0 0', text: 'Questo cartone può partire a qualsiasi ora, anche oltre i minuti del giorno.' })
+          ),
+          h('label', { class: 'switch' }, exempt, h('span', { class: 'slider' }))
+        )
+      );
+
+      const danger = h('div', { class: 'danger-zone' },
+        h('button', { class: 'btn btn-quiet', style: 'color:var(--danger)', text: 'Elimina personaggio', onclick: deleteCharacter })
+      );
+
+      root.replaceChildren(hero, h('div', { class: 'stack' }, tagsPanel, epPanel, timePanel), danger);
+      if (uploading) renderUploadProgress();
+    }
+
+    // Eliminazione con "Annulla": la riga sparisce subito, la cancellazione vera
+    // parte dopo 5 secondi se non ci si ripensa
+    const pendingDeletes = new Set();
+
+    function deferredDelete(row, message, run) {
+      row.classList.add('hidden');
+      const job = { run, timer: null };
+      const execute = async () => {
+        pendingDeletes.delete(job);
+        try { await run(); } catch (e) { toast(e.message); }
+        if (!document.hidden) refreshCharacter();
+      };
+      job.timer = setTimeout(execute, 5000);
+      job.flush = () => { clearTimeout(job.timer); execute(); };
+      pendingDeletes.add(job);
+      toast(message, {
+        label: 'Annulla',
+        run: () => { clearTimeout(job.timer); pendingDeletes.delete(job); row.classList.remove('hidden'); },
       });
     }
 
-    function closeModal() {
-      stopTagScan();
-      $('char-modal').style.display = 'none';
-      selectedCharName = null;
-      loadCharacters(); // refresh grid stats
-    }
+    // Se si chiude la pagina con cancellazioni in sospeso, partono subito (fetch keepalive)
+    window.addEventListener('pagehide', () => pendingDeletes.forEach(j => j.flush()));
 
-    /* --- ACTIONS INSIDE MODAL --- */
-    async function addTagFromModal() {
-      const input = $('m-input-tag');
-      const uid = input.value.trim();
-      if (!uid) return;
-      try {
-        await apiCall(`/characters/${selectedCharName}/tags`, "POST", { uid });
-        input.value = '';
-        showToast("Tag aggiunto");
-        openCharModal(selectedCharName); // refresh modal
-      } catch (e) { showToast("Errore: " + e.message); }
-    }
-
-    async function deleteTag(uid) {
-      if (!confirm("Eliminare tag?")) return;
-      try {
-        await apiCall(`/characters/${selectedCharName}/tags/${uid}`, "DELETE");
-        openCharModal(selectedCharName);
-      } catch (e) { showToast("Errore: " + e.message); }
-    }
-
-    async function toggleCharExempt() {
-      const checkbox = $('m-char-exempt');
+    async function toggleExempt(checkbox) {
       const checked = checkbox.checked;
       try {
-        const res = await apiCall(`/characters/${selectedCharName}/time-limit-exempt`, 'PUT', { exempt: checked });
-        if (res.restart === 'immediate') {
-          showToast(checked ? 'Personaggio escluso dai limiti' : 'Limiti di tempo riattivati per il personaggio');
-        } else {
-          showToast('Salvato: verrà applicato al termine della visione in corso.');
-        }
+        const res = await api(`/characters/${enc(current.name)}/time-limit-exempt`, { method: 'PUT', body: { exempt: checked } });
+        if (res.restart === 'immediate') toast(checked ? 'Ora può partire a qualsiasi ora' : 'Ora segue minuti e orari');
+        else toast('Salvato: vale dalla fine dell\'episodio in corso');
       } catch (e) {
-        checkbox.checked = !checked; // revert su errore
-        showToast('Errore: ' + e.message);
-      }
-    }
-
-    async function deleteEpisode(filename) {
-      if (!confirm("Eliminare video?")) return;
-      try {
-        await apiCall(`/characters/${selectedCharName}/episodes/${filename}`, "DELETE");
-        openCharModal(selectedCharName);
-      } catch (e) { showToast("Errore: " + e.message); }
-    }
-
-    async function uploadEpisodesFromModal() {
-      const input = $('m-input-files');
-      const files = Array.from(input.files);
-      if (!files.length) return;
-
-      const bar = $('progress-bar');
-      const fill = $('upload-fill');
-      $('upload-progress').style.display = 'block';
-      fill.style.width = '0%';
-
-      // Upload Logic
-      const url = `/characters/${selectedCharName}/episodes`;
-      const totalSize = files.reduce((acc, f) => acc + f.size, 0);
-      let loadedTotal = 0;
-
-      for (const file of files) {
-        const fd = new FormData();
-        fd.append('files', file);
-
-        await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open("POST", url);
-          xhr.upload.onprogress = e => {
-            const current = loadedTotal + e.loaded;
-            const pct = Math.round((current / totalSize) * 100);
-            fill.style.width = pct + '%';
-          };
-          xhr.onload = () => resolve();
-          xhr.onerror = () => reject();
-          xhr.send(fd);
-        });
-        loadedTotal += file.size;
-      }
-
-      $('upload-progress').style.display = 'none';
-      input.value = '';
-      showToast("Upload completato");
-      openCharModal(selectedCharName);
-    }
-
-    async function uploadProfileImage() {
-      const input = $('m-input-img');
-      const file = input.files[0];
-      if (!file) return;
-
-      const fd = new FormData();
-      fd.append('file', file);
-
-      try {
-        const res = await fetch(`/characters/${selectedCharName}/image`, {
-          method: 'POST',
-          body: fd
-        });
-        if (!res.ok) throw new Error(await res.text());
-
-        showToast("Immagine aggiornata");
-        // Ricarica modale per vedere aggiornamento
-        openCharModal(selectedCharName);
-        // Anche la griglia sotto deve aggiornarsi
-        loadCharacters();
-      } catch (e) {
-        showToast("Errore upload: " + e.message);
-      }
-      input.value = '';
-    }
-
-
-
-    async function renameCharacter() {
-      if (!selectedCharName) return;
-      const newName = prompt("Nuovo nome per " + selectedCharName + ":", selectedCharName);
-      if (!newName || newName === selectedCharName) return;
-
-      try {
-        const res = await fetch(`/characters/${selectedCharName}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ new_name: newName })
-        });
-
-        if (!res.ok) throw new Error(await res.text());
-
-        showToast("Rinominato!");
-        closeModal();
-        loadCharacters();
-      } catch (e) {
-        showToast("Errore rinomina: " + e.message);
+        checkbox.checked = !checked;
+        toast(e.message);
       }
     }
 
     async function deleteCharacter() {
-      if (!selectedCharName) return;
-      if (!confirm(`Sei sicuro di voler eliminare definitivamente "${selectedCharName}"?\nQuesta azione rimuoverà tutti i file e i dati associati.`)) {
+      const c = current;
+      const parts = [];
+      if (c.stats.total_episodes) parts.push(plural(c.stats.total_episodes, 'episodio', 'episodi'));
+      if (c.tag_uids.length) parts.push(plural(c.tag_uids.length, 'statuina abbinata', 'statuine abbinate'));
+      const ok = await confirmSheet({
+        title: `Eliminare ${c.display_name}?`,
+        text: (parts.length ? `Spariscono anche ${parts.join(' e ')}. ` : '') + 'Non si può tornare indietro.',
+        ok: 'Elimina per sempre',
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        await api(`/characters/${enc(c.name)}`, { method: 'DELETE' });
+        toast(`${c.display_name} eliminato`);
+        location.hash = '#/personaggi';
+      } catch (e) { toast(e.message); }
+    }
+
+    /* ---------- Foto ---------- */
+
+    $('file-image').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file || !current) return;
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const res = await fetch(`/characters/${enc(current.name)}/image`, { method: 'POST', body: fd });
+        if (!res.ok) throw new Error(await errorText(res));
+        imageVersion = Date.now();
+        toast('Foto cambiata');
+        refreshCharacter();
+      } catch (err) { toast(err.message); }
+    });
+
+    /* ---------- Episodi: caricamento ---------- */
+
+    let uploadState = null;
+
+    function renderUploadProgress() {
+      const slot = $('upload-slot');
+      const btn = $('upload-btn');
+      if (!slot) return;
+      if (!uploadState) { slot.replaceChildren(); if (btn) btn.disabled = false; return; }
+      if (btn) btn.disabled = true;
+      const s = uploadState;
+      slot.replaceChildren(h('div', { class: 'progress' },
+        h('div', { class: 'progress-label' },
+          h('span', { text: `${s.index + 1} di ${s.count} · ${s.name}` }),
+          h('span', { text: s.pct + '%' })
+        ),
+        h('div', { class: 'bar' }, h('div', { style: `width:${s.pct}%` })),
+        h('div', { class: 'muted small', style: 'margin-top:6px', text: 'Tieni aperta questa pagina finché non ha finito.' })
+      ));
+    }
+
+    function uploadOne(url, file, onProgress) {
+      return new Promise((resolve) => {
+        const fd = new FormData();
+        fd.append('files', file);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+        xhr.upload.onprogress = (e) => onProgress(e.loaded);
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) return resolve(null);
+          let msg = xhr.responseText;
+          try { msg = JSON.parse(xhr.responseText).detail || msg; } catch (_) { /* testo */ }
+          resolve(msg || `Errore ${xhr.status}`);
+        };
+        xhr.onerror = () => resolve('connessione interrotta');
+        xhr.send(fd);
+      });
+    }
+
+    $('file-videos').addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files);
+      e.target.value = '';
+      if (!files.length || !current || uploading) return;
+
+      const total = files.reduce((a, f) => a + f.size, 0);
+      if (info && info.disk && total > info.disk.free_bytes) {
+        toast(`Non c'è abbastanza spazio: servono ${formatBytes(total)}, liberi ${formatBytes(info.disk.free_bytes)}.`);
         return;
       }
 
-      try {
-        const res = await fetch(`/characters/${selectedCharName}`, {
-          method: "DELETE"
+      const charName = current.name;
+      const url = `/characters/${enc(charName)}/episodes`;
+      const errors = [];
+      let done = 0;
+      uploading = true;
+
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        uploadState = { index: i, count: files.length, name: f.name, pct: Math.round(done / total * 100) };
+        renderUploadProgress();
+        const err = await uploadOne(url, f, (loaded) => {
+          const pct = Math.round((done + loaded) / total * 100);
+          if (pct !== uploadState.pct) { uploadState.pct = pct; renderUploadProgress(); }
         });
-
-        if (!res.ok) throw new Error(await res.text());
-
-        showToast("Personaggio eliminato");
-        closeModal();
-        loadCharacters();
-      } catch (e) {
-        showToast("Errore eliminazione: " + e.message);
+        if (err) errors.push(`${f.name}: ${err}`);
+        done += f.size;
       }
+
+      uploading = false;
+      uploadState = null;
+      renderUploadProgress();
+      loadInfo();
+
+      const ok = files.length - errors.length;
+      if (errors.length) toast(`${ok ? plural(ok, 'episodio caricato', 'episodi caricati') + '. ' : ''}Non caricati: ${errors.join(' · ')}`);
+      else toast(files.length === 1 ? 'Episodio caricato' : `${files.length} episodi caricati`);
+      if (current && current.name === charName) refreshCharacter();
+    });
+
+    window.addEventListener('beforeunload', (e) => {
+      if (uploading) { e.preventDefault(); e.returnValue = ''; }
+    });
+
+    /* ================= Limiti di tempo ================= */
+
+    function windowRow(start, end) {
+      const row = h('div', { class: 'window-row' },
+        h('input', { class: 'field tl-start', type: 'time', value: start, 'aria-label': 'Dalle' }),
+        h('span', { class: 'dash', text: '–' }),
+        h('input', { class: 'field tl-end', type: 'time', value: end, 'aria-label': 'Alle' }),
+        h('button', { class: 'icon-btn danger', type: 'button', 'aria-label': 'Togli questa fascia', onclick: () => row.remove() }, icon('remove'))
+      );
+      return row;
     }
 
-    /* --- SYSTEM / WIFI --- */
-    async function renderWifiPanel() {
-      const container = $('wifi-list-container');
-      container.innerHTML = '<div style="padding:20px; text-align:center; color:#94a3b8;">Scansione...</div>';
-
-      try {
-        const data = await apiCall("/system/wifi");
-
-        // Status
-        $('wifi-status-text').textContent = data.current ? `Connesso: ${data.current.ssid}` : "Non connesso";
-        $('wifi-detail-text').textContent = data.current ? `${data.current.bars} segnale` : "Hotspot o disconnesso";
-
-        container.innerHTML = '';
-
-        // Available
-        const title2 = document.createElement('div');
-        title2.className = 'section-title';
-        title2.innerText = 'Reti Disponibili';
-        container.appendChild(title2);
-
-        data.scan.forEach(net => {
-          if (data.current && net.ssid === data.current.ssid) return;
-
-          const isSaved = data.saved.includes(net.ssid);
-          
-          let btnHtml = '';
-          let badgeHtml = '';
-          if (isSaved) {
-              badgeHtml = `<span style="font-size:0.7em; background-color:#e0f2f1; color:#00695c; padding:2px 6px; border-radius:4px; margin-left:8px; display:inline-block; vertical-align:middle;">✓ Conosciuta</span>`;
-              btnHtml = `<button class="btn btn-primary btn-sm" onclick="reconnectWifi('${net.ssid}')">Connetti</button>`;
-          } else {
-              btnHtml = `<button class="btn btn-secondary btn-sm" onclick="promptWifi('${net.ssid}')">Configura</button>`;
-          }
-
-          const el = document.createElement('div');
-          el.className = 'list-item';
-          el.innerHTML = `
-                    <div class="list-item-content">
-                        <div class="list-item-title" style="display:flex; align-items:center;">${net.ssid} ${badgeHtml}</div>
-                        <div class="list-item-sub">${net.bars} ${net.security ? '🔒' : '🔓'}</div>
-                    </div>
-                    ${btnHtml}
-                 `;
-          container.appendChild(el);
-        });
-
-        // Saved networks (moved below Available networks)
-        if (data.saved.length) {
-          const details = document.createElement('details');
-          details.style.marginBottom = '15px';
-          details.style.marginTop = '20px';
-          
-          const summary = document.createElement('summary');
-          summary.className = 'section-title';
-          summary.style.cursor = 'pointer';
-          summary.style.outline = 'none';
-          summary.innerText = 'Gestisci Reti Salvate ▾';
-          details.appendChild(summary);
-
-          data.saved.forEach(ssid => {
-            const isAp = ssid.endsWith('_AP');
-            const btnHtml = isAp 
-                ? `<button class="btn btn-sm" disabled style="opacity:0.3; cursor:not-allowed;">✕</button>`
-                : `<button class="btn btn-danger btn-sm" onclick="forgetWifi('${ssid}')">✕</button>`;
-            
-            const el = document.createElement('div');
-            el.className = 'list-item';
-            el.style.marginTop = '4px';
-            el.style.padding = '8px 12px';
-            el.innerHTML = `<span>${ssid}</span><div style="display:flex;">${btnHtml}</div>`;
-            details.appendChild(el);
-          });
-          container.appendChild(details);
-        }
-
-      } catch (e) {
-        container.innerHTML = `<div style="color:red; padding:20px;">Errore: ${e.message}</div>`;
-      }
+    function buildDays() {
+      $('tl-days').replaceChildren(...DAY_KEYS.map(day => {
+        const windows = h('div', { class: 'windows', 'data-day': day });
+        return h('div', { class: 'panel day' },
+          h('h2', { text: DAY_LABELS[day] }),
+          h('label', { class: 'lbl', for: `tl-${day}-min`, text: 'Minuti al giorno' }),
+          h('div', { class: 'field-wrap' },
+            h('input', { class: 'field', id: `tl-${day}-min`, type: 'number', min: '0', step: '5', inputmode: 'numeric', placeholder: 'Senza limite' }),
+            h('span', { class: 'suffix', text: 'min' })
+          ),
+          windows,
+          h('button', {
+            class: 'btn btn-quiet', type: 'button', style: 'margin-top:6px;margin-left:-12px',
+            onclick: () => windows.append(windowRow('16:00', '19:00')),
+          }, icon('plus'), 'Aggiungi una fascia oraria')
+        );
+      }));
     }
 
-    async function forgetWifi(ssid) {
-      if (!confirm(`Dimenticare e scollegare ${ssid}?`)) return;
-      try { 
-        await apiCall(`/system/wifi/${ssid}`, "DELETE"); 
-        
-        // Se stiamo eliminando la rete attualmente connessa, andiamo offline e deve partire l'overlay
-        const statusText = $('wifi-status-text').textContent;
-        if (statusText.includes(ssid)) {
-            showReconnectOverlay();
-        } else {
-            renderWifiPanel(); 
-        }
-      }
-      catch (e) { showToast(e.message); }
-    }
-
-    async function reconnectWifi(ssid) {
-      showToast("Connessione in corso a " + ssid + "...");
-      try { 
-        await apiCall(`/system/wifi/${ssid}/connect`, "POST", null); 
-        showReconnectOverlay();
-      } catch(e) {
-        showToast("Errore: " + e.message);
-      }
-    }
-
-    function promptWifi(ssid) {
-      pendingWifiSsid = ssid;
-      $('w-ssid-title').textContent = ssid;
-      $('w-password').value = '';
-      $('wifi-modal').style.display = 'flex';
-    }
-
-    function closeWifiModal() { $('wifi-modal').style.display = 'none'; }
-
-    async function connectWifiConfirm() {
-      const pwd = $('w-password').value;
-      const btn = $('w-connect-btn');
-      btn.textContent = '...';
-      btn.disabled = true;
-
-      try {
-        await apiCall("/system/wifi", "POST", { ssid: pendingWifiSsid, password: pwd });
-        closeWifiModal();
-        showReconnectOverlay();
-      } catch (e) {
-        showToast("Errore: " + e.message);
-      } finally {
-        btn.textContent = 'Connetti';
-        btn.disabled = false;
-      }
-    }
-
-    /* --- LIMITI DI TEMPO --- */
-    function timeWindowRowHtml(start, end) {
-      return `
-        <div class="tl-window-row" style="display:flex; gap:8px; align-items:center; margin-top:6px;">
-          <input type="time" class="tl-window-start" value="${start}" style="flex:1;">
-          <span style="color:var(--text-soft);">–</span>
-          <input type="time" class="tl-window-end" value="${end}" style="flex:1;">
-          <button type="button" class="btn btn-danger" style="padding:8px 12px;" onclick="this.closest('.tl-window-row').remove()">×</button>
-        </div>
-      `;
-    }
-
-    function addTimeWindow(day, start = '08:00', end = '19:00') {
-      document.querySelector(`.tl-windows[data-day="${day}"]`).insertAdjacentHTML('beforeend', timeWindowRowHtml(start, end));
-    }
-
-    function buildTimeLimitsDaysHtml() {
-      return DAY_KEYS.map(day => `
-        <div class="list-item" style="flex-direction:column; align-items:stretch; gap:8px;">
-          <div class="list-item-title">${DAY_LABELS[day]}</div>
-          <input type="number" min="0" id="tl-${day}-minutes" placeholder="Minuti/giorno (illimitato)">
-          <div class="tl-windows" data-day="${day}"></div>
-          <button type="button" class="btn" style="margin-top:6px;" onclick="addTimeWindow('${day}')">+ Aggiungi fascia oraria</button>
-        </div>
-      `).join('');
-    }
-
-    function applyTimeLimitsEnabledState() {
+    function applyEnabled() {
       const enabled = $('tl-enabled').checked;
-      const container = $('time-limits-days');
-      container.classList.toggle('form-disabled', !enabled);
-      container.querySelectorAll('input, button').forEach(el => { el.disabled = !enabled; });
+      const days = $('tl-days');
+      days.classList.toggle('form-disabled', !enabled);
+      days.querySelectorAll('input, button').forEach(el => { el.disabled = !enabled; });
     }
 
-    async function renderTimeLimitsPanel() {
+    $('tl-enabled').addEventListener('change', applyEnabled);
+
+    async function renderTimeLimits() {
       try {
-        const cfg = await apiCall('/system/time-limits');
+        const cfg = await api('/system/time-limits');
         $('tl-enabled').checked = cfg.enabled;
-        timeLimitsExemptCache = cfg.exempt_characters || [];
+        exemptCache = cfg.exempt_characters || [];
         DAY_KEYS.forEach(day => {
           const d = cfg.days[day] || {};
-          $(`tl-${day}-minutes`).value = (d.daily_limit_minutes === null || d.daily_limit_minutes === undefined) ? '' : d.daily_limit_minutes;
-          const windowsContainer = document.querySelector(`.tl-windows[data-day="${day}"]`);
-          windowsContainer.innerHTML = '';
-          (d.windows || []).forEach(w => addTimeWindow(day, w.start, w.end));
+          $(`tl-${day}-min`).value = d.daily_limit_minutes == null ? '' : d.daily_limit_minutes;
+          const w = document.querySelector(`.windows[data-day="${day}"]`);
+          w.replaceChildren(...(d.windows || []).map(x => windowRow(x.start, x.end)));
         });
-        applyTimeLimitsEnabledState();
+        applyEnabled();
       } catch (e) {
-        showToast('Errore caricamento limiti: ' + e.message);
+        toast('Non riesco a leggere minuti e orari: ' + e.message);
       }
-      refreshTimeLimitsUsage();
+      refreshUsage();
     }
 
-    async function refreshTimeLimitsUsage() {
+    async function refreshUsage() {
       try {
-        const u = await apiCall('/system/time-limits/usage');
-        const el = $('tl-usage-text');
-        if (!u.enabled) {
-          el.textContent = 'Limiti disattivati.';
-          return;
-        }
-        const limitTxt = (u.daily_limit_minutes !== null && u.daily_limit_minutes !== undefined)
-          ? `${Math.round(u.minutes_used)}/${u.daily_limit_minutes} min oggi`
-          : `${Math.round(u.minutes_used)} min oggi (nessun limite)`;
-        const windowsTxt = (u.windows && u.windows.length)
-          ? ' · permesso ' + u.windows.map(w => `${w.start}–${w.end}`).join(', ')
-          : '';
-        el.textContent = limitTxt + windowsTxt;
-      } catch (e) {
-        // non critico: lasciamo il testo precedente
-      }
+        const u = await api('/system/time-limits/usage');
+        const el = $('tl-usage');
+        if (!u.enabled) { el.textContent = 'Spenti: i cartoni possono partire sempre.'; return; }
+        const used = Math.round(u.minutes_used);
+        let txt = u.daily_limit_minutes != null
+          ? `Oggi ${used} minuti su ${u.daily_limit_minutes}`
+          : `Oggi ${used} minuti, senza limite`;
+        if (u.windows && u.windows.length) txt += ', ' + u.windows.map(w => `${w.start}–${w.end}`).join(', ');
+        el.textContent = txt + '.';
+      } catch (_) { /* non essenziale */ }
     }
 
-    async function saveTimeLimits() {
-      const btn = $('tl-save-btn');
-      btn.textContent = '...';
-      btn.disabled = true;
-
+    $('tl-save').addEventListener('click', async () => {
+      const btn = $('tl-save');
       const days = {};
       try {
         DAY_KEYS.forEach(day => {
-          const minutesVal = $(`tl-${day}-minutes`).value.trim();
-          const windows = Array.from(document.querySelectorAll(`.tl-windows[data-day="${day}"] .tl-window-row`)).map(row => {
-            const start = row.querySelector('.tl-window-start').value;
-            const end = row.querySelector('.tl-window-end').value;
-            if (!start || !end) throw new Error(`Fascia oraria incompleta per ${DAY_LABELS[day]}`);
+          const v = $(`tl-${day}-min`).value.trim();
+          const windows = Array.from(document.querySelectorAll(`.windows[data-day="${day}"] .window-row`)).map(row => {
+            const start = row.querySelector('.tl-start').value;
+            const end = row.querySelector('.tl-end').value;
+            if (!start || !end) throw new Error(`Completa la fascia oraria di ${DAY_LABELS[day].toLowerCase()}`);
             return { start, end };
           });
-          days[day] = {
-            daily_limit_minutes: minutesVal === '' ? null : parseInt(minutesVal, 10),
-            windows,
-          };
+          days[day] = { daily_limit_minutes: v === '' ? null : parseInt(v, 10), windows };
         });
       } catch (e) {
-        showToast(e.message);
-        btn.textContent = 'Salva limiti di tempo';
-        btn.disabled = false;
+        toast(e.message);
         return;
       }
 
-      try {
-        const res = await apiCall('/system/time-limits', 'POST', {
-          enabled: $('tl-enabled').checked,
-          days,
-          exempt_characters: timeLimitsExemptCache,
-        });
-        if (res.restart === 'immediate') {
-          showReconnectOverlay();
-        } else {
-          showToast('Impostazioni salvate: verranno applicate al termine della visione in corso.');
-        }
-      } catch (e) {
-        showToast('Errore: ' + e.message);
-      } finally {
-        btn.textContent = 'Salva limiti di tempo';
-        btn.disabled = false;
-      }
-    }
-
-    /* --- RESTART --- */
-    window.handleRestartPlayer = async function () {
-      if (!confirm("Riavviare il servizio?")) return;
-      try {
-        await fetch("/system/restart-player", { method: "POST" });
-        showToast("Riavvio in corso...");
-        setTimeout(showReconnectOverlay, 1000);
-      } catch (e) { showToast("Errore comando: " + e.message); }
-    }
-
-    /* --- UPDATE CHECK / APPLY --- */
-    window.handleCheckUpdate = async function () {
-      const btn = $('update-check-btn');
-      const applyBtn = $('update-apply-btn');
-      btn.textContent = '...';
       btn.disabled = true;
-      applyBtn.classList.add('hidden');
       try {
-        const data = await apiCall("/system/update-check");
-        $('update-status-text').textContent = `Versione: ${data.current_version}`;
-        if (data.update_available) {
-          $('update-detail-text').textContent = `Nuova versione disponibile: ${data.latest_version} (canale ${data.channel})`;
-          applyBtn.textContent = `⬆ Aggiorna a v${data.latest_version}`;
-          applyBtn.classList.remove('hidden');
-        } else {
-          $('update-detail-text').textContent = `Già aggiornato (canale ${data.channel})`;
-        }
+        const res = await api('/system/time-limits', {
+          method: 'POST',
+          body: { enabled: $('tl-enabled').checked, days, exempt_characters: exemptCache },
+        });
+        if (res.restart === 'immediate') showReconnect('Applico le modifiche', 'Il lettore si riavvia: ci vuole qualche secondo.');
+        else toast('Salvato: vale dalla fine dell\'episodio in corso');
       } catch (e) {
-        $('update-detail-text').textContent = 'Errore controllo aggiornamenti';
-        showToast("Errore: " + e.message);
+        toast(e.message);
       } finally {
-        btn.textContent = 'Controlla';
         btn.disabled = false;
+      }
+    });
+
+    /* ================= Wi-Fi ================= */
+
+    let wifiCurrent = null;
+
+    function signalBars(signal) {
+      const s = parseInt(signal, 10) || 0;
+      const n = s >= 75 ? 4 : s >= 50 ? 3 : s >= 25 ? 2 : 1;
+      return h('span', { class: 'signal', 'aria-label': `Segnale ${s}%`, role: 'img' },
+        [1, 2, 3, 4].map(i => h('i', { class: i <= n ? 'on' : '' })));
+    }
+
+    async function renderWifi() {
+      const root = $('wifi');
+      root.replaceChildren(h('p', { class: 'muted', text: 'Cerco le reti…' }));
+      try {
+        const data = await api('/system/wifi');
+        wifiCurrent = data.current ? data.current.ssid : null;
+        const els = [];
+
+        els.push(h('div', { class: 'rows', style: 'margin-top:0' },
+          h('div', { class: 'row', style: 'border-top:0' },
+            h('div', { class: 'row-lead', style: data.current ? 'background:var(--green)' : 'background:var(--bg);color:var(--muted)' },
+              data.current ? signalBars(data.current.signal) : icon('remove')),
+            h('div', { class: 'row-main' },
+              h('div', { class: 'row-title', text: data.current ? data.current.ssid : 'Nessuna rete' }),
+              h('div', { class: 'row-sub', text: data.current ? 'Collegato' : 'Il Cucù usa la sua rete di emergenza' })
+            )
+          )
+        ));
+
+        const nets = data.scan
+          .filter(n => n.ssid !== wifiCurrent)
+          .sort((a, b) => (parseInt(b.signal, 10) || 0) - (parseInt(a.signal, 10) || 0));
+
+        els.push(h('div', { class: 'lbl', style: 'margin:18px 0 0', text: 'Reti vicine' }));
+        const list = h('div', { class: 'rows' });
+        if (!nets.length) list.append(h('div', { class: 'row-empty', text: 'Nessun\'altra rete trovata.' }));
+        nets.forEach(net => {
+          const saved = data.saved.includes(net.ssid);
+          list.append(h('div', { class: 'row' },
+            h('div', { class: 'row-lead', style: 'background:var(--bg)' }, signalBars(net.signal)),
+            h('div', { class: 'row-main' },
+              h('div', { class: 'row-title' }, net.ssid, saved ? h('span', { class: 'tag known', text: 'Salvata' }) : null),
+              h('div', { class: 'row-sub', text: net.security ? 'Protetta da password' : 'Aperta' })
+            ),
+            h('button', {
+              class: 'btn', style: 'min-height:40px;padding:6px 14px',
+              text: 'Collega',
+              onclick: () => saved ? switchWifi(net.ssid) : askWifiPassword(net.ssid, !!net.security),
+            })
+          ));
+        });
+        els.push(list);
+
+        if (data.saved.length) {
+          const savedRows = h('div', { class: 'rows' });
+          data.saved.forEach(ssid => {
+            const isAp = ssid.endsWith('_AP');
+            savedRows.append(h('div', { class: 'row' },
+              h('div', { class: 'row-main' },
+                h('div', { class: 'row-title', style: 'font-weight:400', text: ssid }),
+                isAp ? h('div', { class: 'row-sub', text: 'Rete di emergenza del Cucù' }) : null
+              ),
+              isAp ? null : h('button', {
+                class: 'icon-btn danger', 'aria-label': 'Dimentica ' + ssid, onclick: () => forgetWifi(ssid),
+              }, icon('remove'))
+            ));
+          });
+          els.push(h('details', { class: 'more', style: 'margin-top:10px' },
+            h('summary', {}, icon('chevron'), 'Reti salvate'), savedRows));
+        }
+
+        root.replaceChildren(...els);
+      } catch (e) {
+        root.replaceChildren(h('p', { class: 'muted', text: 'Non riesco a leggere le reti: ' + e.message }));
       }
     }
 
-    window.handleApplyUpdate = async function () {
-      if (!confirm("Avviare l'aggiornamento ora? Il dispositivo si riavvierà al termine.")) return;
-      try {
-        await fetch("/system/update", { method: "POST" });
-        showToast("Aggiornamento avviato...");
-        setTimeout(showReconnectOverlay, 1000);
-      } catch (e) { showToast("Errore comando: " + e.message); }
+    $('wifi-refresh').addEventListener('click', renderWifi);
+
+    function afterSwitchText(ssid) {
+      const host = info ? `${info.hostname}.local` : 'il Cucù';
+      return `Il telefono perderà il collegamento con il Cucù per qualche secondo. Poi collegalo anche tu a "${ssid}" e apri ${host}.`;
     }
 
-    function showReconnectOverlay() {
-      const ov = $('reconnect-overlay');
-      ov.innerHTML = `
-        <h2 style="margin-bottom:10px;">Applicazione in corso...</h2>
-        <div id="reconnect-timer" style="font-size:2em; font-weight:bold; margin-bottom:20px;">0s</div>
-        <div style="font-size:1em; max-width: 300px; text-align:center; margin-bottom: 25px;">
-          A seconda dell'operazione di rete, assicurati di collegare il tuo dispositivo allo stesso Wi-Fi del Cucù, oppure alla sua rete fissa d'emergenza.
-        </div>
-        <button id="reconnect-btn" class="btn btn-primary" style="display:none;" onclick="forceReload()">Ricarica Pagina</button>
-      `;
-      ov.style.display = 'flex';
-      let s = 0;
-      setInterval(() => {
-        s++;
-        const t = $('reconnect-timer');
-        if (t) t.innerText = `${s}s`;
-        
-        if (s > 10) {
-           const btn = $('reconnect-btn');
-           if (btn) btn.style.display = 'block';
+    async function switchWifi(ssid) {
+      const ok = await confirmSheet({ title: `Collegare il Cucù a ${ssid}?`, text: afterSwitchText(ssid), ok: 'Collega' });
+      if (!ok) return;
+      try {
+        await api(`/system/wifi/${enc(ssid)}/connect`, { method: 'POST' });
+        showReconnect('Cambio rete', afterSwitchText(ssid));
+      } catch (e) { toast(e.message); }
+    }
+
+    function askWifiPassword(ssid, secured) {
+      const input = h('input', { class: 'field', id: 'wifi-pw', type: 'password', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', placeholder: secured ? 'Password' : 'Nessuna password' });
+      const toggle = h('button', {
+        class: 'icon-btn', type: 'button', 'aria-label': 'Mostra la password',
+        style: 'position:absolute;right:2px;top:2px',
+        onclick: () => { input.type = input.type === 'password' ? 'text' : 'password'; },
+      }, icon('eye'));
+      const btn = h('button', { class: 'btn btn-primary btn-block', text: 'Collega' });
+      const form = h('form', {},
+        h('p', { class: 'sheet-text', text: afterSwitchText(ssid) }),
+        h('label', { class: 'lbl', for: 'wifi-pw', text: 'Password del Wi-Fi' }),
+        h('div', { style: 'position:relative' }, input, toggle),
+        h('div', { class: 'actions' }, btn)
+      );
+      input.style.paddingRight = '52px';
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        btn.disabled = true;
+        try {
+          await api('/system/wifi', { method: 'POST', body: { ssid, password: input.value } });
+          closeSheet();
+          showReconnect('Cambio rete', afterSwitchText(ssid));
+        } catch (err) {
+          toast(err.message);
+          btn.disabled = false;
         }
-        
-        // Try ping cautiously
+      });
+      openSheet({ title: ssid, content: form });
+    }
+
+    async function forgetWifi(ssid) {
+      const isCurrent = ssid === wifiCurrent;
+      const ok = await confirmSheet({
+        title: `Dimenticare ${ssid}?`,
+        text: isCurrent
+          ? 'È la rete che il Cucù sta usando adesso: si scollegherà e accenderà la sua rete di emergenza.'
+          : 'Il Cucù non si collegherà più da solo a questa rete.',
+        ok: 'Dimentica',
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        await api(`/system/wifi/${enc(ssid)}`, { method: 'DELETE' });
+        if (isCurrent) showReconnect('Cambio rete', 'Collega il telefono alla rete del Cucù (il suo nome finisce con _AP) e apri 10.42.0.1.');
+        else renderWifi();
+      } catch (e) { toast(e.message); }
+    }
+
+    /* ================= Sistema ================= */
+
+    $('restart-player').addEventListener('click', async () => {
+      const ok = await confirmSheet({
+        title: 'Riavviare il lettore?',
+        text: 'Se un cartone è in corso si ferma. Ci vogliono pochi secondi.',
+        ok: 'Riavvia',
+      });
+      if (!ok) return;
+      try {
+        await api('/system/restart-player', { method: 'POST' });
+        showReconnect('Riavvio il lettore', 'Ci vogliono pochi secondi.');
+      } catch (e) { toast(e.message); }
+    });
+
+    $('update-check').addEventListener('click', async () => {
+      const btn = $('update-check');
+      const apply = $('update-apply');
+      btn.disabled = true;
+      btn.textContent = 'Controllo…';
+      apply.classList.add('hidden');
+      try {
+        const d = await api('/system/update-check');
+        if (d.update_available) {
+          $('update-text').textContent = `C'è una nuova versione: ${d.latest_version} (ora ${d.current_version}).`;
+          apply.textContent = `Aggiorna alla ${d.latest_version}`;
+          apply.classList.remove('hidden');
+        } else {
+          $('update-text').textContent = `Il Cucù è aggiornato (versione ${d.current_version}).`;
+        }
+      } catch (e) {
+        $('update-text').textContent = 'Non riesco a controllare: ' + e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Controlla aggiornamenti';
+      }
+    });
+
+    $('update-apply').addEventListener('click', async () => {
+      const ok = await confirmSheet({
+        title: 'Aggiornare adesso?',
+        text: 'Il Cucù scarica la nuova versione e si riavvia. Se un cartone è in corso si ferma.',
+        ok: 'Aggiorna',
+      });
+      if (!ok) return;
+      try {
+        await api('/system/update', { method: 'POST' });
+        showReconnect('Aggiornamento in corso', 'Può volerci qualche minuto. La pagina si ricarica da sola.');
+      } catch (e) { toast(e.message); }
+    });
+
+    /* ================= Riconnessione ================= */
+
+    let reconnectTimer = null;
+
+    function showReconnect(title, text) {
+      closeSheet();
+      clearInterval(reconnectTimer);
+      const timer = h('div', { class: 'timer', text: '0 s' });
+      const reload = h('button', { class: 'btn btn-primary hidden', style: 'margin-top:18px', text: 'Ricarica la pagina' });
+      const note = h('p', { class: 'hidden', style: 'margin-top:14px' });
+      reload.addEventListener('click', () => {
+        // Sull'hotspot (10.42.0.1) la pagina non tornerà: il Cucù è passato a un'altra rete
+        if (location.hostname === '10.42.0.1') {
+          note.textContent = `Collega il telefono al Wi-Fi di casa e apri ${info ? info.hostname : 'cucu-xxxx'}.local`;
+          note.classList.remove('hidden');
+        } else {
+          location.reload();
+        }
+      });
+      $('reconnect-root').replaceChildren(h('div', { class: 'reconnect', role: 'alertdialog', 'aria-live': 'assertive' },
+        h('div', { class: 'deco a pop' }),
+        h('div', { class: 'deco b pop', style: 'animation-delay:.1s' }),
+        h('div', { class: 'deco c pop', style: 'animation-delay:.2s' }),
+        h('div', { class: 'peek' }, h('img', { src: '/static/img/gufetto.png', alt: '' })),
+        h('h2', { text: title }),
+        h('p', { text: text }),
+        timer, reload, note
+      ));
+
+      let s = 0;
+      reconnectTimer = setInterval(() => {
+        s++;
+        timer.textContent = `${s} s`;
+        if (s > 10) reload.classList.remove('hidden');
         if (s > 2 && s % 3 === 0) {
-          fetch("/api", { cache: "no-store" })
-            .then(r => { if (r.ok) window.location.reload(); })
-            .catch(() => {});
+          fetch('/api', { cache: 'no-store' })
+            .then(r => { if (r.ok) { clearInterval(reconnectTimer); location.reload(); } })
+            .catch(() => { });
         }
       }, 1000);
     }
 
-    function forceReload() {
-      const host = window.location.hostname;
-      if (host === '10.42.0.1') {
-         alert("Collegati al Wi-Fi del tuo router e naviga sull'indirizzo cucu-XXXX.local del tuo Cucù, perché l'Hotspot si è appena spento!");
-      } else {
-         window.location.reload();
-      }
-    }
+    /* ================= Avvio ================= */
 
-    /* --- INIT --- */
-    document.addEventListener("DOMContentLoaded", () => {
-      $('time-limits-days').innerHTML = buildTimeLimitsDaysHtml();
-      loadCharacters();
-    });
-
+    buildDays();
+    loadInfo();
+    if (!location.hash) history.replaceState(null, '', '#/personaggi');
+    route();
   </script>
 </body>
 

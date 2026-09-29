@@ -1,5 +1,5 @@
 {
-  "version": "0.3.1",
+  "version": "0.4.0",
   "min_version": "0.1.0",
-  "changelog": "Status LED fixes: it no longer fails to start at boot when udev sets the PWM permissions late, and it no longer flickers between states at boot because of the clock (the Pi has no RTC). OTA updates now flush writes to the SD card, so a power cut right after an update can no longer leave empty files or a corrupted git repository."
+  "changelog": "New parent web app design, in line with the Cucù website (Fraunces and Figtree fonts, warm grey and pastel palette, hand-made shapes), built for phones first: bottom navigation, full-page character details, bottom sheets instead of browser pop-ups, undo for deleted figurines and episodes, clear upload errors, free disk space shown before uploading. Fonts and logo are now served by the device itself, so the page looks right on the emergency hotspot too."
 }
