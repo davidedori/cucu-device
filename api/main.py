@@ -233,6 +233,66 @@ def _generate_thumbs_task(char_dir: Path, filenames: List[str]):
         with _thumb_lock:
             _generate_thumb(char_dir, video)
 
+def _thumb_worker():
+    """
+    Prepara piano piano le anteprime mancanti di tutti gli episodi, così la
+    home ha quasi sempre l'immagine dell'episodio in onda. Una alla volta, con
+    pause lunghe, e mai mentre un episodio è in riproduzione.
+    """
+    time.sleep(60)  # lascia finire l'avvio del dispositivo
+    while True:
+        try:
+            if not _ffmpeg_available():
+                time.sleep(3600)
+                continue
+            if _player_playing():
+                time.sleep(30)
+                continue
+            missing = None
+            if CHARACTERS_DIR.exists():
+                for char_dir in sorted(CHARACTERS_DIR.iterdir()):
+                    if not char_dir.is_dir():
+                        continue
+                    for video in sorted(_video_files(char_dir)):
+                        if not _thumb_version(char_dir, video) and not _thumb_failed(char_dir, video):
+                            missing = (char_dir, video)
+                            break
+                    if missing:
+                        break
+            if not missing:
+                time.sleep(600)
+                continue
+            if _thumb_lock.acquire(blocking=False):
+                try:
+                    if not _generate_thumb(*missing):
+                        _mark_thumb_failed(*missing)
+                finally:
+                    _thumb_lock.release()
+            time.sleep(5)
+        except Exception as e:
+            print(f"[thumb] worker: {e}")
+            time.sleep(60)
+
+def _thumb_failed(char_dir: Path, video: Path) -> bool:
+    """File che ffmpeg non sa leggere: il worker non ci riprova finché il video non cambia."""
+    marker = _thumb_path(char_dir, video.name).with_suffix(".failed")
+    try:
+        return marker.stat().st_mtime >= video.stat().st_mtime
+    except OSError:
+        return False
+
+def _mark_thumb_failed(char_dir: Path, video: Path):
+    try:
+        marker = _thumb_path(char_dir, video.name).with_suffix(".failed")
+        marker.parent.mkdir(exist_ok=True)
+        marker.touch()
+    except OSError:
+        pass
+
+@app.on_event("startup")
+def _start_thumb_worker():
+    threading.Thread(target=_thumb_worker, name="thumb-worker", daemon=True).start()
+
 def _video_files(char_dir: Path):
     return [p for p in char_dir.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT]
 
@@ -535,8 +595,35 @@ def system_now():
     alive = bool(data) and (time.time() - data.get("ts", 0)) <= 10
     mode = data.get("mode") if alive else None
     character = data.get("character") if mode in ("playing", "paused", "ended_wait_remove") else None
+    episode = data.get("episode") if character else None
 
     usage = get_time_limits_usage()
+    episode_state = load_episode_state()
+
+    # Personaggio della statuina appoggiata adesso (anche se non sta partendo nulla)
+    tag_character = None
+    if alive and data.get("uid"):
+        tags_map = load_tags()
+        key = _find_uid(tags_map, data["uid"])
+        tag_character = tags_map.get(key) if key else None
+
+    # Anteprima dell'episodio solo se già pronta: mentre va il video non la si genera
+    episode_thumb_v = None
+    char_info = None
+    if character:
+        char_dir = CHARACTERS_DIR / character
+        video = char_dir / episode if episode else None
+        if video is not None and video.is_file():
+            episode_thumb_v = _thumb_version(char_dir, video)
+        if char_dir.is_dir():
+            files = [p.name for p in _video_files(char_dir)]
+            state = episode_state.get(character, {})
+            remaining = set(state.get("remaining", []))
+            known = set(state.get("known", []))
+            char_info = {
+                "total_episodes": len(files),
+                "watched_in_round": sum(1 for f in files if f in known and f not in remaining),
+            }
 
     # Prossima fascia oraria di oggi, per dire "si riparte alle 16:00"
     now_hm = datetime.now().strftime("%H:%M")
@@ -547,9 +634,14 @@ def system_now():
         "mode": mode,
         "blocked": bool(data.get("blocked")) if alive else False,
         "tag_present": bool(data.get("uid")) if alive else False,
+        "tag_character": tag_character,
         "character": character,
-        "display_name": _display_name(load_episode_state(), character) if character else None,
-        "episode": data.get("episode") if character else None,
+        "display_name": _display_name(episode_state, character) if character else None,
+        "episode": episode,
+        "episode_thumb_v": episode_thumb_v,
+        "pos_ms": data.get("pos_ms") if character else None,
+        "len_ms": data.get("len_ms") if character else None,
+        "round": char_info,
         "next_window_start": starts[0] if starts else None,
         "usage": usage,
     }
@@ -1234,6 +1326,8 @@ def get_episode_thumb(name: str, filename: str):
         raise HTTPException(status_code=404, detail="Episodio non trovato.")
 
     if _thumb_version(char_dir, video) is None:
+        if _thumb_failed(char_dir, video):
+            raise HTTPException(status_code=404, detail="Non riesco a estrarre un fotogramma da questo video.")
         if not _ffmpeg_available():
             raise HTTPException(status_code=404, detail="ffmpeg non installato: anteprime non disponibili.")
         if _player_playing():
@@ -1242,6 +1336,7 @@ def get_episode_thumb(name: str, filename: str):
             return JSONResponse({"detail": "Sto preparando un'altra anteprima."}, status_code=503, headers={"Retry-After": "3"})
         try:
             if _thumb_version(char_dir, video) is None and not _generate_thumb(char_dir, video):
+                _mark_thumb_failed(char_dir, video)
                 raise HTTPException(status_code=404, detail="Non riesco a estrarre un fotogramma da questo video.")
         finally:
             _thumb_lock.release()
@@ -1363,6 +1458,7 @@ def delete_character_episode(name: str, filename: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore nell'eliminare il file: {e}")
     _thumb_path(char_dir, file_name).unlink(missing_ok=True)
+    _thumb_path(char_dir, file_name).with_suffix(".failed").unlink(missing_ok=True)
 
     episode_state = load_episode_state()
     state = episode_state.get(name, {"known": [], "remaining": [], "seen": []})

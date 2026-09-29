@@ -632,14 +632,20 @@ try:
         # prima di riavviare il servizio (es. dopo un salvataggio dei limiti).
         # "blocked" (visione bloccata ora dai limiti di tempo) e "ts" li usa
         # led.py per scegliere l'effetto del LED di stato.
-        # "character"/"episode" servono alla web UI per mostrare cosa c'è sulla TV.
+        # "character"/"episode"/"pos_ms"/"len_ms" servono alla web UI per mostrare
+        # cosa c'è sulla TV e a che punto è l'episodio.
         try:
             blocked = not is_viewing_allowed_now(None)[0]
+            pos_ms = len_ms = None
+            if mode in ("playing", "paused"):
+                pos_ms = player.player.get_time()
+                len_ms = player.player.get_length()
             with (BASE_DIR / "last_seen_tag.json").open("w") as _f:
                 json.dump({
                     "uid": uid, "ts": time.time(), "mode": mode, "blocked": blocked,
                     "character": current_character,
                     "episode": current_video_path.name if current_video_path else None,
+                    "pos_ms": pos_ms, "len_ms": len_ms,
                 }, _f)
         except Exception:
             pass
