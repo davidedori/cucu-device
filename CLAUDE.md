@@ -42,7 +42,7 @@ Il refactor da "TinyWorlds" a "cucu-device" è stato completato. Tutti i path, n
 3. Controlla VLC tramite `python-vlc` (binding nativo, non subprocess)
 4. Gestisce la sequenza degli episodi per ogni personaggio (round-robin senza ripetizioni, stato persistito in `episode_state.json`)
 
-La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene caricato/salvato in `episode_state.json` (non tracciato in git, specifico del dispositivo).
+La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene caricato/salvato in `episode_state.json` (non tracciato in git, specifico del dispositivo). La web UI lo modifica mentre il servizio gira (upload, rinomina, "ricomincia il giro", nome del personaggio), quindi `read_nfc.py` lo **rilegge dal disco** prima di scegliere un episodio e lo riscrive toccando solo la voce del personaggio, conservando le altre chiavi (es. `display_name`). Anche `tags.json` viene ricaricato quando cambia (una `stat()` per tick): le statuine abbinate dal web funzionano senza riavviare il servizio. I JSON di stato si scrivono in modo atomico (file `.tmp` + `os.replace`), sia qui sia nell'API.
 
 **`api/main.py`** — server FastAPI (porta 80), lanciato da `cucu-device-api.service` tramite uvicorn nel venv. Gestisce:
 - CRUD personaggi (crea cartella in `characters/`, gestisce `tags.json`)
@@ -52,6 +52,8 @@ La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene carica
 - Gestione rete Wi-Fi via nmcli (scan, connessione, hotspot)
 - Serve `index.html` come SPA alla root e gli asset in `api/static/` su `/static`
 - `GET /system/info`: hostname, versione, canale OTA, spazio libero su disco
+- Statuine: `move: true` nel POST sposta una statuina da un altro personaggio; `PUT /characters/{name}/tags/{uid}/label` le dà un nome. Gli UID si confrontano senza distinguere maiuscole/minuscole (i lettori scrivono esadecimale minuscolo)
+- `POST /characters/{name}/episodes/reset-round`: tutti gli episodi tornano da vedere
 
 **`api/index.html`** — frontend SPA single-file (HTML/CSS/JS inline), mobile-first, con lo stile del sito (`cucu-website/DESIGN.md`): routing via hash (`#/personaggi`, `#/personaggi/<nome>`, `#/tempo`, `#/impostazioni`), DOM costruito con `h()` senza `innerHTML` sui dati utente. Nessuna dipendenza da npm o bundler. Si aggiorna via git pull come tutto il resto.
 
@@ -80,6 +82,7 @@ Tutto il progetto vive in `/home/davidedorigatti/cucu-device/`. Questo path è h
 |---|---|---|
 | `tags.json` | Sì (default vuoto) | Mapping UID → personaggio, modificato dall'utente |
 | `episode_state.json` | No | Stato episodi visti, generato a runtime |
+| `tag_labels.json` | No | Nomi dati alle statuine dal genitore (UID → nome); `tags.json` resta UID → personaggio |
 | `config.env` | No | Configurazione OTA specifica del dispositivo |
 | `config.env.template` | Sì | Template da cui generare `config.env` |
 | `VERSION` | Sì | Versione corrente (plain text, es. `0.1.0`) |

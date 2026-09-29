@@ -33,6 +33,7 @@ CONFIG_ENV_FILE = BASE_DIR / "config.env"
 VERSION_FILE = BASE_DIR / "VERSION"
 LAST_SEEN_TAG_FILE = BASE_DIR / "last_seen_tag.json"
 TIME_LIMITS_FILE = BASE_DIR / "time_limits.json"
+TAG_LABELS_FILE = BASE_DIR / "tag_labels.json"
 DAILY_USAGE_FILE = BASE_DIR / "daily_usage.json"
 
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -47,6 +48,11 @@ class CharacterCreate(BaseModel):
 
 class TagCreate(BaseModel):
     uid: str
+    # True: se la statuina è già di un altro personaggio, la sposta qui
+    move: bool = False
+
+class TagLabel(BaseModel):
+    label: str = ""
 
 class EpisodeRename(BaseModel):
     new_filename: str
@@ -67,6 +73,16 @@ class TimeLimitsConfig(BaseModel):
 class TimeLimitExempt(BaseModel):
     exempt: bool
 
+def _write_json_atomic(path: Path, data):
+    """Scrive su un file temporaneo e lo rinomina: chi legge (read_nfc.py) non
+    vede mai un file a metà, e una mancanza di corrente lascia il file vecchio."""
+    tmp = path.with_name(path.name + ".tmp")
+    with tmp.open("w") as f:
+        json.dump(data, f)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
 def load_episode_state():
     if EPISODE_STATE_FILE.exists():
         try:
@@ -79,8 +95,7 @@ def load_episode_state():
 
 def save_episode_state(state: dict):
     try:
-        with EPISODE_STATE_FILE.open("w") as f:
-            json.dump(state, f)
+        _write_json_atomic(EPISODE_STATE_FILE, state)
     except Exception as e:
         print(f"Errore nel salvare {EPISODE_STATE_FILE}: {e}")
 
@@ -97,11 +112,44 @@ def load_tags():
 
 def save_tags(tags: dict):
     try:
-        with TAGS_FILE.open("w") as f:
-            json.dump(tags, f)
+        _write_json_atomic(TAGS_FILE, tags)
     except Exception as e:
         print(f"Errore nel salvare {TAGS_FILE}: {e}")
 
+
+def _norm_uid(uid: str) -> str:
+    """UID nel formato dei lettori: byte esadecimali minuscoli separati da uno spazio."""
+    return " ".join(uid.strip().split()).lower()
+
+def _find_uid(tags_map: dict, uid: str):
+    """Chiave di tags.json che corrisponde a uid ignorando maiuscole e spazi
+    (le voci inserite a mano in passato potevano essere in maiuscolo)."""
+    target = _norm_uid(uid)
+    for key in tags_map:
+        if _norm_uid(key) == target:
+            return key
+    return None
+
+def _display_name(episode_state: dict, name: str) -> str:
+    return episode_state.get(name, {}).get("display_name", name.replace("_", " ").title())
+
+def load_tag_labels():
+    if TAG_LABELS_FILE.exists():
+        try:
+            with TAG_LABELS_FILE.open() as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Errore nel leggere {TAG_LABELS_FILE}: {e}")
+    return {}
+
+def save_tag_labels(labels: dict):
+    try:
+        _write_json_atomic(TAG_LABELS_FILE, labels)
+    except Exception as e:
+        print(f"Errore nel salvare {TAG_LABELS_FILE}: {e}")
+
+def _video_files(char_dir: Path):
+    return [p for p in char_dir.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT]
 
 def load_time_limits():
     default = {"enabled": False, "days": {}, "exempt_characters": []}
@@ -116,8 +164,7 @@ def load_time_limits():
 
 def save_time_limits(data: dict):
     try:
-        with TIME_LIMITS_FILE.open("w") as f:
-            json.dump(data, f)
+        _write_json_atomic(TIME_LIMITS_FILE, data)
     except Exception as e:
         print(f"Errore nel salvare {TIME_LIMITS_FILE}: {e}")
 
@@ -418,19 +465,24 @@ def get_character(name: str):
     ]
     file_names = [p.name for p in files]
 
-    # Tag NFC associati a questo personaggio
+    # Tag NFC associati a questo personaggio, con l'eventuale nome dato dal genitore
+    labels = load_tag_labels()
     tag_uids = [
-        {"uid": uid}
+        {"uid": uid, "label": labels.get(_norm_uid(uid), "")}
         for uid, char in tags_map.items()
         if char == name
     ]
 
-    # Costruisci lista episodi con stato friendly
+    # Costruisci lista episodi con stato friendly. "watched": già visto nel giro
+    # in corso (conosciuto e non più tra i rimanenti); i file non ancora nello
+    # stato contano come da vedere, come fa read_nfc.py
     episodes = []
     for p in files:
         fname = p.name
         episodes.append({
             "filename": fname,
+            "size_bytes": p.stat().st_size,
+            "watched": fname in known and fname not in remaining,
             "status": {
                 "known": fname in known,
                 "remaining": fname in remaining,
@@ -440,6 +492,7 @@ def get_character(name: str):
 
     # Statistiche (basate solo su file realmente presenti)
     total_episodes = len(file_names)
+    watched_count = sum(1 for e in episodes if e["watched"])
     remaining_count = len([f for f in remaining if f in file_names])
     seen_count = len([f for f in seen if f in file_names])
 
@@ -467,6 +520,7 @@ def get_character(name: str):
             "total_episodes": total_episodes,
             "remaining": remaining_count,
             "seen": seen_count,
+            "watched_in_round": watched_count,
         }
     }
 
@@ -522,21 +576,23 @@ def add_character_tag(name: str, payload: TagCreate):
     if not char_dir.exists() or not char_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"Personaggio '{name}' non trovato")
 
-    # normalizziamo un po' l'UID: togli spazi extra, metti tutto maiuscolo
-    raw_uid = payload.uid.strip()
-    if not raw_uid:
+    # stesso formato dei lettori (esadecimale minuscolo), su cui si basa read_nfc.py
+    if not payload.uid.strip():
         raise HTTPException(status_code=400, detail="UID non può essere vuoto.")
-
-    uid_norm = " ".join(raw_uid.split())
+    uid_norm = _norm_uid(payload.uid)
 
     tags_map = load_tags()
 
-    # se l'UID è già associato ad un altro personaggio, blocchiamo
-    if uid_norm in tags_map and tags_map[uid_norm] != name:
+    # se l'UID è già associato ad un altro personaggio, blocchiamo (salvo move)
+    existing = _find_uid(tags_map, uid_norm)
+    if existing is not None and tags_map[existing] != name and not payload.move:
+        other = _display_name(load_episode_state(), tags_map[existing])
         raise HTTPException(
             status_code=400,
-            detail=f"UID già associato al personaggio '{tags_map[uid_norm]}'."
+            detail=f"Questa statuina è già di {other}."
         )
+    if existing is not None:
+        del tags_map[existing]
 
     # associa questo UID al personaggio
     tags_map[uid_norm] = name
@@ -563,12 +619,11 @@ def delete_character_tag(name: str, uid: str):
     if not char_dir.exists() or not char_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"Personaggio '{name}' non trovato")
 
-    # normalizza UID come nel POST
-    uid_norm = " ".join(uid.strip().split()).upper()
-
     tags_map = load_tags()
 
-    if uid_norm not in tags_map:
+    # confronto senza maiuscole/spazi: i lettori scrivono l'UID in minuscolo
+    uid_norm = _find_uid(tags_map, uid)
+    if uid_norm is None:
         raise HTTPException(status_code=404, detail="UID non presente in tags.json.")
 
     if tags_map[uid_norm] != name:
@@ -577,11 +632,35 @@ def delete_character_tag(name: str, uid: str):
             detail=f"Questo UID è associato a '{tags_map[uid_norm]}', non a '{name}'."
         )
 
-    # rimuovi l'UID
+    # rimuovi l'UID (e l'eventuale nome dato alla statuina)
     del tags_map[uid_norm]
     save_tags(tags_map)
 
+    labels = load_tag_labels()
+    if labels.pop(_norm_uid(uid_norm), None) is not None:
+        save_tag_labels(labels)
+
     return {"character": name, "uid": uid_norm, "status": "removed"}
+
+@app.put("/characters/{name}/tags/{uid}/label")
+def set_character_tag_label(name: str, uid: str, payload: TagLabel):
+    """
+    Dà un nome a una statuina (es. "quella rossa", "di scorta"). Salvato a parte
+    in tag_labels.json: tags.json resta nel formato UID → personaggio letto da read_nfc.py.
+    """
+    tags_map = load_tags()
+    key = _find_uid(tags_map, uid)
+    if key is None or tags_map[key] != name:
+        raise HTTPException(status_code=404, detail="Statuina non trovata per questo personaggio.")
+
+    label = " ".join(payload.label.split())[:40]
+    labels = load_tag_labels()
+    if label:
+        labels[_norm_uid(key)] = label
+    else:
+        labels.pop(_norm_uid(key), None)
+    save_tag_labels(labels)
+    return {"character": name, "uid": key, "label": label}
 
 @app.get("/system/scan-tag")
 def scan_tag():
@@ -606,9 +685,14 @@ def scan_tag():
         return {"uid": None, "known_character": None}
 
     tags_map = load_tags()
-    known_character = tags_map.get(uid)
+    key = _find_uid(tags_map, uid)
+    known_character = tags_map[key] if key is not None else None
 
-    return {"uid": uid, "known_character": known_character}
+    return {
+        "uid": uid,
+        "known_character": known_character,
+        "known_display_name": _display_name(load_episode_state(), known_character) if known_character else None,
+    }
 
 @app.get("/system/time-limits")
 def get_time_limits():
@@ -801,6 +885,29 @@ async def upload_character_episodes(
         }
     }
 
+
+@app.post("/characters/{name}/episodes/reset-round")
+def reset_character_round(name: str):
+    """
+    "Ricomincia il giro": tutti gli episodi tornano da vedere. Tocca solo la voce
+    di questo personaggio in episode_state.json (mai reinizializzare il file);
+    read_nfc.py rilegge lo stato dal disco prima di scegliere l'episodio, quindi
+    vale dal prossimo episodio senza riavviare nulla.
+    """
+    char_dir = CHARACTERS_DIR / name
+    if not char_dir.exists() or not char_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Personaggio '{name}' non trovato")
+
+    file_names = [p.name for p in _video_files(char_dir)]
+    episode_state = load_episode_state()
+    state = episode_state.get(name, {})
+    known = [f for f in state.get("known", []) if f in file_names]
+    known += [f for f in file_names if f not in known]
+
+    episode_state[name] = {**state, "known": known, "remaining": known.copy(), "seen": state.get("seen", [])}
+    save_episode_state(episode_state)
+
+    return {"character": name, "status": "reset", "remaining": len(known)}
 
 @app.patch("/characters/{name}/episodes/{filename}")
 def rename_character_episode(name: str, filename: str, payload: EpisodeRename):
@@ -1071,7 +1178,14 @@ def delete_character(name: str):
             del tags_map[uid]
         save_tags(tags_map)
 
-    # 3. Pulizia esenzione limiti di tempo
+    # 3. Pulizia nomi delle statuine tolte
+    if uids_to_remove:
+        labels = load_tag_labels()
+        removed_labels = [labels.pop(_norm_uid(u), None) for u in uids_to_remove]
+        if any(l is not None for l in removed_labels):
+            save_tag_labels(labels)
+
+    # 4. Pulizia esenzione limiti di tempo
     limits = load_time_limits()
     exempt_list = limits.get("exempt_characters", [])
     if name in exempt_list:

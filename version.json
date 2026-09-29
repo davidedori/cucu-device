@@ -1,5 +1,5 @@
 {
-  "version": "0.4.0",
+  "version": "0.5.0",
   "min_version": "0.1.0",
-  "changelog": "New parent web app design, in line with the Cucù website (Fraunces and Figtree fonts, warm grey and pastel palette, hand-made shapes), built for phones first: bottom navigation, full-page character details, bottom sheets instead of browser pop-ups, undo for deleted figurines and episodes, clear upload errors, free disk space shown before uploading. Fonts and logo are now served by the device itself, so the page looks right on the emergency hotspot too."
+  "changelog": "Figurines and episodes added from the web app now work right away, without restarting the player, and character names keep their capitals and accents. Removing a figurine from the web app works again. New in the web app: a 3-step wizard for new characters (name and photo, figurine, first episodes), moving a figurine from another character, names for figurines, watched/to-watch episodes with a 'start the round again' button, renaming episodes, an upload queue with per-file progress and cancel, and photos shrunk on the phone before upload. State files are now written atomically, so a power cut can no longer truncate them."
 }

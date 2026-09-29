@@ -562,6 +562,51 @@
 
     .danger-zone { margin-top: 28px; text-align: center; }
 
+    .row-actions { display: flex; flex: none; }
+    .inline-edit { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+    .inline-edit .actions { display: flex; gap: 8px; }
+    .inline-edit .field-wrap .field { padding-right: 64px; }
+    .hero-text .inline-edit { padding: 0; }
+
+    /* Giro degli episodi: quanti ne ha già visti */
+    .round { display: flex; align-items: center; gap: 12px; margin: 8px 0 12px; }
+    .round-text { flex: 1; min-width: 0; }
+    .round .btn-quiet { flex: none; min-height: 44px; }
+
+    /* Coda di caricamento */
+    .queue { display: flex; flex-direction: column; gap: 8px; }
+    .queue-item { display: flex; align-items: center; gap: 8px; background: var(--bg); border-radius: 14px; padding: 10px 6px 10px 14px; }
+    .queue-item.error .row-sub { color: var(--danger); }
+
+    /* Scansione: azione (Spostala qui / Riprova) e ascolto in pausa */
+    .scan-action:not(:empty) { margin-top: 12px; }
+    .scan-visual.paused .ring { animation: none; opacity: 0; }
+
+    /* Wizard nuovo personaggio */
+    .steps { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; font-size: 14px; color: var(--muted); }
+    .steps i { width: 22px; height: 6px; border-radius: 3px; background: var(--line); }
+    .steps i.on { background: var(--orange-text); }
+    .steps span { margin-left: 6px; }
+
+    .photo-pick {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      margin-top: 14px;
+      padding: 8px;
+      border: 0;
+      border-radius: 16px;
+      background: var(--bg);
+      color: var(--ink);
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .avatar.sm { width: 56px; height: 56px; font-size: 22px; background: var(--surface); color: var(--muted); }
+    .avatar.sm svg { width: 24px; height: 24px; }
+
     /* ---------- Limiti di tempo ---------- */
     .day h2 { font-size: 19px; margin-bottom: 12px; }
     .day .windows { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
@@ -655,6 +700,9 @@
     }
 
     .toast:not(:has(button)) { padding-right: 18px; }
+
+    /* Con un pannello aperto il toast va in alto, per non coprirne i pulsanti */
+    body.sheet-open .toast { bottom: auto; top: calc(16px + var(--safe-t)); }
     .toast button { background: none; border: 0; color: #ffc9b5; font-weight: 600; min-height: 36px; padding: 0 8px; cursor: pointer; }
 
     /* ---------- Riconnessione ---------- */
@@ -874,8 +922,6 @@
   <div id="toast-root" aria-live="polite"></div>
   <div id="reconnect-root"></div>
 
-  <input type="file" id="file-image" accept="image/png,image/jpeg" hidden>
-  <input type="file" id="file-videos" accept=".mp4,.mkv,.avi,.mov,.m4v,video/*" multiple hidden>
 
   <script>
     'use strict';
@@ -960,7 +1006,7 @@
     function formatBytes(b) {
       if (b == null) return '—';
       const gb = b / 1e9;
-      return gb >= 1 ? `${gb.toFixed(1).replace('.', ',')} GB` : `${Math.round(b / 1e6)} MB`;
+      return gb >= 1 ? `${gb.toFixed(1).replace('.', ',')} GB` : `${Math.max(1, Math.round(b / 1e6))} MB`;
     }
 
     /* ================= API ================= */
@@ -1026,6 +1072,7 @@
         onclick: (e) => { if (e.target === backdrop) closeSheet(); },
       }, sheet);
       $('sheet-root').append(backdrop);
+      document.body.classList.add('sheet-open');
       const first = sheet.querySelector('input, .actions button');
       if (first) setTimeout(() => first.focus(), 60);
       return sheet;
@@ -1035,6 +1082,7 @@
       const root = $('sheet-root');
       if (!root.firstChild) return;
       root.replaceChildren();
+      document.body.classList.remove('sheet-open');
       const cb = sheetOnClose;
       sheetOnClose = null;
       if (cb) cb();
@@ -1076,7 +1124,6 @@
     let info = null;
     let imageVersion = Date.now();
     let current = null;          // scheda del personaggio aperto
-    let uploading = false;
 
     const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
     const DAY_LABELS = { mon: 'Lunedì', tue: 'Martedì', wed: 'Mercoledì', thu: 'Giovedì', fri: 'Venerdì', sat: 'Sabato', sun: 'Domenica' };
@@ -1119,6 +1166,7 @@
         showView('impostazioni');
         renderWifi();
         renderInfo();
+        if (!updatesChecked) checkUpdates();
       }
       window.scrollTo(0, 0);
     }
@@ -1208,19 +1256,99 @@
       root.replaceChildren(grid);
     }
 
-    /* ---------- Nuovo personaggio: nome, poi statuina ---------- */
+    /* ---------- Scelta file ---------- */
+
+    // Input creato al volo e cliccato subito, dentro il gesto dell'utente
+    // (i browser dei telefoni aprono il selettore solo così)
+    function pickFiles({ accept, multiple }, onPick) {
+      const input = h('input', { type: 'file', accept, multiple: multiple || null, hidden: true });
+      input.addEventListener('change', () => {
+        const files = Array.from(input.files || []);
+        input.remove();
+        if (files.length) onPick(files);
+      });
+      document.body.append(input);
+      input.click();
+    }
+
+    const VIDEO_ACCEPT = '.mp4,.mkv,.avi,.mov,.m4v,video/*';
+    const IMAGE_ACCEPT = 'image/png,image/jpeg';
+
+    /* ---------- Foto: rimpicciolita sul telefono prima di inviarla ---------- */
+    // Le foto del telefono pesano diversi MB: al Cucù basta un quadrato di 600 px.
+    // I PNG restano PNG, così le statuine scontornate mantengono la trasparenza
+
+    const IMAGE_MAX = 600;
+
+    async function shrinkImage(file) {
+      const isPng = file.type === 'image/png';
+      try {
+        const url = URL.createObjectURL(file);
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = reject;
+          i.src = url;
+        });
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, IMAGE_MAX / Math.max(img.naturalWidth, img.naturalHeight));
+        if (scale === 1 && file.size < 400 * 1024) return { blob: file, name: isPng ? 'profile.png' : 'profile.jpg' };
+        const canvas = h('canvas', { width: Math.round(img.naturalWidth * scale), height: Math.round(img.naturalHeight * scale) });
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise(r => canvas.toBlob(r, isPng ? 'image/png' : 'image/jpeg', 0.86));
+        if (!blob) throw new Error('canvas');
+        return { blob, name: isPng ? 'profile.png' : 'profile.jpg' };
+      } catch (_) {
+        // Se il browser non riesce a elaborarla, la mando così com'è
+        return { blob: file, name: file.name };
+      }
+    }
+
+    async function uploadImage(charName, file) {
+      const { blob, name } = await shrinkImage(file);
+      const fd = new FormData();
+      fd.append('file', blob, name);
+      const res = await fetch(`/characters/${enc(charName)}/image`, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(await errorText(res));
+      imageVersion = Date.now();
+    }
+
+    /* ---------- Nuovo personaggio: nome e foto, statuina, episodi ---------- */
+
+    function stepsLabel(n) {
+      return h('div', { class: 'steps', 'aria-label': `Passo ${n} di 3` },
+        [1, 2, 3].map(i => h('i', { class: i <= n ? 'on' : '' })),
+        h('span', { text: `Passo ${n} di 3` }));
+    }
 
     function openNewCharacter() {
+      let photo = null;
       const input = h('input', {
         class: 'field', id: 'nc-name', type: 'text', placeholder: 'Es. il gufo Bubo',
         autocomplete: 'off', enterkeyhint: 'done',
-        onkeydown: (e) => { if (e.key === 'Enter') submit(); },
+        onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } },
       });
-      const btn = h('button', { class: 'btn btn-primary btn-block', text: 'Crea personaggio', onclick: () => submit() });
+
+      const preview = h('div', { class: 'avatar sm' }, icon('camera'));
+      preview.style.borderRadius = PEBBLES[0];
+      const photoLabel = h('span', { text: 'Aggiungi una foto (se vuoi)' });
+      const photoBtn = h('button', {
+        class: 'photo-pick', type: 'button',
+        onclick: () => pickFiles({ accept: IMAGE_ACCEPT }, ([f]) => {
+          photo = f;
+          const url = URL.createObjectURL(f);
+          preview.replaceChildren();
+          preview.style.background = `center / cover no-repeat url("${url}")`;
+          photoLabel.textContent = 'Cambia foto';
+        }),
+      }, preview, photoLabel);
+
+      const btn = h('button', { class: 'btn btn-primary btn-block', text: 'Avanti', onclick: () => submit() });
       const body = h('div', {},
-        h('p', { class: 'sheet-text', text: 'Come si chiama? Usa il nome che userebbe il bambino.' }),
-        h('label', { class: 'lbl', for: 'nc-name', text: 'Nome' }),
+        stepsLabel(1),
+        h('label', { class: 'lbl', for: 'nc-name', text: 'Come si chiama?' }),
         input,
+        photoBtn,
         h('div', { class: 'actions' }, btn)
       );
 
@@ -1228,25 +1356,49 @@
         const name = input.value.trim();
         if (!name) { input.focus(); return; }
         btn.disabled = true;
+        let char;
         try {
-          const char = await api('/characters', { method: 'POST', body: { name } });
-          loadCharacters();
-          // Secondo passo: abbinare la statuina
-          setSheetTitle(char.display_name || name);
-          const scan = scanPanel({
-            title: 'Appoggia la statuina sul Cucù',
-            onCancel: () => { closeSheet(); location.hash = '#/personaggi/' + enc(char.name); },
-            cancelLabel: 'Lo faccio dopo',
-          });
-          body.replaceChildren(scan.el);
-          startTagScan(char.name, scan, () => {
-            closeSheet();
-            location.hash = '#/personaggi/' + enc(char.name);
-          });
+          char = await api('/characters', { method: 'POST', body: { name } });
         } catch (e) {
           toast(e.message);
           btn.disabled = false;
+          return;
         }
+        if (photo) {
+          try { await uploadImage(char.name, photo); } catch (e) { toast('La foto non è stata salvata: ' + e.message); }
+        }
+        loadCharacters();
+        setSheetTitle(char.display_name || name);
+        stepFigure(char);
+      }
+
+      function stepFigure(char) {
+        const scan = scanPanel({
+          title: 'Appoggia la sua statuina sul Cucù',
+          cancelLabel: 'Lo faccio dopo',
+          onCancel: () => { stopTagScan(); stepEpisodes(char); },
+        });
+        body.replaceChildren(stepsLabel(2), scan.el);
+        startTagScan(char.name, scan, () => stepEpisodes(char));
+      }
+
+      function stepEpisodes(char) {
+        const detail = '#/personaggi/' + enc(char.name);
+        body.replaceChildren(
+          stepsLabel(3),
+          h('p', { class: 'sheet-text', text: 'Ultimo passo: carica qualche episodio. Puoi aggiungerne altri quando vuoi.' }),
+          h('div', { class: 'actions' },
+            h('button', {
+              class: 'btn btn-primary btn-block',
+              onclick: () => {
+                closeSheet();
+                location.hash = detail;
+                pickVideos(char.name);
+              },
+            }, icon('upload'), 'Scegli i video'),
+            h('button', { class: 'btn btn-block', text: 'Lo faccio dopo', onclick: () => { closeSheet(); location.hash = detail; } })
+          )
+        );
       }
 
       openSheet({ title: 'Nuovo personaggio', content: body, onClose: stopTagScan });
@@ -1258,13 +1410,16 @@
 
     function scanPanel({ title, onCancel, cancelLabel }) {
       const status = h('div', { class: 'scan-status', text: 'In ascolto…' });
+      const action = h('div', { class: 'scan-action' });
+      const visual = h('div', { class: 'scan-visual', 'aria-hidden': 'true' },
+        h('span', { class: 'ring' }), h('span', { class: 'ring' }), h('span', { class: 'ring' }),
+        h('svg', { class: 'fig', viewBox: '0 0 80 90', html: FIGURE_SVG })
+      );
       const el = h('div', { class: 'scan' },
-        h('div', { class: 'scan-visual', 'aria-hidden': 'true' },
-          h('span', { class: 'ring' }), h('span', { class: 'ring' }), h('span', { class: 'ring' }),
-          h('svg', { class: 'fig', viewBox: '0 0 80 90', html: FIGURE_SVG })
-        ),
+        visual,
         h('div', { class: 'scan-title', text: title }),
-        status,
+        h('div', { role: 'status', 'aria-live': 'polite' }, status),
+        action,
         h('button', { class: 'btn', style: 'margin-top:10px', text: cancelLabel || 'Annulla', onclick: onCancel })
       );
       return {
@@ -1273,41 +1428,68 @@
           status.textContent = msg;
           status.className = 'scan-status' + (kind ? ' ' + kind : '');
         },
+        setAction(label, run) {
+          if (!label) { action.replaceChildren(); return; }
+          if (action.dataset.label === label) return;
+          action.dataset.label = label;
+          action.replaceChildren(h('button', { class: 'btn btn-primary', text: label, onclick: run }));
+        },
+        clearAction() { action.replaceChildren(); delete action.dataset.label; },
+        setListening(on) { visual.classList.toggle('paused', !on); },
       };
     }
 
     let scanTimer = null;
+    const SCAN_TIMEOUT_MS = 60000;
 
     async function startTagScan(charName, panel, onDone) {
       stopTagScan();
+      panel.setStatus('In ascolto…');
+      panel.clearAction();
+      panel.setListening(true);
+
       let known = new Set();
       try {
         const data = await api(`/characters/${enc(charName)}`);
-        known = new Set(data.tag_uids.map(t => t.uid));
+        known = new Set(data.tag_uids.map(t => t.uid.toLowerCase()));
       } catch (_) { /* si parte comunque */ }
 
+      const started = Date.now();
       let busy = false;
+
+      const attach = async (uid, move) => {
+        stopTagScan();
+        panel.clearAction();
+        panel.setStatus(move ? 'La sposto qui…' : 'Trovata! Un attimo…', 'ok');
+        try {
+          await api(`/characters/${enc(charName)}/tags`, { method: 'POST', body: { uid, move } });
+          toast(move ? 'Statuina spostata' : 'Statuina abbinata');
+          onDone();
+        } catch (e) {
+          panel.setStatus(e.message, 'error');
+        }
+      };
+
       scanTimer = setInterval(async () => {
         if (busy || document.hidden) return;
+        if (Date.now() - started > SCAN_TIMEOUT_MS) {
+          stopTagScan();
+          panel.setListening(false);
+          panel.setStatus('Non sento nessuna statuina. Appoggiala bene al centro e riprova.', 'warn');
+          panel.setAction('Riprova', () => startTagScan(charName, panel, onDone));
+          return;
+        }
         busy = true;
         try {
           const data = await api('/system/scan-tag');
-          if (!data.uid) { panel.setStatus('In ascolto…'); return; }
-          if (known.has(data.uid)) { panel.setStatus('Questa statuina è già sua.', 'warn'); return; }
+          if (!data.uid) { panel.setStatus('In ascolto…'); panel.clearAction(); return; }
+          if (known.has(data.uid.toLowerCase())) { panel.setStatus('Questa statuina è già sua.', 'warn'); panel.clearAction(); return; }
           if (data.known_character && data.known_character !== charName) {
-            const other = characters.find(c => c.name === data.known_character);
-            panel.setStatus(`Questa statuina è già di ${other ? other.display_name : data.known_character}. Provane un'altra.`, 'warn');
+            panel.setStatus(`Questa statuina ora fa partire ${data.known_display_name || data.known_character}.`, 'warn');
+            panel.setAction('Spostala qui', () => attach(data.uid, true));
             return;
           }
-          stopTagScan();
-          panel.setStatus('Trovata! Un attimo…', 'ok');
-          try {
-            await api(`/characters/${enc(charName)}/tags`, { method: 'POST', body: { uid: data.uid } });
-            toast('Statuina abbinata');
-            onDone();
-          } catch (e) {
-            panel.setStatus('Errore: ' + e.message, 'error');
-          }
+          await attach(data.uid, false);
         } catch (_) {
           // errori di rete durante l'ascolto: si riprova al giro dopo
         } finally {
@@ -1338,6 +1520,34 @@
       if (current) openCharacter(current.name);
     }
 
+    // "Episodio_01.La-pioggia.mp4" → "Episodio 01 La-pioggia"
+    function splitExt(filename) {
+      const i = filename.lastIndexOf('.');
+      return i > 0 ? [filename.slice(0, i), filename.slice(i)] : [filename, ''];
+    }
+
+    function prettyEpisode(filename) {
+      return splitExt(filename)[0].replace(/[_.]+/g, ' ').replace(/\s+/g, ' ').trim() || filename;
+    }
+
+    // Campo di modifica al posto del testo di una riga; Invio salva, Esc annulla
+    function inlineEdit(container, { value, label, placeholder, suffix, onSave, onCancel }) {
+      const input = h('input', { class: 'field', type: 'text', value, 'aria-label': label, placeholder, enterkeyhint: 'done' });
+      const save = h('button', { class: 'btn btn-primary', text: 'Salva' });
+      const form = h('form', { class: 'inline-edit' },
+        suffix ? h('div', { class: 'field-wrap' }, input, h('span', { class: 'suffix', text: suffix })) : input,
+        h('div', { class: 'actions' }, save, h('button', { class: 'btn', type: 'button', text: 'Annulla', onclick: onCancel })));
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        save.disabled = true;
+        try { await onSave(input.value.trim()); } catch (err) { toast(err.message); save.disabled = false; }
+      });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } });
+      container.replaceChildren(form);
+      input.focus();
+      input.select();
+    }
+
     function renderCharacter() {
       const c = current;
       const index = Math.max(0, characters.findIndex(x => x.name === c.name));
@@ -1354,77 +1564,101 @@
       );
 
       function startRename() {
-        const input = h('input', { class: 'field', type: 'text', value: c.display_name, 'aria-label': 'Nuovo nome' });
-        const save = h('button', { class: 'btn btn-primary', text: 'Salva' });
-        const form = h('form', { class: 'rename-form' }, input,
-          h('div', { class: 'actions' }, save, h('button', { class: 'btn', type: 'button', text: 'Annulla', onclick: renderTitle })));
-        form.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const newName = input.value.trim();
-          if (!newName || newName === c.display_name) { renderTitle(); return; }
-          save.disabled = true;
-          try {
+        inlineEdit(titleBox, {
+          value: c.display_name, label: 'Nuovo nome',
+          onCancel: renderTitle,
+          onSave: async (newName) => {
+            if (!newName || newName === c.display_name) { renderTitle(); return; }
             const res = await api(`/characters/${enc(c.name)}`, { method: 'PUT', body: { new_name: newName } });
             toast('Nome cambiato');
             characters = [];
             if (res.new_name !== c.name) location.replace('#/personaggi/' + enc(res.new_name));
             else refreshCharacter();
-          } catch (err) {
-            toast(err.message);
-            save.disabled = false;
-          }
+          },
         });
-        titleBox.replaceChildren(form);
-        input.focus();
-        input.select();
       }
 
       renderTitle();
 
       const hero = h('div', { class: 'char-hero' },
-        h('button', { class: 'avatar-btn', 'aria-label': 'Cambia foto', onclick: () => $('file-image').click() },
+        h('button', {
+          class: 'avatar-btn', 'aria-label': 'Cambia foto',
+          onclick: () => pickFiles({ accept: IMAGE_ACCEPT }, async ([f]) => {
+            try { await uploadImage(c.name, f); toast('Foto cambiata'); refreshCharacter(); } catch (e) { toast(e.message); }
+          }),
+        },
           avatar(c, index, true),
           h('span', { class: 'badge-cam' }, icon('camera'))
         ),
         titleBox
       );
 
-      // Statuine
-      const tagRows = h('div', { class: 'rows' });
+      root.replaceChildren(hero, h('div', { class: 'stack' }, figuresPanel(c, index), episodesPanel(c), alwaysPanel(c)),
+        h('div', { class: 'danger-zone' },
+          h('button', { class: 'btn btn-quiet', style: 'color:var(--danger)', text: 'Elimina personaggio', onclick: deleteCharacter })));
+      renderUploadQueue();
+    }
+
+    /* ---------- Statuine ---------- */
+
+    function figuresPanel(c, index) {
+      const rows = h('div', { class: 'rows' });
       if (!c.tag_uids.length) {
-        tagRows.append(h('div', { class: 'row-empty', text: 'Ancora nessuna statuina: abbinane una per far partire i suoi episodi.' }));
+        rows.append(h('div', { class: 'row-empty', text: 'Ancora nessuna statuina: abbinane una per far partire i suoi episodi.' }));
       }
       c.tag_uids.forEach((t, i) => {
         const [bg, fg] = TINTS[(index + i) % TINTS.length];
-        const row = h('div', { class: 'row' },
-          h('div', { class: 'row-lead', style: `background:${bg};color:${fg}` }, icon('figure')),
-          h('div', { class: 'row-main' },
-            h('div', { class: 'row-title', text: `Statuina ${i + 1}` }),
-            h('div', { class: 'row-sub mono', text: t.uid })
-          ),
+        const fallback = `Statuina ${i + 1}`;
+        const main = h('div', { class: 'row-main' });
+        const showMain = () => main.replaceChildren(
+          h('div', { class: 'row-title', text: t.label || fallback }),
+          h('div', { class: 'row-sub mono', text: t.uid }));
+        showMain();
+
+        const actions = h('div', { class: 'row-actions' },
           h('button', {
-            class: 'icon-btn danger', 'aria-label': `Togli statuina ${i + 1}`,
+            class: 'icon-btn', 'aria-label': `Dai un nome a ${t.label || fallback}`,
+            onclick: () => {
+              actions.classList.add('hidden');
+              const done = () => { actions.classList.remove('hidden'); showMain(); };
+              inlineEdit(main, {
+                value: t.label || '', label: 'Nome della statuina', placeholder: 'Es. quella rossa',
+                onCancel: done,
+                onSave: async (label) => {
+                  const res = await api(`/characters/${enc(c.name)}/tags/${enc(t.uid)}/label`, { method: 'PUT', body: { label } });
+                  t.label = res.label;
+                  done();
+                },
+              });
+            },
+          }, icon('edit')),
+          h('button', {
+            class: 'icon-btn danger', 'aria-label': `Togli ${t.label || fallback}`,
             onclick: () => deferredDelete(row, 'Statuina tolta', () =>
               api(`/characters/${enc(c.name)}/tags/${enc(t.uid)}`, { method: 'DELETE', keepalive: true })),
           }, icon('remove'))
         );
-        tagRows.append(row);
+
+        const row = h('div', { class: 'row' },
+          h('div', { class: 'row-lead', style: `background:${bg};color:${fg}` }, icon('figure')),
+          main, actions);
+        rows.append(row);
       });
 
       const scanSlot = h('div');
-      const addTagBtn = h('button', { class: 'btn btn-block', style: 'margin-top:14px' }, icon('plus'), 'Abbina una statuina');
-      addTagBtn.addEventListener('click', () => {
-        addTagBtn.classList.add('hidden');
+      const addBtn = h('button', { class: 'btn btn-block', style: 'margin-top:14px' }, icon('plus'), 'Abbina una statuina');
+      addBtn.addEventListener('click', () => {
+        addBtn.classList.add('hidden');
         const panel = scanPanel({
           title: 'Appoggia la statuina sul Cucù',
-          onCancel: () => { stopTagScan(); scanSlot.replaceChildren(); addTagBtn.classList.remove('hidden'); },
+          onCancel: () => { stopTagScan(); scanSlot.replaceChildren(); addBtn.classList.remove('hidden'); },
         });
         scanSlot.replaceChildren(panel.el);
         panel.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         startTagScan(c.name, panel, refreshCharacter);
       });
 
-      const manualInput = h('input', { class: 'field mono', type: 'text', placeholder: '04 a1 b2 c3', 'aria-label': 'Codice della statuina', autocomplete: 'off' });
+      const manualInput = h('input', { class: 'field mono', type: 'text', placeholder: '04 a1 b2 c3', 'aria-label': 'Codice della statuina', autocomplete: 'off', autocapitalize: 'off' });
       const manual = h('details', { class: 'more', style: 'margin-top:6px' },
         h('summary', {}, icon('chevron'), 'Inserisci il codice a mano'),
         h('form', {
@@ -1442,47 +1676,108 @@
         }, manualInput, h('button', { class: 'btn', text: 'Aggiungi' }))
       );
 
-      const tagsPanel = h('div', { class: 'panel' },
+      return h('div', { class: 'panel' },
         h('h2', { text: 'Statuine' }),
-        h('div', { class: 'panel-sub', style: 'margin-top:4px', text: 'Appoggiane una sul Cucù per far partire un episodio.' }),
-        tagRows, scanSlot, addTagBtn, manual
-      );
+        h('div', { class: 'panel-sub', style: 'margin-top:4px', text: 'Appoggiane una sul Cucù per far partire un episodio. Puoi dare un nome a ciascuna.' }),
+        rows, scanSlot, addBtn, manual);
+    }
 
-      // Episodi
-      const epRows = h('div', { class: 'rows' });
-      if (!c.episodes.length) {
-        epRows.append(h('div', { class: 'row-empty', text: 'Ancora nessun episodio.' }));
-      }
+    /* ---------- Episodi ---------- */
+
+    function episodesPanel(c) {
+      const total = c.episodes.length;
+      const watched = c.stats.watched_in_round || 0;
+      const rows = h('div', { class: 'rows' });
+      if (!total) rows.append(h('div', { class: 'row-empty', text: 'Ancora nessun episodio.' }));
+
       c.episodes
         .slice()
         .sort((a, b) => a.filename.localeCompare(b.filename, 'it', { numeric: true }))
         .forEach((ep) => {
-          const row = h('div', { class: 'row' },
-            h('div', { class: 'row-lead', style: 'background:var(--bg);color:var(--muted)' }, icon('film')),
-            h('div', { class: 'row-main' }, h('div', { class: 'row-title', style: 'font-weight:400', text: ep.filename })),
+          const [base, ext] = splitExt(ep.filename);
+          const main = h('div', { class: 'row-main' });
+          const showMain = () => main.replaceChildren(
+            h('div', { class: 'row-title', style: 'font-weight:400' },
+              prettyEpisode(ep.filename),
+              ep.watched ? h('span', { class: 'tag known', text: 'Visto' }) : null),
+            h('div', { class: 'row-sub', text: `${ext.replace('.', '').toUpperCase()} · ${formatBytes(ep.size_bytes)}` }));
+          showMain();
+
+          const actions = h('div', { class: 'row-actions' },
             h('button', {
-              class: 'icon-btn danger', 'aria-label': 'Elimina ' + ep.filename,
+              class: 'icon-btn', 'aria-label': 'Rinomina ' + prettyEpisode(ep.filename),
+              onclick: () => {
+                actions.classList.add('hidden');
+                inlineEdit(main, {
+                  value: base, label: 'Nome dell\'episodio', suffix: ext,
+                  onCancel: () => { actions.classList.remove('hidden'); showMain(); },
+                  onSave: async (newBase) => {
+                    if (!newBase || newBase === base) { actions.classList.remove('hidden'); showMain(); return; }
+                    if (/[\\/]/.test(newBase)) throw new Error('Il nome non può contenere / o \\');
+                    await api(`/characters/${enc(c.name)}/episodes/${enc(ep.filename)}`, { method: 'PATCH', body: { new_filename: newBase + ext } });
+                    toast('Episodio rinominato');
+                    refreshCharacter();
+                  },
+                });
+              },
+            }, icon('edit')),
+            h('button', {
+              class: 'icon-btn danger', 'aria-label': 'Elimina ' + prettyEpisode(ep.filename),
               onclick: () => deferredDelete(row, 'Episodio eliminato', () =>
                 api(`/characters/${enc(c.name)}/episodes/${enc(ep.filename)}`, { method: 'DELETE', keepalive: true })),
             }, icon('remove'))
           );
-          epRows.append(row);
+
+          const row = h('div', { class: 'row' },
+            h('div', { class: 'row-lead', style: 'background:var(--bg);color:var(--muted)' }, icon('film')),
+            main, actions);
+          rows.append(row);
         });
 
-      const epPanel = h('div', { class: 'panel' },
+      let round = null;
+      if (total) {
+        const all = watched >= total;
+        round = h('div', { class: 'round' },
+          h('div', { class: 'round-text' },
+            h('div', { class: 'bar' }, h('div', { style: `width:${Math.round(watched / total * 100)}%;background:var(--green-ink)` })),
+            h('div', {
+              class: 'muted small', style: 'margin-top:6px',
+              text: all ? `Li ha visti tutti: al prossimo giro si ricomincia.` : `${watched} di ${total} già visti in questo giro`,
+            })),
+          watched ? h('button', { class: 'btn btn-quiet', text: 'Ricomincia il giro', onclick: () => resetRound(c) }) : null
+        );
+      }
+
+      return h('div', { class: 'panel' },
         h('h2', { text: 'Episodi' }),
         h('div', { class: 'panel-sub', style: 'margin-top:4px', text: 'Partono uno alla volta, senza ripetizioni finché non li ha visti tutti.' }),
-        epRows,
+        round,
+        rows,
         h('div', { id: 'upload-slot' }),
-        h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => $('file-videos').click() }, icon('upload'), 'Aggiungi episodi'),
+        h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => pickVideos(c.name) }, icon('upload'), 'Aggiungi episodi'),
         info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.free_bytes)}` }) : null
       );
+    }
 
-      // Orari
+    async function resetRound(c) {
+      const ok = await confirmSheet({
+        title: 'Ricominciare il giro?',
+        text: `Tutti gli episodi di ${c.display_name} tornano da vedere. Vale dal prossimo episodio.`,
+        ok: 'Ricomincia',
+      });
+      if (!ok) return;
+      try {
+        await api(`/characters/${enc(c.name)}/episodes/reset-round`, { method: 'POST' });
+        toast('Si ricomincia da capo');
+        refreshCharacter();
+      } catch (e) { toast(e.message); }
+    }
+
+    function alwaysPanel(c) {
       const exempt = h('input', { type: 'checkbox', 'aria-label': 'Sempre disponibile' });
       exempt.checked = !!c.time_limit_exempt;
       exempt.addEventListener('change', () => toggleExempt(exempt));
-      const timePanel = h('div', { class: 'panel' },
+      return h('div', { class: 'panel' },
         h('div', { class: 'panel-head', style: 'margin:0' },
           h('div', {},
             h('h2', { text: 'Sempre disponibile' }),
@@ -1491,13 +1786,6 @@
           h('label', { class: 'switch' }, exempt, h('span', { class: 'slider' }))
         )
       );
-
-      const danger = h('div', { class: 'danger-zone' },
-        h('button', { class: 'btn btn-quiet', style: 'color:var(--danger)', text: 'Elimina personaggio', onclick: deleteCharacter })
-      );
-
-      root.replaceChildren(hero, h('div', { class: 'stack' }, tagsPanel, epPanel, timePanel), danger);
-      if (uploading) renderUploadProgress();
     }
 
     // Eliminazione con "Annulla": la riga sparisce subito, la cancellazione vera
@@ -1555,104 +1843,152 @@
       } catch (e) { toast(e.message); }
     }
 
-    /* ---------- Foto ---------- */
+    /* ---------- Episodi: coda di caricamento ---------- */
+    // Un file alla volta, ognuno con la sua barra e il suo "annulla".
+    // La coda sopravvive alla navigazione: si vede quando si torna sul personaggio
 
-    $('file-image').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      e.target.value = '';
-      if (!file || !current) return;
-      const fd = new FormData();
-      fd.append('file', file);
-      try {
-        const res = await fetch(`/characters/${enc(current.name)}/image`, { method: 'POST', body: fd });
-        if (!res.ok) throw new Error(await errorText(res));
-        imageVersion = Date.now();
-        toast('Foto cambiata');
-        refreshCharacter();
-      } catch (err) { toast(err.message); }
-    });
+    let queue = null; // { target, displayName, items: [{ file, status, loaded, error, xhr }] }
 
-    /* ---------- Episodi: caricamento ---------- */
+    const isUploading = () => !!queue && queue.items.some(i => i.status === 'waiting' || i.status === 'uploading');
 
-    let uploadState = null;
-
-    function renderUploadProgress() {
-      const slot = $('upload-slot');
-      const btn = $('upload-btn');
-      if (!slot) return;
-      if (!uploadState) { slot.replaceChildren(); if (btn) btn.disabled = false; return; }
-      if (btn) btn.disabled = true;
-      const s = uploadState;
-      slot.replaceChildren(h('div', { class: 'progress' },
-        h('div', { class: 'progress-label' },
-          h('span', { text: `${s.index + 1} di ${s.count} · ${s.name}` }),
-          h('span', { text: s.pct + '%' })
-        ),
-        h('div', { class: 'bar' }, h('div', { style: `width:${s.pct}%` })),
-        h('div', { class: 'muted small', style: 'margin-top:6px', text: 'Tieni aperta questa pagina finché non ha finito.' })
-      ));
+    function pickVideos(charName) {
+      if (isUploading()) { toast('Aspetta che finiscano i caricamenti in corso'); return; }
+      pickFiles({ accept: VIDEO_ACCEPT, multiple: true }, (files) => enqueueVideos(charName, files));
     }
 
-    function uploadOne(url, file, onProgress) {
+    async function enqueueVideos(charName, files) {
+      let existing = [];
+      let displayName = charName;
+      try {
+        const data = await api(`/characters/${enc(charName)}`);
+        existing = data.episodes.map(e => e.filename);
+        displayName = data.display_name;
+      } catch (_) { /* il server ricontrolla comunque */ }
+
+      const seen = new Set(existing);
+      const items = files.map(file => {
+        const item = { file, status: 'waiting', loaded: 0, error: null, xhr: null };
+        if (seen.has(file.name)) { item.status = 'error'; item.error = 'c\'è già un episodio con questo nome'; }
+        seen.add(file.name);
+        return item;
+      });
+
+      const needed = items.filter(i => i.status === 'waiting').reduce((a, i) => a + i.file.size, 0);
+      if (info && info.disk && needed > info.disk.free_bytes) {
+        toast(`Non c'è abbastanza spazio: servono ${formatBytes(needed)}, liberi ${formatBytes(info.disk.free_bytes)}.`);
+        return;
+      }
+
+      queue = { target: charName, displayName, items };
+      renderUploadQueue();
+      runQueue();
+    }
+
+    async function runQueue() {
+      const q = queue;
+      let wakeLock = null;
+      try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (_) { /* solo su https: sul Cucù di solito non c'è */ }
+
+      for (const item of q.items) {
+        if (item.status !== 'waiting') continue;
+        item.status = 'uploading';
+        renderUploadQueue();
+        const err = await uploadOne(`/characters/${enc(q.target)}/episodes`, item);
+        if (item.status === 'canceled') continue;
+        item.status = err ? 'error' : 'done';
+        item.error = err;
+        renderUploadQueue();
+      }
+
+      try { await wakeLock?.release(); } catch (_) { /* già rilasciato */ }
+      loadInfo();
+
+      const ok = q.items.filter(i => i.status === 'done').length;
+      const failed = q.items.filter(i => i.status === 'error').length;
+      if (!failed) {
+        queue = null;
+        if (ok) toast(ok === 1 ? 'Episodio caricato' : `${ok} episodi caricati`);
+      } else {
+        // Restano visibili solo i file non caricati, con il motivo
+        q.items = q.items.filter(i => i.status === 'error');
+        toast(`${ok ? plural(ok, 'episodio caricato', 'episodi caricati') + ', ' : ''}${plural(failed, 'non caricato', 'non caricati')}`);
+      }
+      if (current && current.name === q.target) refreshCharacter();
+      else renderUploadQueue();
+    }
+
+    function uploadOne(url, item) {
       return new Promise((resolve) => {
         const fd = new FormData();
-        fd.append('files', file);
+        fd.append('files', item.file);
         const xhr = new XMLHttpRequest();
+        item.xhr = xhr;
+        let last = 0;
         xhr.open('POST', url);
-        xhr.upload.onprogress = (e) => onProgress(e.loaded);
+        xhr.upload.onprogress = (e) => {
+          item.loaded = e.loaded;
+          const now = Date.now();
+          if (now - last > 250) { last = now; renderUploadQueue(); }
+        };
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) return resolve(null);
           let msg = xhr.responseText;
           try { msg = JSON.parse(xhr.responseText).detail || msg; } catch (_) { /* testo */ }
-          resolve(msg || `Errore ${xhr.status}`);
+          resolve(msg || `errore ${xhr.status}`);
         };
         xhr.onerror = () => resolve('connessione interrotta');
+        xhr.onabort = () => resolve('annullato');
         xhr.send(fd);
       });
     }
 
-    $('file-videos').addEventListener('change', async (e) => {
-      const files = Array.from(e.target.files);
-      e.target.value = '';
-      if (!files.length || !current || uploading) return;
+    function cancelItem(item) {
+      if (item.status === 'uploading' && item.xhr) item.xhr.abort();
+      item.status = 'canceled';
+      renderUploadQueue();
+    }
 
-      const total = files.reduce((a, f) => a + f.size, 0);
-      if (info && info.disk && total > info.disk.free_bytes) {
-        toast(`Non c'è abbastanza spazio: servono ${formatBytes(total)}, liberi ${formatBytes(info.disk.free_bytes)}.`);
-        return;
-      }
+    function renderUploadQueue() {
+      const slot = $('upload-slot');
+      const btn = $('upload-btn');
+      if (btn) btn.disabled = isUploading();
+      if (!slot) return;
+      if (!queue || !current || current.name !== queue.target) { slot.replaceChildren(); return; }
 
-      const charName = current.name;
-      const url = `/characters/${enc(charName)}/episodes`;
-      const errors = [];
-      let done = 0;
-      uploading = true;
+      const visible = queue.items.filter(i => i.status !== 'canceled');
+      const list = h('div', { class: 'queue' },
+        visible.map(item => {
+          const pct = item.file.size ? Math.round(item.loaded / item.file.size * 100) : 0;
+          const label = {
+            waiting: 'In attesa',
+            uploading: `${pct}% di ${formatBytes(item.file.size)}`,
+            done: 'Caricato',
+            error: 'Non caricato: ' + item.error,
+          }[item.status];
+          return h('div', { class: 'queue-item' + (item.status === 'error' ? ' error' : '') },
+            h('div', { class: 'row-main' },
+              h('div', { class: 'row-title', style: 'font-weight:400', text: item.file.name }),
+              h('div', { class: 'row-sub', text: label }),
+              item.status === 'uploading' ? h('div', { class: 'bar', style: 'margin-top:6px' }, h('div', { style: `width:${pct}%` })) : null
+            ),
+            (item.status === 'waiting' || item.status === 'uploading')
+              ? h('button', { class: 'icon-btn', 'aria-label': 'Annulla ' + item.file.name, onclick: () => cancelItem(item) }, icon('remove'))
+              : null
+          );
+        })
+      );
 
-      for (let i = 0; i < files.length; i++) {
-        const f = files[i];
-        uploadState = { index: i, count: files.length, name: f.name, pct: Math.round(done / total * 100) };
-        renderUploadProgress();
-        const err = await uploadOne(url, f, (loaded) => {
-          const pct = Math.round((done + loaded) / total * 100);
-          if (pct !== uploadState.pct) { uploadState.pct = pct; renderUploadProgress(); }
-        });
-        if (err) errors.push(`${f.name}: ${err}`);
-        done += f.size;
-      }
-
-      uploading = false;
-      uploadState = null;
-      renderUploadProgress();
-      loadInfo();
-
-      const ok = files.length - errors.length;
-      if (errors.length) toast(`${ok ? plural(ok, 'episodio caricato', 'episodi caricati') + '. ' : ''}Non caricati: ${errors.join(' · ')}`);
-      else toast(files.length === 1 ? 'Episodio caricato' : `${files.length} episodi caricati`);
-      if (current && current.name === charName) refreshCharacter();
-    });
+      const uploading = isUploading();
+      slot.replaceChildren(h('div', { class: 'progress' },
+        list,
+        uploading
+          ? h('div', { class: 'muted small', style: 'margin-top:8px', text: 'Tieni aperta questa pagina e lo schermo acceso finché non ha finito.' })
+          : h('button', { class: 'btn btn-quiet', style: 'margin-top:4px', text: 'Chiudi', onclick: () => { queue = null; renderUploadQueue(); } })
+      ));
+    }
 
     window.addEventListener('beforeunload', (e) => {
-      if (uploading) { e.preventDefault(); e.returnValue = ''; }
+      if (isUploading()) { e.preventDefault(); e.returnValue = ''; }
     });
 
     /* ================= Limiti di tempo ================= */
@@ -1918,7 +2254,10 @@
       } catch (e) { toast(e.message); }
     });
 
-    $('update-check').addEventListener('click', async () => {
+    let updatesChecked = false;
+
+    async function checkUpdates() {
+      updatesChecked = true;
       const btn = $('update-check');
       const apply = $('update-apply');
       btn.disabled = true;
@@ -1934,12 +2273,16 @@
           $('update-text').textContent = `Il Cucù è aggiornato (versione ${d.current_version}).`;
         }
       } catch (e) {
-        $('update-text').textContent = 'Non riesco a controllare: ' + e.message;
+        // Tipico sull'hotspot o senza internet: il dettaglio tecnico non serve al genitore
+        $('update-text').textContent = 'Non riesco a controllare adesso: serve che il Cucù sia collegato a internet.';
+        console.warn('update-check:', e.message);
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Controlla aggiornamenti';
+        btn.textContent = 'Controlla di nuovo';
       }
-    });
+    }
+
+    $('update-check').addEventListener('click', checkUpdates);
 
     $('update-apply').addEventListener('click', async () => {
       const ok = await confirmSheet({
