@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 import time
 import random
 import sys
@@ -157,6 +158,30 @@ except json.JSONDecodeError as e:
     print(f"[ERROR] {CONFIG_PATH} corrotto ({e}), parto con mappa vuota.")
     tag_map = {}
 
+# tags.json viene riletto quando cambia (statuine abbinate/tolte dalla web UI),
+# così non serve riavviare il servizio. Basta una stat() per tick.
+try:
+    tags_mtime = CONFIG_PATH.stat().st_mtime_ns
+except OSError:
+    tags_mtime = None
+
+def reload_tags_if_changed():
+    global tag_map, tags_mtime
+    try:
+        mtime = CONFIG_PATH.stat().st_mtime_ns
+    except OSError:
+        return
+    if mtime == tags_mtime:
+        return
+    try:
+        with CONFIG_PATH.open() as f:
+            new_map = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return  # file illeggibile: tengo la mappa attuale e riprovo al prossimo tick
+    tag_map = new_map
+    tags_mtime = mtime
+    print(f"tags.json ricaricato ({len(tag_map)} statuine).")
+
 # Limiti di tempo/fascia oraria (genitore). Fallback SEMPRE permissivo: un file
 # assente o corrotto non deve mai bloccare l'avvio del servizio né la visione.
 try:
@@ -179,12 +204,35 @@ except (FileNotFoundError, json.JSONDecodeError):
 
 # --- FUNZIONI EPISODI ---------------------------------------------------
 
+def _write_json_atomic(path: Path, data):
+    """Scrive su un file temporaneo e lo rinomina: se manca la corrente a metà
+    resta il file vecchio intero, mai uno troncato (vedi invariante 5)."""
+    tmp = path.with_name(path.name + ".tmp")
+    with tmp.open("w") as f:
+        json.dump(data, f)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
 def save_episode_state():
     try:
-        with EPISODE_STATE_FILE.open("w") as f:
-            json.dump(episode_state, f)
+        _write_json_atomic(EPISODE_STATE_FILE, episode_state)
     except Exception as e:
         print(f"Errore nel salvare {EPISODE_STATE_FILE}: {e}")
+
+def _read_episode_state_file():
+    """Stato episodi letto dal disco: la web UI lo modifica mentre il servizio
+    gira (upload, rinomina, "ricomincia il giro", nome del personaggio), quindi
+    la copia in memoria non è la fonte di verità. Se il file è illeggibile si
+    usa la copia in memoria, così non si perde nulla."""
+    try:
+        with EPISODE_STATE_FILE.open() as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data
+    except Exception as e:
+        print(f"Errore nel rileggere {EPISODE_STATE_FILE}: {e}")
+    return dict(episode_state)
 
 def save_daily_usage():
     try:
@@ -232,7 +280,9 @@ def load_episode_state():
             remaining = known.copy()
             seen = []
 
+        # {**state, ...}: conserva le altre chiavi (es. display_name scritto dall'API)
         episode_state[character] = {
+            **state,
             "known": uniq(known),
             "remaining": uniq(remaining),
             "seen": uniq(seen)
@@ -249,10 +299,10 @@ def _select_episode(character: str):
     files = [p for p in char_dir.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT]
     if not files: return None
 
-    state = episode_state.get(character, {})
-    known = state.get("known", [])
-    remaining = state.get("remaining", [])
-    seen = state.get("seen", [])
+    state = _read_episode_state_file().get(character, {})
+    known = list(state.get("known", []))
+    remaining = list(state.get("remaining", []))
+    seen = list(state.get("seen", []))
 
     if not known:
         known = [p.name for p in files]
@@ -266,6 +316,12 @@ def _select_episode(character: str):
              known = file_names.copy()
              remaining = known.copy()
              seen = []
+        else:
+            # File arrivati senza passare dall'API (es. copiati a mano):
+            # entrano nel giro come episodi ancora da vedere
+            new_files = [f for f in file_names if f not in known]
+            known.extend(new_files)
+            remaining.extend(new_files)
 
     if not remaining:
         remaining = known.copy()
@@ -289,7 +345,11 @@ def _select_episode(character: str):
 def _commit_episode(character: str, known, remaining, seen):
     """Persiste la scelta fatta da _select_episode(): va chiamata solo quando
     l'episodio sta davvero per partire."""
-    episode_state[character] = {"known": known, "remaining": remaining, "seen": seen}
+    global episode_state
+    episode_state = _read_episode_state_file()
+    entry = dict(episode_state.get(character, {}))  # conserva display_name
+    entry.update(known=known, remaining=remaining, seen=seen)
+    episode_state[character] = entry
     save_episode_state()
 
 def get_media_duration_minutes(path: Path):
@@ -563,6 +623,7 @@ try:
                 usage_unsaved_seconds = 0.0
 
         # 2. Lettura NFC
+        reload_tags_if_changed()
         uid = reader.read_uid()
         has_tag = uid is not None
 

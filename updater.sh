@@ -147,10 +147,10 @@ fi
 log "Aggiornamento disponibile: $LOCAL_VERSION → $REMOTE_VERSION"
 
 # ---- BACKUP FILE CONFIGURAZIONE UTENTE -------------------------------------
-# tags.json e time_limits.json vengono modificati dall'utente (tramite UI web)
+# tags.json, time_limits.json e tag_labels.json vengono modificati dall'utente (tramite UI web)
 # e non devono essere sovrascritti dal git reset --hard. Vengono salvati prima
 # e ripristinati dopo.
-VOLATILE_FILES=("tags.json" "time_limits.json")
+VOLATILE_FILES=("tags.json" "time_limits.json" "tag_labels.json")
 BACKUP_DIR="$(mktemp -d /tmp/cucu-ota-XXXXXX)"
 trap 'rm -rf "$BACKUP_DIR"' EXIT
 
