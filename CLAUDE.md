@@ -64,6 +64,8 @@ La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene carica
 
 **`api/static/`** — font (Fraunces, Figtree) e logo serviti in locale da `/static`: la UI non deve dipendere da CDN, perché al primo setup il telefono è collegato all'hotspot del Cucù senza internet. `setup.sh` la copia insieme a `index.html`.
 
+**`graphics/`** — schermate mostrate sulla TV da `read_nfc.py`: `idle.png` (appoggia una statuina), `end.png` (fine episodio, togli la statuina), `wait_next.png` (statuina tolta: un altro?), `rest.png` (statuina bloccata dai limiti di tempo), `splash.png`, e la clessidra `hourglass/hourglass_0..9.png` sovrapposta al video. Insieme ai fotogrammi di avvio `plymouth/boot_0N.png` si generano da `graphics/src/tv-screens.html` con `python3 graphics/src/render.py` (Chrome headless sul computer, non sul Pi), con lo stesso linguaggio del sito. Il gufetto dell'animazione di avvio sta in `graphics/src/boot-owl-0N.png`.
+
 **`led.py`** — LED di stato (hardware v2), servizio `cucu-led.service` che parte presto nel boot (`DefaultDependencies=no`). Anima un LED su GPIO13 con il PWM hardware (sysfs `/sys/class/pwm`). Legge lo stato da `last_seen_tag.json` (`mode`, `blocked`, `ts`), che `read_nfc.py` riscrive ad ogni tick; se il file non viene aggiornato da 10 s → respiro veloce. Sui device senza PWM esce con 0. Non è nel health check OTA.
 
 **`updater.sh`** — script OTA. Legge `config.env`, scarica `version.json` da GitHub raw, confronta versioni semver, fa `git fetch + git reset --hard`, ripristina `tags.json`, aggiorna pip e systemd, health check + rollback automatico in caso di fallimento.

@@ -798,11 +798,15 @@
     .tv-foot { width: 30%; height: 8px; margin: 10px auto 0; border-radius: 8px; background: var(--line); filter: url(#mano-oggetto); }
 
     /* Il dispositivo: render del sito con le forme pastello dietro */
+    /* Nel render il corpo del dispositivo sta al 37% della larghezza (a destra
+       c'è solo l'ombra): si sposta tutto il gruppo del 13% per centrare l'oggetto,
+       non l'immagine */
     .device-wrap {
       position: relative;
       isolation: isolate;
       width: min(78%, 22rem);
       margin: 0 auto;
+      translate: 13% 0;
     }
 
     .device-wrap .device-img { display: block; width: 100%; height: auto; }
@@ -857,7 +861,7 @@
 
     @media (min-width: 768px) {
       .stage { grid-template-columns: 1.35fr 1fr; align-items: end; gap: 24px; }
-      .device-wrap { width: 100%; margin-bottom: 12px; }
+      .device-wrap { width: 88%; margin-bottom: 12px; }
     }
 
     /* ---------- PIN ---------- */

@@ -1,5 +1,5 @@
 {
-  "version": "0.8.0",
+  "version": "0.9.0",
   "min_version": "0.1.0",
-  "changelog": "New 'Now' home page in the web app: a drawn TV like on the website shows the preview of the episode on air with a progress bar (or pause, end of episode, rest time), next to the Cucù render with the figurine standing on the reader and a status glow. Below: episode, time left, round progress and minutes used today. Preview images are now prepared in the background, one at a time, while nothing is playing."
+  "changelog": "New TV screens in the Cucù style (warm grey, pastel hand-made shapes, grain, website illustrations): 'Put a figurine' while waiting, a new 'The end / take the figurine off' screen when an episode ends, 'Another one? Let's decide together' after it is removed, and a sleeping owl when time limits block viewing (previously all showed the waiting screen). New hourglass overlay and boot splash on the new background; the old TinyWorlds splash is gone. A figurine blocked by time limits after an episode is no longer retried ten times a second. Web app: the device render is centred on the Now page."
 }

@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Cucù — schermate TV</title>
+<!--
+  Sorgente delle grafiche mostrate sulla TV (stesso linguaggio del sito:
+  cucu-website/DESIGN.md). Ogni schermata si sceglie con l'hash dell'URL.
+  Si rigenerano tutte con:  python3 graphics/src/render.py
+-->
+<style>
+  @font-face { font-family: 'Fraunces'; font-weight: 400 600; src: url(../../api/static/fonts/fraunces-normal-latin.woff2) format('woff2'); }
+  @font-face { font-family: 'Fraunces'; font-weight: 400 600; src: url(../../api/static/fonts/fraunces-normal-latin-ext.woff2) format('woff2'); unicode-range: U+0100-02BA; }
+  @font-face { font-family: 'Figtree'; font-weight: 400 600; src: url(../../api/static/fonts/figtree-normal-latin.woff2) format('woff2'); }
+
+  :root {
+    --bg: #f5f6f3; --ink: #3d3d3a; --muted: #6e6e69; --line: #e6e7e4; --orange: #e94e1b;
+    --peach: #f4dfcb; --blue: #d8e6f3; --green: #d5e8d8; --pink: #f5d8e2; --apricot: #f9d8ca;
+  }
+
+  html, body { margin: 0; background: transparent; }
+  .screen { display: none; }
+  .screen.on { display: block; }
+
+  /* ---------- Schermate a tutto schermo ---------- */
+  .tv {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: var(--bg);
+    font-family: "Figtree", sans-serif;
+    color: var(--ink);
+  }
+
+  /* stessa grana del sito, un filo più leggera: sulla TV si vede di più */
+  .tv::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+    opacity: .18;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.15 0 0 0 0 0.15 0 0 0 0 0.14 0 0 0 2.4 -0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  }
+
+  .s {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    width: var(--w);
+    height: var(--h, var(--w));
+    background: var(--c);
+    transform: translate(-50%, -50%) rotate(var(--r, 0deg));
+    filter: url(#mano);
+  }
+  .round { border-radius: 50%; }
+  .rect { border-radius: 40px; }
+  .tri { background: none; }
+  .tri svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  .tri polygon { fill: var(--c); stroke: var(--c); stroke-width: 16; stroke-linejoin: round; }
+
+  .stack {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  h1, .big {
+    font-family: "Fraunces", serif;
+    font-variation-settings: "SOFT" 100, "WONK" 0;
+    font-weight: 500;
+    margin: 0;
+    line-height: 1.05;
+  }
+
+  .say { font-family: "Fraunces", serif; font-variation-settings: "SOFT" 100; font-size: 76px; font-weight: 500; margin: 0; }
+  .sub { font-size: 48px; color: var(--muted); margin: 14px 0 0; }
+
+  /* Macchia bianca fatta a mano dietro una parola del titolo (come sul sito) */
+  .hl { position: relative; isolation: isolate; padding: 0 .18em; }
+  .hl::before {
+    content: "";
+    position: absolute;
+    inset: .12em -.02em .02em;
+    z-index: -1;
+    background: #fff;
+    border-radius: .2em;
+    transform: rotate(-1.6deg);
+    filter: url(#mano-hl);
+  }
+
+  .logo-v { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .owl { fill: var(--orange); }
+
+  /* Illustrazioni: stile piatto, bordo appena tremolante come sul sito */
+  .draw { filter: url(#mano-disegno); overflow: visible; }
+  .device { filter: url(#mano-oggetto); overflow: visible; }
+
+  /* ---------- Clessidra (sopra il video, 140×140, fondo trasparente) ---------- */
+  .hg { position: relative; width: 140px; height: 140px; }
+  .hg .pebble { position: absolute; inset: 9px; border-radius: 50%; background: #fff; filter: url(#mano-pebble); }
+  .hg svg { position: absolute; inset: 0; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="mano" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="1" seed="4"/>
+      <feDisplacementMap in="SourceGraphic" scale="14" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="mano-piccolo" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="1" seed="2"/>
+      <feDisplacementMap in="SourceGraphic" scale="6" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="mano-pebble" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.025" numOctaves="1" seed="3"/>
+      <feDisplacementMap in="SourceGraphic" scale="5" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="mano-hl" x="-10%" y="-30%" width="120%" height="160%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="1" seed="5"/>
+      <feDisplacementMap in="SourceGraphic" scale="8" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="mano-disegno" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="1" seed="12"/>
+      <feDisplacementMap in="SourceGraphic" scale="2.6" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="mano-oggetto" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="1" seed="6"/>
+      <feDisplacementMap in="SourceGraphic" scale="4" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+
+    <!-- Gufetto del logo (stessa sagoma di cucu-cad/assets/cucu.svg e del sito) -->
+    <path id="owl-body" d="M80.6,24.17c-5.01,0-9.65,1.64-13.38,4.42-.18-.37-.42-.71-.71-1.01L47.23,4.15c-1.46-1.74-2.71-2.87-3.72-3.39-1.03-.51-2.49-.76-4.38-.76H10.24c-2.77,0-4.17,1.38-4.17,4.15,0,1.18.37,2.13,1.1,2.86l22.31,18.28c-2.21-.73-4.55-1.11-6.99-1.11C10.09,24.17,0,34.25,0,46.65c0,4.96,1.63,9.56,4.37,13.3v30.81c0,8.7,1.49,16.05,4.47,22.08,2.99,6.01,7.12,10.58,12.42,13.66,5.31,3.1,11.36,4.65,18.15,4.65s12.67-1.1,17.61-3.3c4.15-1.86,7.67-4.45,10.49-7.79-1.11-2.14-1.91-4.32-2.49-6.34-1.64-5.83-1.41-10.56-1.39-10.89.02-.38.12-.76.27-1.1.3-.38.58-.76.83-1.18.63-.56,1.48-.91,2.39-.86,1.84.12,3.24,1.68,3.14,3.5,0,.12-.2,5.01,1.76,10.53,1,2.81,2.54,5.78,4.98,8.35,4.17,4.38,10.18,6.82,17.88,7.26,1.05-.12,1.93-.53,2.62-1.3.83-.9,1.25-1.94,1.25-3.14V59.95c2.74-3.74,4.37-8.33,4.37-13.3,0-12.4-10.09-22.48-22.5-22.48ZM80.6,64.17c-2.17,0-4.27-.4-6.21-1.15-2.69-1.01-5.08-2.69-6.94-4.83-.3-.32-.56-.66-.83-1.01-2.21-2.92-3.52-6.57-3.52-10.53,0-2.24.42-4.38,1.2-6.36.4-1.05.91-2.03,1.49-2.96,3.1-4.91,8.58-8.18,14.81-8.18,5.86,0,11.04,2.89,14.21,7.3,2.09,2.87,3.3,6.39,3.3,10.19,0,9.66-7.85,17.52-17.52,17.52ZM22.5,29.15c5.58,0,10.54,2.61,13.75,6.67,1.06,1.34,1.94,2.84,2.57,4.47.78,1.98,1.2,4.12,1.2,6.36,0,4.08-1.41,7.87-3.77,10.84-.13.18-.27.35-.42.51-3.15,3.69-7.8,6.06-13,6.16h-.33c-9.65,0-17.52-7.85-17.52-17.52,0-3.8,1.23-7.32,3.3-10.19,3.17-4.42,8.37-7.3,14.21-7.3ZM39.46,91.83c-1.74.12-3.22-1.28-3.22-3.02v-24.36c5.31-4.12,8.75-10.58,8.75-17.8,0-2.21-.32-4.35-.93-6.36-.71-2.47-1.86-4.75-3.34-6.79,1.05.28,2.34.43,3.88.43h17.47c-.07.1-.13.2-.18.28-1.25,1.86-2.21,3.9-2.84,6.08-.61,2.01-.93,4.15-.93,6.36,0,7.22,3.42,13.66,8.72,17.76-.27,7.35-3.32,25.73-27.38,27.41Z"/>
+    <g id="owl-pupils">
+      <path d="M74.39,40.31v-.02h-.43c-3.52,0-6.36,2.86-6.36,6.36s2.84,6.38,6.36,6.38c.15,0,.3,0,.43-.02,3.32-.22,5.94-2.99,5.94-6.36s-2.62-6.13-5.94-6.34Z"/>
+      <path d="M15.86,53.03c3.52,0,6.38-2.86,6.38-6.38s-2.86-6.36-6.38-6.36-6.36,2.86-6.36,6.36,2.84,6.38,6.36,6.38Z"/>
+    </g>
+
+    <!-- Statuine del sito: base tonda, stile piatto senza contorni -->
+    <g id="fig-base">
+      <ellipse cx="30" cy="75.5" rx="25" ry="4" fill="#000" opacity="0.07"/>
+      <path d="M8 70 v4 a22 5 0 0 0 44 0 v-4 Z" fill="#d3d6d1"/>
+      <ellipse cx="30" cy="70" rx="22" ry="5" fill="#e9ebe7"/>
+    </g>
+    <symbol id="fig-gufo" viewBox="0 0 60 80">
+      <use href="#fig-base"/>
+      <path d="M12 10 Q20 12 24 15 Q30 13 36 15 Q40 12 48 10 Q49 20 49 26 C51 32 51 38 50 44 C49 58 41 67 30 67 C19 67 11 58 10 44 C9 38 9 32 11 26 Q11 20 12 10Z" fill="#8db6d8"/>
+      <path d="M30 14 Q36 14 36 15 Q40 12 48 10 Q49 20 49 26 C51 32 51 38 50 44 C49 58 41 67 30 67Z" fill="#7faad0" opacity="0.6"/>
+      <path d="M30 40 C38 40 42 48 42 55 C42 62 37 66 30 66 C23 66 18 62 18 55 C18 48 22 40 30 40Z" fill="#e3eef7"/>
+      <path d="M25 50 q2 2 4 0 M31 50 q2 2 4 0 M28 56 q2 2 4 0" fill="none" stroke="#a9c6e0" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M12 36 C7 42 8 52 14 57 C15 49 15 42 12 36Z" fill="#5f90bd"/>
+      <path d="M48 36 C53 42 52 52 46 57 C45 49 45 42 48 36Z" fill="#5f90bd"/>
+      <circle cx="22" cy="29" r="8" fill="#fff"/>
+      <circle cx="38" cy="29" r="8" fill="#fff"/>
+      <circle cx="23" cy="30" r="3.8" fill="#3d3d3a"/>
+      <circle cx="37" cy="30" r="3.8" fill="#3d3d3a"/>
+      <circle cx="24.3" cy="28.7" r="1.3" fill="#fff"/>
+      <circle cx="38.3" cy="28.7" r="1.3" fill="#fff"/>
+      <path d="M27.3 36 L32.7 36 L30 41Z" fill="#eeb54a"/>
+      <ellipse cx="25" cy="66.5" rx="3.2" ry="1.7" fill="#eeb54a"/>
+      <ellipse cx="35" cy="66.5" rx="3.2" ry="1.7" fill="#eeb54a"/>
+    </symbol>
+    <symbol id="fig-coniglio" viewBox="0 0 60 80">
+      <use href="#fig-base"/>
+      <path d="M21 30 C16 20 16 6 21 5 C26 4 27 18 26 29Z" fill="#e2a0b6"/>
+      <path d="M39 30 C44 20 44 6 39 5 C34 4 33 18 34 29Z" fill="#e2a0b6"/>
+      <path d="M21.5 26 C19 18 19.5 9 21.5 8.5 C23.5 8.5 24 18 23.5 26Z M38.5 26 C41 18 40.5 9 38.5 8.5 C36.5 8.5 36 18 36.5 26Z" fill="#f8d3df"/>
+      <path d="M30 44 C41 44 46 54 46 60 C46 66 40 68 30 68 C20 68 14 66 14 60 C14 54 19 44 30 44Z" fill="#e5a6bb"/>
+      <ellipse cx="30" cy="59" rx="8" ry="6.5" fill="#f8dde6"/>
+      <ellipse cx="24" cy="65.5" rx="3.8" ry="2.5" fill="#d8909f"/>
+      <ellipse cx="36" cy="65.5" rx="3.8" ry="2.5" fill="#d8909f"/>
+      <ellipse cx="30" cy="36" rx="14" ry="12.5" fill="#f0bccd"/>
+      <circle cx="21.5" cy="40" r="2.4" fill="#ec8fad" opacity="0.55"/>
+      <circle cx="38.5" cy="40" r="2.4" fill="#ec8fad" opacity="0.55"/>
+      <circle cx="24.5" cy="35" r="2.4" fill="#3d3d3a"/>
+      <circle cx="35.5" cy="35" r="2.4" fill="#3d3d3a"/>
+      <circle cx="25.2" cy="34.2" r="0.8" fill="#fff"/>
+      <circle cx="36.2" cy="34.2" r="0.8" fill="#fff"/>
+      <path d="M28.3 39.3 h3.4 l-1.7 1.9z" fill="#c9687f"/>
+      <path d="M27.8 42.4 q1.1 1.3 2.2 0 q1.1 1.3 2.2 0" fill="none" stroke="#c9687f" stroke-width="1.3" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="fig-orso" viewBox="0 0 60 80">
+      <use href="#fig-base"/>
+      <circle cx="18" cy="21" r="6.5" fill="#cf8c5f"/>
+      <circle cx="42" cy="21" r="6.5" fill="#cf8c5f"/>
+      <circle cx="18" cy="21" r="3.2" fill="#f1d3b9"/>
+      <circle cx="42" cy="21" r="3.2" fill="#f1d3b9"/>
+      <path d="M30 43 C42 43 47 53 47 60 C47 66 41 68 30 68 C19 68 13 66 13 60 C13 53 18 43 30 43Z" fill="#d89b70"/>
+      <ellipse cx="30" cy="59" rx="9" ry="7" fill="#f1d3b9"/>
+      <ellipse cx="17.5" cy="55" rx="4" ry="6" fill="#c5825a" transform="rotate(20 17.5 55)"/>
+      <ellipse cx="42.5" cy="55" rx="4" ry="6" fill="#c5825a" transform="rotate(-20 42.5 55)"/>
+      <circle cx="30" cy="33" r="13.5" fill="#e2a67c"/>
+      <ellipse cx="30" cy="38.5" rx="6.5" ry="5" fill="#f1d3b9"/>
+      <circle cx="24.5" cy="30.5" r="2.3" fill="#3d3d3a"/>
+      <circle cx="35.5" cy="30.5" r="2.3" fill="#3d3d3a"/>
+      <circle cx="25.2" cy="29.8" r="0.8" fill="#fff"/>
+      <circle cx="36.2" cy="29.8" r="0.8" fill="#fff"/>
+      <ellipse cx="30" cy="36.3" rx="2.4" ry="1.7" fill="#3d3d3a"/>
+      <path d="M28 40 q2 1.6 4 0" fill="none" stroke="#b07a55" stroke-width="1.2" stroke-linecap="round"/>
+    </symbol>
+
+    <!-- Il dispositivo disegnato del sito (cubo 105×105×42 mm, foro Ø35 mm) -->
+    <linearGradient id="dev-front" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#c9ccc7"/>
+      <stop offset="0.14" stop-color="#dcdeda"/>
+      <stop offset="0.86" stop-color="#dcdeda"/>
+      <stop offset="1" stop-color="#c9ccc7"/>
+    </linearGradient>
+    <symbol id="device" viewBox="0 -2 140 94" overflow="visible">
+      <ellipse cx="70" cy="87.5" rx="70" ry="4" fill="#000" opacity="0.07"/>
+      <path d="M4 19 V82.4 A20 4.6 0 0 0 24 87 H116 A20 4.6 0 0 0 136 82.4 V19 Z" fill="url(#dev-front)"/>
+      <path d="M24 4 H116 A20 4.6 0 0 1 136 8.6 V29.4 A20 4.6 0 0 1 116 34 H24 A20 4.6 0 0 1 4 29.4 V8.6 A20 4.6 0 0 1 24 4 Z" fill="#eeefeb"/>
+      <path d="M6 30 A20 4.6 0 0 0 24 34 H116 A20 4.6 0 0 0 134 30" fill="none" stroke="#f8f8f6" stroke-width="1.2"/>
+      <g transform="translate(61.4 49.6) scale(0.168)"><use href="#owl-body" fill="#eef0ec"/></g>
+      <g transform="translate(61.4 49) scale(0.168)"><use href="#owl-body" fill="#c6c9c4"/></g>
+      <ellipse cx="70" cy="19" rx="22" ry="5.1" fill="#cfd2cd"/>
+      <ellipse cx="70" cy="19.9" rx="18.5" ry="3.6" fill="#e2e4e0"/>
+    </symbol>
+
+    <!-- freccia disegnata a mano (quella di "Com'è nato Cucù" sul sito) -->
+    <symbol id="arrow-down" viewBox="0 0 24 36" overflow="visible">
+      <path d="M12.5 3 C11.5 12 13 21 12 31 M4.5 23.5 C7.5 26 10 29 12 32 C14.5 28.5 17 26 19.5 23" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- Forme ai bordi, condivise: poche e grandi, tagliate dai bordi, mai dietro il logo -->
+<template id="shapes">
+  <i class="s round" style="--x:160px;--y:150px;--w:440px;--c:var(--blue)"></i>
+  <i class="s rect" style="--x:120px;--y:930px;--w:360px;--h:420px;--r:24deg;--c:var(--peach)"></i>
+  <i class="s tri" style="--x:440px;--y:700px;--w:210px;--r:14deg;--c:var(--pink)"><svg viewBox="0 0 100 100"><polygon points="50,12 90,84 10,84"/></svg></i>
+  <i class="s rect" style="--x:1770px;--y:170px;--w:380px;--h:460px;--r:-18deg;--c:var(--pink)"></i>
+  <i class="s round" style="--x:1820px;--y:930px;--w:430px;--c:var(--apricot)"></i>
+  <i class="s tri" style="--x:1500px;--y:780px;--w:190px;--r:-22deg;--c:var(--blue)"><svg viewBox="0 0 100 100"><polygon points="50,12 90,84 10,84"/></svg></i>
+  <i class="s tri" style="--x:1470px;--y:140px;--w:160px;--r:30deg;--c:var(--green)"><svg viewBox="0 0 100 100"><polygon points="50,12 90,84 10,84"/></svg></i>
+  <i class="s rect" style="--x:480px;--y:1010px;--w:130px;--r:-12deg;--c:var(--green)"></i>
+</template>
+
+<!-- Attesa: "appoggia una statuina" -->
+<section class="screen tv" id="idle">
+  <div class="stack">
+    <svg class="draw" width="190" height="253" viewBox="0 0 60 80"><use href="#fig-gufo"/></svg>
+    <svg width="44" height="66" style="color:var(--muted);margin:6px 0 -6px"><use href="#arrow-down"/></svg>
+    <svg class="device" width="560" height="376" viewBox="0 -2 140 94"><use href="#device"/></svg>
+    <p class="say" style="margin-top:36px">Appoggia una statuina</p>
+  </div>
+</section>
+
+<!-- Fine episodio: la statuina si toglie -->
+<section class="screen tv" id="end">
+  <div class="stack">
+    <h1 style="font-size:170px"><span class="hl">Fine</span></h1>
+    <div style="position:relative;display:flex;flex-direction:column;align-items:center;margin-top:28px">
+      <div style="position:relative">
+        <svg class="draw" width="160" height="213" viewBox="0 0 60 80" style="transform:rotate(-6deg)"><use href="#fig-coniglio"/></svg>
+        <!-- la statuina si solleva: freccia verso l'alto accanto, non sopra al titolo -->
+        <svg width="44" height="66" style="position:absolute;left:180px;top:70px;color:var(--muted);transform:rotate(180deg)"><use href="#arrow-down"/></svg>
+      </div>
+      <svg class="device" width="470" height="316" viewBox="0 -2 140 94" style="margin-top:34px"><use href="#device"/></svg>
+    </div>
+    <p class="say" style="font-size:66px;margin-top:30px">Togli la statuina</p>
+  </div>
+</section>
+
+<!-- Dopo la fine, statuina tolta: se ne sceglie un'altra insieme -->
+<section class="screen tv" id="next">
+  <div class="stack">
+    <h1 style="font-size:150px">Un <span class="hl">altro?</span></h1>
+    <div style="display:flex;gap:70px;align-items:flex-end;margin:70px 0 40px">
+      <svg class="draw" width="200" height="267" viewBox="0 0 60 80"><use href="#fig-gufo"/></svg>
+      <svg class="draw" width="200" height="267" viewBox="0 0 60 80"><use href="#fig-coniglio"/></svg>
+      <svg class="draw" width="200" height="267" viewBox="0 0 60 80"><use href="#fig-orso"/></svg>
+    </div>
+    <p class="say" style="font-size:66px">Si decide insieme.</p>
+  </div>
+</section>
+
+<!-- Bloccato dai limiti di tempo: il gufetto dorme -->
+<section class="screen tv" id="rest">
+  <div class="stack">
+    <div style="position:relative">
+      <svg width="300" height="382" viewBox="-2 -2 107.1 135.16" style="overflow:visible">
+        <use href="#owl-body" class="owl"/>
+        <!-- occhi chiusi: palpebre ad arco al posto delle pupille -->
+        <path d="M11 49 Q22.5 58 34 49 M69.1 49 Q80.6 58 92.1 49" fill="none" stroke="var(--orange)" stroke-width="4.2" stroke-linecap="round"/>
+      </svg>
+      <span class="big" style="position:absolute;left:330px;top:40px;font-size:64px;color:var(--muted)">z</span>
+      <span class="big" style="position:absolute;left:380px;top:-30px;font-size:88px;color:var(--muted)">z</span>
+      <span class="big" style="position:absolute;left:450px;top:-120px;font-size:116px;color:var(--muted)">Z</span>
+      <!-- luna e stelle, di lato: mai dietro il logo -->
+      <svg width="170" height="170" viewBox="0 0 100 100" style="position:absolute;left:-330px;top:-90px;filter:url(#mano-piccolo)">
+        <path d="M62 8 A44 44 0 1 0 92 70 A36 36 0 1 1 62 8 Z" fill="var(--peach)"/>
+      </svg>
+      <i class="s round" style="--x:-140px;--y:260px;--w:26px;--c:var(--blue);filter:url(#mano-piccolo)"></i>
+      <i class="s round" style="--x:-230px;--y:150px;--w:16px;--c:var(--pink);filter:url(#mano-piccolo)"></i>
+      <i class="s round" style="--x:560px;--y:230px;--w:22px;--c:var(--green);filter:url(#mano-piccolo)"></i>
+    </div>
+    <h1 style="font-size:104px;margin-top:70px">Il gufetto <span class="hl">riposa</span></h1>
+    <p class="sub" style="font-size:56px">Si guarda più tardi.</p>
+  </div>
+</section>
+
+<!-- Avvio (fallback se Plymouth non parte): logo verticale -->
+<section class="screen tv" id="splash">
+  <div class="stack">
+    <div class="logo-v">
+      <svg width="190" height="242" viewBox="0 0 103.1 131.16"><use href="#owl-body" class="owl"/><use href="#owl-pupils" class="owl"/></svg>
+      <img src="../../api/static/img/scritta.png" width="300" alt="cucù" style="margin-top:12px">
+    </div>
+  </div>
+</section>
+
+<!-- Solo fondo e forme: base per i fotogrammi di avvio (Plymouth), il gufetto lo mette render.py -->
+<section class="screen tv" id="bootbg"><div class="stack"></div></section>
+
+<!-- Clessidra sopra il video: #hg-0 (tempo finito) … #hg-9 (tutto il tempo) -->
+<section class="screen" id="hg">
+  <div class="hg">
+    <div class="pebble"></div>
+    <svg viewBox="0 0 140 140" width="140" height="140">
+      <defs>
+        <clipPath id="hg-top"><path d="M47 38 H93 L70 70 Z"/></clipPath>
+        <clipPath id="hg-bot"><path d="M70 70 L93 102 H47 Z"/></clipPath>
+      </defs>
+      <!-- vetro -->
+      <path d="M45 37 H95 L73 67.5 Q70 70 73 72.5 L95 103 H45 L67 72.5 Q70 70 67 67.5 Z" fill="#e3ebf3" stroke="#e3ebf3" stroke-width="5" stroke-linejoin="round"/>
+      <!-- sabbia (misure calcolate dallo script sotto) -->
+      <rect id="sand-top" x="40" width="60" fill="#e2a67c" clip-path="url(#hg-top)"/>
+      <rect id="sand-bot" x="40" width="60" fill="#e2a67c" clip-path="url(#hg-bot)"/>
+      <rect id="sand-stream" x="69" y="68" width="2" height="30" rx="1" fill="#e2a67c"/>
+      <!-- tappi -->
+      <rect x="40" y="30" width="60" height="9" rx="4.5" fill="#3d3d3a"/>
+      <rect x="40" y="101" width="60" height="9" rx="4.5" fill="#3d3d3a"/>
+    </svg>
+  </div>
+</section>
+
+<script>
+  // Forme condivise dentro ogni schermata a tutto schermo
+  const shapes = document.getElementById('shapes');
+  document.querySelectorAll('.tv').forEach(s => s.prepend(shapes.content.cloneNode(true)));
+
+  const id = location.hash.slice(1) || 'idle';
+  const m = id.match(/^hg-(\d)$/);
+  if (m) {
+    // Sabbia in proporzione all'area delle due metà (triangoli): sopra resta
+    // level/9 del tempo, sotto è scesa il resto
+    const f = Number(m[1]) / 9;
+    const H = 32;
+    const topH = H * Math.sqrt(f);
+    const top = document.getElementById('sand-top');
+    top.setAttribute('y', 70 - topH);
+    top.setAttribute('height', topH);
+    const bot = document.getElementById('sand-bot');
+    const botY = 70 + H * Math.sqrt(f);
+    bot.setAttribute('y', botY);
+    bot.setAttribute('height', 102 - botY);
+    document.getElementById('sand-stream').style.display = f > 0 && f < 1 ? '' : 'none';
+    document.getElementById('hg').classList.add('on');
+  } else {
+    document.getElementById(id).classList.add('on');
+  }
+</script>
+</body>
+</html>
