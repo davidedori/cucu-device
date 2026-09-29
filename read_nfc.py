@@ -26,8 +26,11 @@ GRAPHICS_DIR = BASE_DIR / "graphics"
 TIME_LIMITS_PATH = BASE_DIR / "time_limits.json"
 DAILY_USAGE_PATH = BASE_DIR / "daily_usage.json"
 
-IDLE_IMAGE = GRAPHICS_DIR / "idle.png"
-WAIT_NEXT_IMAGE = GRAPHICS_DIR / "wait_next.png"
+# Schermate sulla TV (sorgente e rigenerazione: graphics/src/)
+IDLE_IMAGE = GRAPHICS_DIR / "idle.png"            # appoggia una statuina
+END_IMAGE = GRAPHICS_DIR / "end.png"              # episodio finito: togli la statuina
+WAIT_NEXT_IMAGE = GRAPHICS_DIR / "wait_next.png"  # statuina tolta: un altro? si decide insieme
+REST_IMAGE = GRAPHICS_DIR / "rest.png"            # statuina bloccata dai limiti di tempo
 HOURGLASS_DIR = GRAPHICS_DIR / "hourglass"
 HOURGLASS_LEVELS = 10  # 0 = vuoto/limite raggiunto, 9 = pieno
 
@@ -143,6 +146,9 @@ current_video_path = None
 
 last_uid = None
 had_tag = False
+# Statuina che non è potuta partire per i limiti di tempo: finché resta
+# appoggiata si mostra REST_IMAGE e non si ritenta a ogni tick
+start_blocked_uid = None
 
 # Stato episodi persistente
 EPISODE_STATE_FILE = BASE_DIR / "episode_state.json"
@@ -484,16 +490,17 @@ def _compute_hourglass_level(character):
     return min(HOURGLASS_LEVELS - 1, int(fraction * HOURGLASS_LEVELS))
 
 def start_video(character):
+    """Ritorna "played", "blocked" (limiti di tempo) o "missing" (nessun video)."""
     global current_character, mode, current_video_path
     allowed, remaining_minutes = is_viewing_allowed_now(character)
     if not allowed:
         print(f"Visione non permessa ora per '{character}' (limiti di tempo attivi).")
-        return
+        return "blocked"
 
     selection = _select_episode(character)
     if not selection:
         print(f"Nessun video trovato per {character}")
-        return
+        return "missing"
     video, known, remaining, seen = selection
 
     if remaining_minutes is not None:
@@ -503,7 +510,7 @@ def start_video(character):
                 f"Episodio '{video.name}' ({duration_min:.1f} min) supera il tempo "
                 f"residuo oggi ({remaining_minutes:.1f} min): resto in idle."
             )
-            return
+            return "blocked"
 
     _commit_episode(character, known, remaining, seen)
 
@@ -513,6 +520,7 @@ def start_video(character):
     current_video_path = video
     mode = "playing"
     player.set_hourglass_level(_compute_hourglass_level(character))
+    return "played"
 
 def manage_graphics():
     """Gestisce la grafica in base allo stato, SE non stiamo riproducendo un video."""
@@ -616,9 +624,7 @@ try:
             if player.check_ended():
                 print("Video finito.")
                 mode = "ended_wait_remove"
-                # Placeholder: stessa immagine dell'idle, in attesa di una
-                # grafica dedicata per la fine dell'episodio.
-                refresh_graphic(IDLE_IMAGE) # Immediato switch
+                refresh_graphic(END_IMAGE) # "Fine": togli la statuina
                 save_daily_usage()
                 usage_unsaved_seconds = 0.0
 
@@ -662,19 +668,25 @@ try:
         if mode == "idle":
             if tag_just_added:
                 char = tag_map.get(uid)
+                start_blocked_uid = None
                 if char:
                     # START VIDEO
-                    start_video(char)
+                    result = start_video(char)
                     current_graphic_path = None # reset grafica tracker
+                    if result == "blocked":
+                        start_blocked_uid = uid
+                        refresh_graphic(REST_IMAGE) # il gufetto riposa
                 else:
                     print(f"Tag sconosciuto: {uid}")
             elif tag_removed:
+                start_blocked_uid = None
                 refresh_graphic(IDLE_IMAGE) # Torna a idle puro se tolto tag sconosciuto
-            elif has_tag and current_graphic_path != IDLE_IMAGE:
-                 # Tag presente ma nessun video partito (tag sconosciuto o
-                 # bloccato dai limiti di tempo). Placeholder: stessa immagine
-                 # dell'idle, in attesa di una grafica dedicata.
-                 refresh_graphic(IDLE_IMAGE)
+            elif has_tag:
+                # Tag presente ma nessun video partito: bloccato dai limiti
+                # (gufetto che riposa) oppure sconosciuto/senza video (attesa)
+                target = REST_IMAGE if uid == start_blocked_uid else IDLE_IMAGE
+                if current_graphic_path != target:
+                    refresh_graphic(target)
 
         elif mode == "playing":
             if tag_removed:
@@ -709,19 +721,26 @@ try:
             if tag_removed:
                 print("Tag rimosso post-episodio.")
                 mode = "ended_wait_return"
-                # Grafica resta quella impostata a fine episodio (oggi: idle.png)
+                refresh_graphic(WAIT_NEXT_IMAGE) # un altro? si decide insieme
 
         elif mode == "ended_wait_return":
             # Qui accettiamo qualsiasi NUOVO tag.
             # Usiamo has_tag per essere sicuri di prendere anche uno swap immediato
-            if has_tag:
+            # (una statuina già rifiutata per i limiti non si ritenta a ogni tick)
+            if has_tag and uid != start_blocked_uid:
                 char = tag_map.get(uid)
                 if char:
                     print(f"Nuovo episodio per {char}")
-                    start_video(char)
+                    result = start_video(char)
                     current_graphic_path = None
+                    if result == "blocked":
+                        start_blocked_uid = uid
+                        refresh_graphic(REST_IMAGE)
                 else:
                     print("Tag sconosciuto post-episodio.")
+            elif not has_tag and start_blocked_uid is not None:
+                start_blocked_uid = None
+                refresh_graphic(WAIT_NEXT_IMAGE)
 
         # Aggiorna tracking
         last_uid = uid
