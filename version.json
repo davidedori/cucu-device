@@ -1,5 +1,5 @@
 {
-  "version": "0.6.0",
+  "version": "0.7.0",
   "min_version": "0.1.0",
-  "changelog": "Web app: a 'Now on TV' card shows what the child is watching, pauses, end of episode, rest time and minutes used today. Time limits are easier to set: a week overview, quick minute choices, copy a day to other days, a plain-language summary and one save for all changes, with a warning before leaving unsaved. Optional parent PIN to protect the settings (reset by deleting ui_auth.json over SSH). Cucù can be added to the phone home screen with its own icon."
+  "changelog": "Shorter episode list in the web app: the first 6 episodes, then 'Show all', with search and Watched / To watch filters. Each episode now has a preview image, made on the device with ffmpeg one at a time, at low priority and never while an episode is playing. Needs a one-time 'sudo apt install ffmpeg' (setup.sh installs it); without ffmpeg a generic icon is shown."
 }

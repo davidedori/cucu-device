@@ -159,6 +159,7 @@ APT_PACKAGES=(
     curl               # fetch version.json per OTA
     network-manager    # nmcli (gestione Wi-Fi dall'API)
     dnsmasq-base       # DHCP server per hotspot nmcli
+    ffmpeg             # anteprime degli episodi nella web UI (facoltativo: senza, icona generica)
     iptables           # NAT routing per hotspot nmcli
     avahi-daemon       # mDNS: rende raggiungibile <hostname>.local
     plymouth           # splash screen grafico (avvio silenzioso)

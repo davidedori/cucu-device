@@ -578,6 +578,35 @@
     .round-text { flex: 1; min-width: 0; }
     .round .btn-quiet { flex: none; min-height: 44px; }
 
+    /* Episodi: righe compatte con anteprima 16:9 */
+    .ep-row { padding-left: 14px; gap: 12px; }
+    .ep-thumb {
+      flex: none;
+      width: 84px;
+      aspect-ratio: 16 / 9;
+      border-radius: 10px;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      color: #b5b6b1;
+    }
+    .ep-thumb svg { width: 24px; height: 24px; }
+    .ep-thumb img { width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+    /* comparsa a scatti come il resto dell'interfaccia */
+    .ep-thumb.ready img { opacity: 1; animation: foto .3s steps(3, end); }
+    @keyframes foto { from { opacity: 0; } to { opacity: 1; } }
+    .ep-title {
+      font-weight: 400;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+    }
+    .ep-tools:not(:empty) { margin: 6px 0 12px; }
+    .ep-list .row-sub { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+
     /* Coda di caricamento */
     .queue { display: flex; flex-direction: column; gap: 8px; }
     .queue-item { display: flex; align-items: center; gap: 8px; background: var(--bg); border-radius: 14px; padding: 10px 6px 10px 14px; }
@@ -1292,6 +1321,7 @@
 
       stopTagScan();
       stopNowPolling();
+      resetThumbs();
       closeSheet();
       document.querySelectorAll('.nav a').forEach(a => {
         if (a.dataset.nav === r.section) a.setAttribute('aria-current', 'page');
@@ -1697,6 +1727,7 @@
     }
 
     function renderCharacter() {
+      resetThumbs();
       const c = current;
       const index = Math.max(0, characters.findIndex(x => x.name === c.name));
       const root = $('character');
@@ -1831,56 +1862,19 @@
     }
 
     /* ---------- Episodi ---------- */
+    // Lista corta: i primi EPISODES_PREVIEW, poi "Mostra tutti". Con la lista
+    // aperta compaiono ricerca e filtri. Lo stato resta per personaggio,
+    // così un aggiornamento della scheda non richiude la lista
+
+    const EPISODES_PREVIEW = 6;
+    let epView = { name: null, expanded: false, q: '', filter: 'all' };
 
     function episodesPanel(c) {
+      if (epView.name !== c.name) epView = { name: c.name, expanded: false, q: '', filter: 'all' };
+
       const total = c.episodes.length;
       const watched = c.stats.watched_in_round || 0;
-      const rows = h('div', { class: 'rows' });
-      if (!total) rows.append(h('div', { class: 'row-empty', text: 'Ancora nessun episodio.' }));
-
-      c.episodes
-        .slice()
-        .sort((a, b) => a.filename.localeCompare(b.filename, 'it', { numeric: true }))
-        .forEach((ep) => {
-          const [base, ext] = splitExt(ep.filename);
-          const main = h('div', { class: 'row-main' });
-          const showMain = () => main.replaceChildren(
-            h('div', { class: 'row-title', style: 'font-weight:400' },
-              prettyEpisode(ep.filename),
-              ep.watched ? h('span', { class: 'tag known', text: 'Visto' }) : null),
-            h('div', { class: 'row-sub', text: `${ext.replace('.', '').toUpperCase()} · ${formatBytes(ep.size_bytes)}` }));
-          showMain();
-
-          const actions = h('div', { class: 'row-actions' },
-            h('button', {
-              class: 'icon-btn', 'aria-label': 'Rinomina ' + prettyEpisode(ep.filename),
-              onclick: () => {
-                actions.classList.add('hidden');
-                inlineEdit(main, {
-                  value: base, label: 'Nome dell\'episodio', suffix: ext,
-                  onCancel: () => { actions.classList.remove('hidden'); showMain(); },
-                  onSave: async (newBase) => {
-                    if (!newBase || newBase === base) { actions.classList.remove('hidden'); showMain(); return; }
-                    if (/[\\/]/.test(newBase)) throw new Error('Il nome non può contenere / o \\');
-                    await api(`/characters/${enc(c.name)}/episodes/${enc(ep.filename)}`, { method: 'PATCH', body: { new_filename: newBase + ext } });
-                    toast('Episodio rinominato');
-                    refreshCharacter();
-                  },
-                });
-              },
-            }, icon('edit')),
-            h('button', {
-              class: 'icon-btn danger', 'aria-label': 'Elimina ' + prettyEpisode(ep.filename),
-              onclick: () => deferredDelete(row, 'Episodio eliminato', () =>
-                api(`/characters/${enc(c.name)}/episodes/${enc(ep.filename)}`, { method: 'DELETE', keepalive: true })),
-            }, icon('remove'))
-          );
-
-          const row = h('div', { class: 'row' },
-            h('div', { class: 'row-lead', style: 'background:var(--bg);color:var(--muted)' }, icon('film')),
-            main, actions);
-          rows.append(row);
-        });
+      const sorted = c.episodes.slice().sort((a, b) => a.filename.localeCompare(b.filename, 'it', { numeric: true }));
 
       let round = null;
       if (total) {
@@ -1890,21 +1884,181 @@
             h('div', { class: 'bar' }, h('div', { style: `width:${Math.round(watched / total * 100)}%;background:var(--green-ink)` })),
             h('div', {
               class: 'muted small', style: 'margin-top:6px',
-              text: all ? `Li ha visti tutti: al prossimo giro si ricomincia.` : `${watched} di ${total} già visti in questo giro`,
+              text: all ? 'Li ha visti tutti: al prossimo giro si ricomincia.' : `${watched} di ${total} già visti in questo giro`,
             })),
           watched ? h('button', { class: 'btn btn-quiet', text: 'Ricomincia il giro', onclick: () => resetRound(c) }) : null
         );
       }
 
+      const list = h('div', { class: 'rows ep-list' });
+      const more = h('div');
+      const tools = h('div', { class: 'ep-tools' });
+
+      const draw = () => {
+        const q = epView.q.trim().toLowerCase();
+        let items = sorted;
+        if (epView.filter === 'todo') items = items.filter(e => !e.watched);
+        if (epView.filter === 'seen') items = items.filter(e => e.watched);
+        if (q) items = items.filter(e => prettyEpisode(e.filename).toLowerCase().includes(q));
+        const filtering = q || epView.filter !== 'all';
+        const shown = epView.expanded || filtering ? items : items.slice(0, EPISODES_PREVIEW);
+
+        if (!total) list.replaceChildren(h('div', { class: 'row-empty', text: 'Ancora nessun episodio.' }));
+        else if (!items.length) list.replaceChildren(h('div', { class: 'row-empty', text: 'Nessun episodio trovato.' }));
+        else list.replaceChildren(...shown.map(ep => episodeRow(c, ep)));
+
+        const hidden = items.length - shown.length;
+        more.replaceChildren(
+          hidden > 0
+            ? h('button', { class: 'btn btn-block', style: 'margin-top:12px', onclick: () => { epView.expanded = true; draw(); drawTools(); } },
+              `Mostra tutti gli episodi (${total})`)
+            : epView.expanded && total > EPISODES_PREVIEW && !filtering
+              ? h('button', { class: 'btn btn-quiet btn-block', style: 'margin-top:4px', text: 'Mostra meno', onclick: () => { epView.expanded = false; draw(); drawTools(); list.scrollIntoView({ block: 'nearest' }); } })
+              : null
+        );
+      };
+
+      // Ricerca e filtri solo quando la lista è lunga e aperta
+      const drawTools = () => {
+        if (!(epView.expanded && total > EPISODES_PREVIEW)) { tools.replaceChildren(); return; }
+        if (tools.firstChild) return; // già disegnati: non perdere il focus della ricerca
+        const search = h('input', {
+          class: 'field', type: 'search', placeholder: 'Cerca un episodio', 'aria-label': 'Cerca un episodio',
+          value: epView.q, enterkeyhint: 'search', autocomplete: 'off',
+        });
+        search.addEventListener('input', () => { epView.q = search.value; draw(); });
+        const chips = h('div', { class: 'chips', style: 'margin-top:10px' });
+        const drawChips = () => chips.replaceChildren(...[['all', 'Tutti'], ['todo', 'Da vedere'], ['seen', 'Visti']].map(([k, label]) =>
+          h('button', {
+            class: 'chip', type: 'button', 'aria-pressed': String(epView.filter === k), text: label,
+            onclick: () => { epView.filter = k; drawChips(); draw(); },
+          })));
+        drawChips();
+        tools.replaceChildren(search, chips);
+      };
+
+      draw();
+      drawTools();
+
       return h('div', { class: 'panel' },
-        h('h2', { text: 'Episodi' }),
+        h('div', { class: 'panel-head', style: 'margin:0' },
+          h('h2', { text: 'Episodi' }),
+          total ? h('span', { class: 'muted small', text: plural(total, 'episodio', 'episodi') }) : null),
         h('div', { class: 'panel-sub', style: 'margin-top:4px', text: 'Partono uno alla volta, senza ripetizioni finché non li ha visti tutti.' }),
         round,
-        rows,
+        tools,
+        list,
+        more,
         h('div', { id: 'upload-slot' }),
         h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => pickVideos(c.name) }, icon('upload'), 'Aggiungi episodi'),
         info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.free_bytes)}` }) : null
       );
+    }
+
+    function episodeRow(c, ep) {
+      const [base, ext] = splitExt(ep.filename);
+      const title = prettyEpisode(ep.filename);
+      const main = h('div', { class: 'row-main' });
+      const showMain = () => main.replaceChildren(
+        h('div', { class: 'row-title ep-title', text: title }),
+        h('div', { class: 'row-sub' },
+          ep.watched ? h('span', { class: 'tag known', style: 'margin-left:0', text: 'Visto' }) : 'Da vedere',
+          ` · ${formatBytes(ep.size_bytes)}`));
+      showMain();
+
+      const actions = h('div', { class: 'row-actions' },
+        h('button', {
+          class: 'icon-btn', 'aria-label': 'Rinomina ' + title,
+          onclick: () => {
+            actions.classList.add('hidden');
+            inlineEdit(main, {
+              value: base, label: 'Nome dell\'episodio', suffix: ext,
+              onCancel: () => { actions.classList.remove('hidden'); showMain(); },
+              onSave: async (newBase) => {
+                if (!newBase || newBase === base) { actions.classList.remove('hidden'); showMain(); return; }
+                if (/[\\/]/.test(newBase)) throw new Error('Il nome non può contenere / o \\');
+                await api(`/characters/${enc(c.name)}/episodes/${enc(ep.filename)}`, { method: 'PATCH', body: { new_filename: newBase + ext } });
+                toast('Episodio rinominato');
+                refreshCharacter();
+              },
+            });
+          },
+        }, icon('edit')),
+        h('button', {
+          class: 'icon-btn danger', 'aria-label': 'Elimina ' + title,
+          onclick: () => deferredDelete(row, 'Episodio eliminato', () =>
+            api(`/characters/${enc(c.name)}/episodes/${enc(ep.filename)}`, { method: 'DELETE', keepalive: true })),
+        }, icon('remove'))
+      );
+
+      const row = h('div', { class: 'row ep-row' }, episodeThumb(c, ep), main, actions);
+      return row;
+    }
+
+    /* ---------- Anteprime ---------- */
+    // Già pronte: si caricano subito (URL con versione, in cache nel browser).
+    // Da creare: una alla volta e solo quando la riga è visibile, perché sul
+    // Cucù ogni anteprima costa un secondo o due di CPU. Se il Cucù è occupato
+    // (503) si riprova più tardi
+
+    const thumbQueue = [];
+    let thumbBusy = false;
+    let thumbGen = 0;
+
+    const thumbObserver = 'IntersectionObserver' in window
+      ? new IntersectionObserver((entries) => entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        thumbObserver.unobserve(e.target);
+        const job = e.target._thumbJob;
+        if (job) { thumbQueue.push(job); pumpThumbs(); }
+      }), { rootMargin: '200px' })
+      : null;
+
+    function episodeThumb(c, ep) {
+      const box = h('div', { class: 'ep-thumb', 'aria-hidden': 'true' }, icon('film'));
+      if (!info || !info.thumbnails) return box;
+      const url = `/characters/${enc(c.name)}/episodes/${enc(ep.filename)}/thumb`;
+      const show = (src) => {
+        const img = h('img', { alt: '', src, decoding: 'async' });
+        img.addEventListener('load', () => box.classList.add('ready'));
+        box.replaceChildren(img);
+      };
+      if (ep.thumb_v) {
+        show(`${url}?v=${ep.thumb_v}`);
+      } else {
+        box._thumbJob = { url, show, tries: 0, gen: thumbGen };
+        if (thumbObserver) thumbObserver.observe(box);
+      }
+      return box;
+    }
+
+    async function pumpThumbs() {
+      if (thumbBusy) return;
+      thumbBusy = true;
+      while (thumbQueue.length) {
+        const job = thumbQueue.shift();
+        if (job.gen !== thumbGen) continue; // pagina cambiata nel frattempo
+        try {
+          const res = await fetch(job.url);
+          if (res.ok) {
+            job.show(URL.createObjectURL(await res.blob()));
+          } else if (res.status === 503 && job.tries < 30) {
+            // Cucù occupato: si rimette in coda e si aspetta quanto suggerisce
+            job.tries++;
+            const wait = Math.min(30, parseInt(res.headers.get('Retry-After'), 10) || 5) * 1000;
+            setTimeout(() => { if (job.gen === thumbGen) { thumbQueue.push(job); pumpThumbs(); } }, wait);
+          }
+          // 404 (formato non leggibile o ffmpeg assente): resta l'icona
+        } catch (_) { /* rete: resta l'icona */ }
+      }
+      thumbBusy = false;
+    }
+
+    // Uscendo dal personaggio la coda non serve più
+    function resetThumbs() {
+      thumbGen++;
+      thumbQueue.length = 0;
+      if (thumbObserver) thumbObserver.disconnect();
     }
 
     async function resetRound(c) {

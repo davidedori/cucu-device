@@ -54,6 +54,7 @@ La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene carica
 - `GET /system/info`: hostname, versione, canale OTA, spazio libero su disco
 - Statuine: `move: true` nel POST sposta una statuina da un altro personaggio; `PUT /characters/{name}/tags/{uid}/label` le dà un nome. Gli UID si confrontano senza distinguere maiuscole/minuscole (i lettori scrivono esadecimale minuscolo)
 - `POST /characters/{name}/episodes/reset-round`: tutti gli episodi tornano da vedere
+- `GET /characters/{name}/episodes/{filename}/thumb`: anteprima JPEG 320px, creata con ffmpeg alla prima richiesta e salvata in `characters/<nome>/.thumbs/` (valida finché è più recente del video). Una alla volta (lock), `nice 19`, `-threads 1`, e 503 + `Retry-After` se un episodio è in riproduzione. Rinomina/eliminazione episodio spostano/cancellano l'anteprima
 - `GET /system/now`: cosa succede sulla TV (legge `mode`, `character`, `episode`, `blocked` da `last_seen_tag.json`) + uso di oggi
 - PIN genitore facoltativo: `/auth/*` e il middleware ASGI `PinGuard` (puro ASGI, per non bufferizzare gli upload). Senza `ui_auth.json` non blocca nulla; con il PIN restano aperti solo `/`, `/static/*`, `/api`, `/manifest.webmanifest` e `/auth/*`. `updater.sh` e il suo health check non usano HTTP, quindi non ne sono toccati
 - `GET /manifest.webmanifest`: icona sulla schermata Home (niente service worker: su `http://*.local` non sarebbe disponibile)
@@ -101,6 +102,7 @@ Quando si rilascia una nuova versione, vanno aggiornati **entrambi** `VERSION` e
 - `libnfc-bin` — fornisce `/usr/bin/nfc-list` (backend ACR122U)
 - `i2c-tools` — crea il gruppo `i2c` e fornisce `i2cdetect` (backend PN532)
 - `fbi` — framebuffer image viewer per splash screen
+- `ffmpeg` — anteprime degli episodi nella web UI (facoltativo: senza, la UI mostra un'icona). Non viene installato dall'OTA: sui dispositivi esistenti serve `sudo apt install ffmpeg` una volta
 
 **Venv API (`api/venv/`, non tracciato in git):**
 - Vedi `requirements.txt` per la lista completa
