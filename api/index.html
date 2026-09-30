@@ -49,6 +49,10 @@
          grana di body::after sopra la media visibile torni --bg. Così la barra
          di stato opaca di iOS (theme-color, o lo sfondo di body) combacia */
       --paper: #fafbf8;
+      /* Dalla Home, su iOS 26 la pagina scorre anche sotto l'ora, ma gli
+         elementi fixed partono da sotto la barra di stato: velatura, grana e
+         schermate a tutto schermo salgono di tanto così per coprirla */
+      --over-top: 100px;
       --surface: #ffffff;
       --ink: #3d3d3a;
       --muted: #6e6e69;
@@ -109,6 +113,7 @@
       content: "";
       position: fixed;
       inset: 0;
+      top: calc(-1 * var(--over-top));
       pointer-events: none;
       z-index: 1000;
       opacity: .09;
@@ -914,6 +919,7 @@
     .sheet-backdrop {
       position: fixed;
       inset: 0;
+      top: calc(-1 * var(--over-top));
       z-index: 200;
       background: rgba(61, 61, 58, .38);
       display: flex;
@@ -975,6 +981,7 @@
     .reconnect {
       position: fixed;
       inset: 0;
+      top: calc(-1 * var(--over-top));
       z-index: 500;
       background: var(--paper);
       display: flex;
@@ -982,14 +989,14 @@
       align-items: center;
       justify-content: center;
       text-align: center;
-      padding: 24px;
+      padding: calc(24px + var(--over-top)) 24px 24px;
       overflow: hidden;
     }
 
     .reconnect h2 { font-size: 26px; margin: 18px 0 8px; }
     .reconnect p { color: var(--muted); max-width: 22rem; }
     .reconnect .timer { font-family: var(--serif); font-size: 20px; margin-top: 14px; color: var(--muted); }
-    .reconnect .deco.a { width: 220px; height: 200px; left: -110px; top: 12px; background: var(--peach); border-radius: 50%; }
+    .reconnect .deco.a { width: 220px; height: 200px; left: -110px; top: calc(var(--over-top) + 12px); background: var(--peach); border-radius: 50%; }
     .reconnect .deco.b { width: 120px; height: 120px; right: -40px; top: 30%; background: var(--blue); border-radius: 28px; transform: rotate(20deg); }
     .reconnect .deco.c { width: 160px; height: 150px; left: 12%; bottom: -80px; background: var(--green); border-radius: 46% 54% 50% 50%; }
     .reconnect > *:not(.deco) { position: relative; }
