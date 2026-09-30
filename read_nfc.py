@@ -335,7 +335,10 @@ def _select_episode(character: str):
             if f not in seen: seen.append(f)
         print(f"Reset pool episodi per '{character}'")
 
-    chosen_name = random.choice(remaining)
+    # Prima gli episodi mai visti (es. appena aggiunti dal genitore): "seen"
+    # non si azzera con il giro, quindi distingue i nuovi da quelli già visti
+    never_seen = [f for f in remaining if f not in seen]
+    chosen_name = random.choice(never_seen or remaining)
     remaining.remove(chosen_name)
     if chosen_name not in seen:
         seen.append(chosen_name)

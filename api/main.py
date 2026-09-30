@@ -908,6 +908,8 @@ def get_character(name: str):
             "size_bytes": p.stat().st_size,
             "thumb_v": _thumb_version(char_dir, p),
             "watched": fname in known and fname not in remaining,
+            # Mai partito: read_nfc.py lo sceglie prima degli altri
+            "new": fname not in seen,
             "status": {
                 "known": fname in known,
                 "remaining": fname in remaining,

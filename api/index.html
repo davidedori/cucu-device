@@ -882,6 +882,7 @@
 
     .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 2px; }
     .tag.known { background: var(--green); color: var(--green-ink); }
+    .tag.new { background: var(--apricot); color: var(--apricot-ink); }
 
     .kv { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; }
     .kv:first-of-type { border-top: 0; }
@@ -2044,7 +2045,12 @@
 
       const total = c.episodes.length;
       const watched = c.stats.watched_in_round || 0;
-      const sorted = c.episodes.slice().sort((a, b) => a.filename.localeCompare(b.filename, 'it', { numeric: true }));
+      // "Nuovo" = mai partito, e parte prima degli altri. Su un personaggio
+      // appena creato sarebbero tutti nuovi: lì l'etichetta non dice niente
+      const showNew = (c.stats.seen || 0) > 0;
+      c.episodes.forEach(e => { e.isNew = showNew && !!e.new; });
+      const sorted = c.episodes.slice().sort((a, b) =>
+        (b.isNew - a.isNew) || a.filename.localeCompare(b.filename, 'it', { numeric: true }));
 
       let round = null;
       if (total) {
@@ -2132,7 +2138,8 @@
       const showMain = () => main.replaceChildren(
         h('div', { class: 'row-title ep-title', text: title }),
         h('div', { class: 'row-sub' },
-          ep.watched ? h('span', { class: 'tag known', style: 'margin-left:0', text: 'Visto' }) : 'Da vedere',
+          ep.isNew ? h('span', { class: 'tag new', style: 'margin-left:0', text: 'Nuovo' })
+            : ep.watched ? h('span', { class: 'tag known', style: 'margin-left:0', text: 'Visto' }) : 'Da vedere',
           ` · ${formatBytes(ep.size_bytes)}`));
       showMain();
 
