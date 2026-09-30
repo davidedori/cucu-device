@@ -890,8 +890,6 @@
     .lock form { width: 100%; max-width: 320px; margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
     .field.pin { text-align: center; font-size: 26px; letter-spacing: .35em; padding-left: 20px; }
     .field.pin::placeholder { letter-spacing: .35em; }
-    .how-to ol { margin: 8px 0 0; padding-left: 22px; color: var(--muted); }
-    .how-to li + li { margin-top: 4px; }
 
     /* Guida per aggiungere Cucù alla schermata Home */
     .home-steps { margin: 0 0 4px; padding-left: 22px; }
@@ -1233,26 +1231,10 @@
           <div id="security"></div>
         </div>
 
-        <div class="panel how-to" id="homescreen">
+        <div class="panel hidden" id="homescreen">
           <h2>Cucù sulla schermata Home</h2>
           <div class="panel-sub" style="margin-top:6px">Così lo apri come un'app, senza cercare l'indirizzo.</div>
-          <button class="btn btn-block hidden" id="homescreen-guide" style="margin-top:14px">Mostrami come</button>
-          <details class="more">
-            <summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Su iPhone</summary>
-            <ol>
-              <li>Apri questa pagina con Safari.</li>
-              <li>Tocca il pulsante Condividi (il quadrato con la freccia).</li>
-              <li>Scegli «Aggiungi alla schermata Home».</li>
-            </ol>
-          </details>
-          <details class="more">
-            <summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Su Android</summary>
-            <ol>
-              <li>Apri questa pagina con Chrome.</li>
-              <li>Tocca il menu (i tre puntini in alto a destra).</li>
-              <li>Scegli «Aggiungi a schermata Home».</li>
-            </ol>
-          </details>
+          <button class="btn btn-block" id="homescreen-guide" style="margin-top:14px">Mostrami come</button>
         </div>
 
         <div class="panel">
@@ -3576,10 +3558,10 @@
       loadInfo();
       if (!location.hash) history.replaceState(null, '', '#/adesso');
       route();
-      // Già sulla Home: il riquadro con le istruzioni non serve
-      if (isStandalone()) $('homescreen').classList.add('hidden');
-      else if (phonePlatform()) {
-        $('homescreen-guide').classList.remove('hidden');
+      // Il riquadro serve solo nel browser di un telefono: già dalla Home o
+      // su un computer resta nascosto
+      if (!isStandalone() && phonePlatform()) {
+        $('homescreen').classList.remove('hidden');
         $('homescreen-guide').addEventListener('click', showHomeScreenGuide);
       }
       maybeOfferOnStart();
