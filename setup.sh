@@ -150,8 +150,7 @@ APT_PACKAGES=(
     python3-vlc        # binding Python per VLC (usato da read_nfc.py)
     vlc-bin            # core binaries VLC
     vlc-plugin-base    # plugin base VLC
-    libnfc-bin         # nfc-list (lettore ACR122U USB, hardware v1)
-    i2c-tools          # gruppo i2c + i2cdetect (lettore PN532 I2C, hardware v2)
+    i2c-tools          # gruppo i2c + i2cdetect (lettore PN532 I2C)
     fbi                # framebuffer image viewer (usato come fallback)
     python3-venv       # per creare il venv dell'API
     python3-pip        # pip
@@ -459,8 +458,7 @@ if [ -f "$CONFIG_TXT" ]; then
         ok "config.txt: disable_splash già presente"
     fi
 
-    # Bus I2C per il lettore PN532 (hardware v2). Innocuo sui device con
-    # ACR122U USB: nessun dispositivo sul bus e read_nfc.py ripiega su nfc-list.
+    # Bus I2C per il lettore PN532.
     # Baudrate 100kHz: il PN532 usa il clock stretching, che il controller I2C
     # del Pi gestisce male a velocità più alte. Attivo dal prossimo riavvio.
     # "[all]" evita che le righe finiscano dentro una sezione condizionale

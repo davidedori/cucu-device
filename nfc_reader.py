@@ -1,26 +1,19 @@
 #!/usr/bin/env python3
-"""Backend di lettura NFC per read_nfc.py.
+"""Lettore NFC di read_nfc.py: modulo PN532 sul bus I2C dei GPIO.
 
-Due lettori supportati, stessa interfaccia read_uid() -> str | None:
-- Acr122uReader: lettore USB ACR122U via `nfc-list` (libnfc), hardware v1.
-- Pn532I2cReader: modulo PN532 sul bus I2C dei GPIO, hardware v2.
-
-Il formato dell'UID è identico per entrambi ("04 a1 b2 c3 d4 e5 f6": hex
-minuscolo separato da spazio singolo), così tags.json resta valido quando si
-cambia lettore senza dover riassociare le statuette.
+read_uid() -> str | None, con l'UID in hex minuscolo separato da spazi
+("04 a1 b2 c3 d4 e5 f6"): è il formato delle chiavi di tags.json, lo stesso
+che usava il vecchio lettore USB ACR122U (supporto rimosso), quindi le
+statuette associate allora restano valide.
 
 Solo stdlib: read_nfc.py gira col python di sistema, non nel venv dell'API.
 
-Eseguito direttamente (`python3 nfc_reader.py [auto|pn532_i2c|acr122u]`)
-stampa gli UID letti: utile per verificare il cablaggio col servizio fermo.
+Eseguito direttamente (`python3 nfc_reader.py`) stampa gli UID letti: utile
+per verificare il cablaggio col servizio fermo.
 """
 import fcntl
 import os
-import re
-import subprocess
 import time
-
-NFCLIST_PATH = "/usr/bin/nfc-list"
 
 I2C_BUS_PATH = "/dev/i2c-1"
 PN532_I2C_ADDR = 0x24
@@ -55,23 +48,6 @@ class Pn532Error(Exception):
 
 def format_uid(uid_bytes):
     return " ".join(f"{b:02x}" for b in uid_bytes)
-
-
-# --- ACR122U (nfc-list) -------------------------------------------------
-
-class Acr122uReader:
-    name = "ACR122U (nfc-list)"
-
-    def read_uid(self):
-        try:
-            result = subprocess.run([NFCLIST_PATH, "-v"], capture_output=True, text=True, timeout=2)
-            out = result.stdout + result.stderr
-            m = re.search(r"UID \(NFCID1\):\s*(.*)", out)
-            if m:
-                return " ".join(m.group(1).strip().split())
-        except Exception:
-            pass
-        return None
 
 
 # --- PN532 frame (funzioni pure, testabili senza hardware) --------------
@@ -179,7 +155,20 @@ class Pn532I2cReader:
 
     # -- inizializzazione --
 
+    def _abort_pending(self):
+        # Un riavvio del servizio può uccidere il processo precedente a metà di
+        # un InListPassiveTarget: il chip resta con quel comando in corso (o
+        # con la risposta non letta) e il primo scambio del nuovo processo va
+        # fuori sincrono. Un frame ACK dall'host annulla il comando in corso
+        # (UM0701-02, par. 6.2.1.3); se non c'era niente da annullare è ignorato.
+        try:
+            os.write(self.fd, ACK_FRAME)
+        except OSError:
+            pass
+        time.sleep(0.02)
+
     def _init_chip(self):
+        self._abort_pending()
         # Il PN532 si sveglia dal power-down al primo indirizzamento I2C, e il
         # primo trasferimento può andare in NACK: qualche tentativo prima di
         # considerarlo assente.
@@ -257,38 +246,35 @@ class Pn532I2cReader:
         return uid
 
 
-# --- SELEZIONE BACKEND --------------------------------------------------
+# --- AVVIO ---------------------------------------------------------------
 
-def create_reader(mode="auto"):
-    """mode: 'auto' (PN532 se risponde, altrimenti ACR122U), 'pn532_i2c', 'acr122u'."""
-    mode = (mode or "auto").strip().lower()
-    if mode == "acr122u":
-        reader = Acr122uReader()
-    elif mode == "pn532_i2c":
-        # Forzato da config: niente fallback. Riprova finché il chip non
-        # risponde invece di far crashare il servizio (resta "active" e
-        # mostra la schermata idle, senza cicli di restart di systemd).
-        reader = Pn532I2cReader()
-        warned = False
-        while not reader.probe():
-            if not warned:
-                print(f"[WARN] PN532 non trovato su {I2C_BUS_PATH}, riprovo...")
-                warned = True
-            time.sleep(2)
-    else:
-        if mode != "auto":
-            print(f"[WARN] NFC_READER='{mode}' non riconosciuto, uso 'auto'.")
-        reader = Pn532I2cReader()
-        if not reader.probe():
-            reader = Acr122uReader()
-    detail = f" (fw {reader.firmware})" if getattr(reader, "firmware", None) else ""
-    print(f"Lettore NFC: {reader.name}{detail}")
+# Ogni quanto ripetere l'avviso se il PN532 continua a non rispondere
+NOT_FOUND_WARN_EVERY_SEC = 60
+
+
+def create_reader():
+    """Ritorna il lettore solo quando il PN532 risponde. Finché non risponde
+    riprova invece di far crashare il servizio: resta "active" e mostra la
+    schermata idle, senza cicli di restart di systemd."""
+    reader = Pn532I2cReader()
+    tries = 0
+    last_warn = None
+    while not reader.probe():
+        tries += 1
+        now = time.monotonic()
+        if last_warn is None or now - last_warn >= NOT_FOUND_WARN_EVERY_SEC:
+            print(f"[WARN] PN532 non risponde su {I2C_BUS_PATH}@0x{PN532_I2C_ADDR:02x}, riprovo... "
+                  f"(tentativo {tries})")
+            last_warn = now
+        time.sleep(2)
+    detail = f" (fw {reader.firmware})" if reader.firmware else ""
+    after = f" dopo {tries + 1} tentativi" if tries else ""
+    print(f"Lettore NFC: {reader.name}{detail}{after}")
     return reader
 
 
 if __name__ == "__main__":
-    import sys
-    r = create_reader(sys.argv[1] if len(sys.argv) > 1 else "auto")
+    r = create_reader()
     last = object()
     try:
         while True:

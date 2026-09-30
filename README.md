@@ -9,7 +9,7 @@ Dispositivo basato su Raspberry Pi che permette a un bambino di avviare video su
 | Componente | Note |
 |---|---|
 | Raspberry Pi 4 o 5 | Testato su RPi 4 Model B |
-| Lettore NFC | PN532 su I2C (hardware v2) oppure ACR122U USB (hardware v1). Scelto da `NFC_READER` in `config.env`, default `auto` |
+| Lettore NFC | PN532 su I2C (il lettore USB ACR122U dell'hardware v1 non è più supportato) |
 | Schermo/TV | Collegato via HDMI, fullscreen automatico |
 | Scheda SD | 16 GB min, 32 GB consigliati (per i video) |
 | Tag NFC | Uno per personaggio (NTAG215 o simili) |
@@ -52,7 +52,7 @@ Il LED è gestito da `led.py` (servizio `cucu-led.service`), che parte presto ne
 
 Luminosità e velocità si regolano con le costanti in cima a `led.py`. Sui dispositivi senza LED o senza PWM il servizio esce subito, senza errori.
 
-`setup.sh` abilita il bus I2C a 100 kHz (serve un riavvio). Per verificare: `i2cdetect -y 1` deve mostrare `24`. Il formato degli UID è identico a quello dell'ACR122U, quindi le statuette già associate continuano a funzionare.
+`setup.sh` abilita il bus I2C a 100 kHz (serve un riavvio). Per verificare: `i2cdetect -y 1` deve mostrare `24`. Il formato degli UID è identico a quello del vecchio ACR122U, quindi le statuette associate allora continuano a funzionare.
 
 Un dispositivo v1 convertito a PN532 va aggiornato rieseguendo `sudo bash setup.sh`, perché l'aggiornamento OTA non abilita il bus I2C.
 
@@ -63,7 +63,7 @@ Un dispositivo v1 convertito a PN532 va aggiornato rieseguendo `sudo bash setup.
 ```
 cucu-device/
 ├── read_nfc.py                 # Script principale: NFC reader + VLC player
-├── nfc_reader.py               # Backend lettore NFC (PN532 I2C / ACR122U)
+├── nfc_reader.py               # Driver del lettore NFC PN532 (I2C)
 ├── led.py                      # LED di stato (PWM hardware, servizio cucu-led)
 ├── tags.json                   # Mapping UID NFC → personaggio (configurato via UI)
 ├── VERSION                     # Versione corrente (es. 0.1.0)
@@ -135,7 +135,7 @@ Lo script è **idempotente**: può essere rieseguito senza danni in qualsiasi mo
 
 Cosa fa:
 - Imposta l'hostname univoco `cucu-XXXX` (dagli ultimi 4 caratteri del MAC di wlan0)
-- Installa le dipendenze di sistema (vlc, libnfc, fbi, avahi...)
+- Installa le dipendenze di sistema (vlc, i2c-tools, fbi, avahi...)
 - Crea la struttura cartelle in `/home/<utente>/cucu-device/`
 - Crea il venv Python e installa le dipendenze API
 - Configura i permessi sudoers per l'API
