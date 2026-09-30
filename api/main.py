@@ -44,7 +44,7 @@ DAILY_USAGE_FILE = BASE_DIR / "daily_usage.json"
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 # Font e immagini della UI serviti in locale: niente CDN, così la pagina
-# funziona anche quando il telefono è collegato all'hotspot del Cucù (senza internet)
+# funziona anche quando il telefono è collegato all'hotspot di Cucù (senza internet)
 app.mount("/static", StaticFiles(directory=API_DIR / "static"), name="static")
 
 class CharacterCreate(BaseModel):
@@ -1350,7 +1350,7 @@ async def upload_character_episodes(
 @app.get("/characters/{name}/episodes/{filename}/thumb")
 def get_episode_thumb(name: str, filename: str):
     """
-    Anteprima dell'episodio. Se manca la crea (una alla volta): se il Cucù è
+    Anteprima dell'episodio. Se manca la crea (una alla volta): se Cucù è
     occupato risponde 503 e la UI riprova dopo qualche secondo.
     """
     char_dir = CHARACTERS_DIR / name

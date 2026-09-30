@@ -19,7 +19,7 @@
 
   <style>
     /* Font incorporati (da cucu-website/fonts): la UI deve funzionare anche
-       collegati all'hotspot del Cucù, quindi niente Google Fonts */
+       collegati all'hotspot di Cucù, quindi niente Google Fonts */
     @font-face {
       font-family: 'Figtree'; font-style: normal; font-weight: 400 600; font-display: swap;
       src: url(/static/fonts/figtree-normal-latin-ext.woff2) format('woff2');
@@ -49,10 +49,6 @@
          grana di body::after sopra la media visibile torni --bg. Così la barra
          di stato opaca di iOS (theme-color, o lo sfondo di body) combacia */
       --paper: #fafbf8;
-      /* Dalla Home, su iOS 26 la pagina scorre anche sotto l'ora, ma gli
-         elementi fixed partono da sotto la barra di stato: velatura, grana e
-         schermate a tutto schermo salgono di tanto così per coprirla */
-      --over-top: 100px;
       --surface: #ffffff;
       --ink: #3d3d3a;
       --muted: #6e6e69;
@@ -113,7 +109,6 @@
       content: "";
       position: fixed;
       inset: 0;
-      top: calc(-1 * var(--over-top));
       pointer-events: none;
       z-index: 1000;
       opacity: .09;
@@ -919,7 +914,6 @@
     .sheet-backdrop {
       position: fixed;
       inset: 0;
-      top: calc(-1 * var(--over-top));
       z-index: 200;
       background: rgba(61, 61, 58, .38);
       display: flex;
@@ -981,7 +975,6 @@
     .reconnect {
       position: fixed;
       inset: 0;
-      top: calc(-1 * var(--over-top));
       z-index: 500;
       background: var(--paper);
       display: flex;
@@ -989,14 +982,14 @@
       align-items: center;
       justify-content: center;
       text-align: center;
-      padding: calc(24px + var(--over-top)) 24px 24px;
+      padding: 24px;
       overflow: hidden;
     }
 
     .reconnect h2 { font-size: 26px; margin: 18px 0 8px; }
     .reconnect p { color: var(--muted); max-width: 22rem; }
     .reconnect .timer { font-family: var(--serif); font-size: 20px; margin-top: 14px; color: var(--muted); }
-    .reconnect .deco.a { width: 220px; height: 200px; left: -110px; top: calc(var(--over-top) + 12px); background: var(--peach); border-radius: 50%; }
+    .reconnect .deco.a { width: 220px; height: 200px; left: -110px; top: 12px; background: var(--peach); border-radius: 50%; }
     .reconnect .deco.b { width: 120px; height: 120px; right: -40px; top: 30%; background: var(--blue); border-radius: 28px; transform: rotate(20deg); }
     .reconnect .deco.c { width: 160px; height: 150px; left: 12%; bottom: -80px; background: var(--green); border-radius: 46% 54% 50% 50%; }
     .reconnect > *:not(.deco) { position: relative; }
@@ -1130,7 +1123,7 @@
           <i class="hs rect" style="--x:80%;--y:74%;--w:30%;--r:14deg;--c:var(--peach);--ar:.85"></i>
           <i class="hs round" style="--x:9%;--y:78%;--w:18%;--c:var(--green)"></i>
           <div class="device-glow"></div>
-          <img class="device-img" src="/static/img/dispositivo.webp" alt="Il Cucù" width="900" height="613">
+          <img class="device-img" src="/static/img/dispositivo.webp" alt="Cucù" width="900" height="613">
           <div class="figurine" id="figurine" aria-hidden="true"></div>
         </figure>
       </div>
@@ -1215,7 +1208,7 @@
 
         <div class="panel">
           <h2>Aggiornamenti</h2>
-          <div class="panel-sub" style="margin-top:6px" id="update-text">Il Cucù si aggiorna da solo di notte. Puoi anche controllare adesso.</div>
+          <div class="panel-sub" style="margin-top:6px" id="update-text">Cucù si aggiorna da solo di notte. Puoi anche controllare adesso.</div>
           <div class="stack">
             <button class="btn btn-block" id="update-check">Controlla aggiornamenti</button>
             <button class="btn btn-primary btn-block hidden" id="update-apply">Aggiorna ora</button>
@@ -1694,7 +1687,7 @@
     const IMAGE_ACCEPT = 'image/png,image/jpeg';
 
     /* ---------- Foto: rimpicciolita sul telefono prima di inviarla ---------- */
-    // Le foto del telefono pesano diversi MB: al Cucù basta un quadrato di 600 px.
+    // Le foto del telefono pesano diversi MB: a Cucù basta un quadrato di 600 px.
     // I PNG restano PNG, così le statuine scontornate mantengono la trasparenza
 
     const IMAGE_MAX = 600;
@@ -1793,7 +1786,7 @@
 
       function stepFigure(char) {
         const scan = scanPanel({
-          title: 'Appoggia la sua statuina sul Cucù',
+          title: 'Appoggia la sua statuina su Cucù',
           cancelLabel: 'Lo faccio dopo',
           onCancel: () => { stopTagScan(); stepEpisodes(char); },
         });
@@ -2070,7 +2063,7 @@
       addBtn.addEventListener('click', () => {
         addBtn.classList.add('hidden');
         const panel = scanPanel({
-          title: 'Appoggia la statuina sul Cucù',
+          title: 'Appoggia la statuina su Cucù',
           onCancel: () => { stopTagScan(); scanSlot.replaceChildren(); addBtn.classList.remove('hidden'); },
         });
         scanSlot.replaceChildren(panel.el);
@@ -2098,7 +2091,7 @@
 
       return h('div', { class: 'panel' },
         h('h2', { text: 'Statuine' }),
-        h('div', { class: 'panel-sub', style: 'margin-top:4px', text: 'Appoggiane una sul Cucù per far partire un episodio. Puoi dare un nome a ciascuna.' }),
+        h('div', { class: 'panel-sub', style: 'margin-top:4px', text: 'Appoggiane una su Cucù per far partire un episodio. Puoi dare un nome a ciascuna.' }),
         rows, scanSlot, addBtn, manual);
     }
 
@@ -2245,7 +2238,7 @@
     /* ---------- Anteprime ---------- */
     // Già pronte: si caricano subito (URL con versione, in cache nel browser).
     // Da creare: una alla volta e solo quando la riga è visibile, perché sul
-    // Cucù ogni anteprima costa un secondo o due di CPU. Se il Cucù è occupato
+    // Cucù ogni anteprima costa un secondo o due di CPU. Se Cucù è occupato
     // (503) si riprova più tardi
 
     const thumbQueue = [];
@@ -2436,7 +2429,7 @@
     async function runQueue() {
       const q = queue;
       let wakeLock = null;
-      try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (_) { /* solo su https: sul Cucù di solito non c'è */ }
+      try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (_) { /* solo su https: su Cucù di solito non c'è */ }
 
       for (const item of q.items) {
         if (item.status !== 'waiting') continue;
@@ -2542,7 +2535,7 @@
 
     /* ================= Tempo ================= */
     // La pagina lavora su una bozza: si salva tutto insieme (un solo riavvio del
-    // lettore) e si può annullare. saved = ultima configurazione letta dal Cucù
+    // lettore) e si può annullare. saved = ultima configurazione letta da Cucù
 
     const tl = { saved: null, draft: null };
     const DAY_SHORT = { mon: 'L', tue: 'M', wed: 'M', thu: 'G', fri: 'V', sat: 'S', sun: 'D' };
@@ -2577,7 +2570,7 @@
     const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
     async function renderTimeLimits() {
-      // Con modifiche in sospeso si tiene la bozza, altrimenti si rilegge dal Cucù
+      // Con modifiche in sospeso si tiene la bozza, altrimenti si rilegge da Cucù
       if (!isTimeDirty()) {
         try {
           tl.saved = normalizeLimits(await api('/system/time-limits'));
@@ -2898,7 +2891,7 @@
         return { state: 'rest', title: 'Il gufetto riposa', sub: when, big: 'Riposo', small: n.next_window_start ? `si riparte alle ${hm(n.next_window_start)}` : 'a domani' };
       }
       if (n.tag_present && !n.tag_character) return { state: 'idle', title: 'Statuina sconosciuta', sub: 'Questa statuina non è abbinata a nessun personaggio. Puoi abbinarla dalla scheda di un personaggio.', big: 'Cucù!', small: 'statuina sconosciuta' };
-      return { state: 'idle', title: 'Pronto', sub: 'Appoggia una statuina sul Cucù per far partire un episodio.', big: 'Cucù!', small: 'appoggia una statuina' };
+      return { state: 'idle', title: 'Pronto', sub: 'Appoggia una statuina su Cucù per far partire un episodio.', big: 'Cucù!', small: 'appoggia una statuina' };
     }
 
     let screenKey = null;
@@ -3021,7 +3014,7 @@
               data.current ? signalBars(data.current.signal) : icon('remove')),
             h('div', { class: 'row-main' },
               h('div', { class: 'row-title', text: data.current ? data.current.ssid : 'Nessuna rete' }),
-              h('div', { class: 'row-sub', text: data.current ? 'Collegato' : 'Il Cucù usa la sua rete di emergenza' })
+              h('div', { class: 'row-sub', text: data.current ? 'Collegato' : 'Cucù usa la sua rete di emergenza' })
             )
           )
         ));
@@ -3057,7 +3050,7 @@
             savedRows.append(h('div', { class: 'row' },
               h('div', { class: 'row-main' },
                 h('div', { class: 'row-title', style: 'font-weight:400', text: ssid }),
-                isAp ? h('div', { class: 'row-sub', text: 'Rete di emergenza del Cucù' }) : null
+                isAp ? h('div', { class: 'row-sub', text: 'Rete di emergenza di Cucù' }) : null
               ),
               isAp ? null : h('button', {
                 class: 'icon-btn danger', 'aria-label': 'Dimentica ' + ssid, onclick: () => forgetWifi(ssid),
@@ -3077,12 +3070,12 @@
     $('wifi-refresh').addEventListener('click', renderWifi);
 
     function afterSwitchText(ssid) {
-      const host = info ? `${info.hostname}.local` : 'il Cucù';
-      return `Il telefono perderà il collegamento con il Cucù per qualche secondo. Poi collegalo anche tu a "${ssid}" e apri ${host}.`;
+      const host = info ? `${info.hostname}.local` : 'Cucù';
+      return `Il telefono perderà il collegamento con Cucù per qualche secondo. Poi collegalo anche tu a "${ssid}" e apri ${host}.`;
     }
 
     async function switchWifi(ssid) {
-      const ok = await confirmSheet({ title: `Collegare il Cucù a ${ssid}?`, text: afterSwitchText(ssid), ok: 'Collega' });
+      const ok = await confirmSheet({ title: `Collegare Cucù a ${ssid}?`, text: afterSwitchText(ssid), ok: 'Collega' });
       if (!ok) return;
       try {
         await api(`/system/wifi/${enc(ssid)}/connect`, { method: 'POST' });
@@ -3125,15 +3118,15 @@
       const ok = await confirmSheet({
         title: `Dimenticare ${ssid}?`,
         text: isCurrent
-          ? 'È la rete che il Cucù sta usando adesso: si scollegherà e accenderà la sua rete di emergenza.'
-          : 'Il Cucù non si collegherà più da solo a questa rete.',
+          ? 'È la rete che Cucù sta usando adesso: si scollegherà e accenderà la sua rete di emergenza.'
+          : 'Cucù non si collegherà più da solo a questa rete.',
         ok: 'Dimentica',
         danger: true,
       });
       if (!ok) return;
       try {
         await api(`/system/wifi/${enc(ssid)}`, { method: 'DELETE' });
-        if (isCurrent) showReconnect('Cambio rete', 'Collega il telefono alla rete del Cucù (il suo nome finisce con _AP) e apri 10.42.0.1.');
+        if (isCurrent) showReconnect('Cambio rete', 'Collega il telefono alla rete di Cucù (il suo nome finisce con _AP) e apri 10.42.0.1.');
         else renderWifi();
       } catch (e) { toast(e.message); }
     }
@@ -3169,11 +3162,11 @@
           apply.textContent = `Aggiorna alla ${d.latest_version}`;
           apply.classList.remove('hidden');
         } else {
-          $('update-text').textContent = `Il Cucù è aggiornato (versione ${d.current_version}).`;
+          $('update-text').textContent = `Cucù è aggiornato (versione ${d.current_version}).`;
         }
       } catch (e) {
         // Tipico sull'hotspot o senza internet: il dettaglio tecnico non serve al genitore
-        $('update-text').textContent = 'Non riesco a controllare adesso: serve che il Cucù sia collegato a internet.';
+        $('update-text').textContent = 'Non riesco a controllare adesso: serve che Cucù sia collegato a internet.';
         console.warn('update-check:', e.message);
       } finally {
         btn.disabled = false;
@@ -3186,7 +3179,7 @@
     $('update-apply').addEventListener('click', async () => {
       const ok = await confirmSheet({
         title: 'Aggiornare adesso?',
-        text: 'Il Cucù scarica la nuova versione e si riavvia. Se un cartone è in corso si ferma.',
+        text: 'Cucù scarica la nuova versione e si riavvia. Se un cartone è in corso si ferma.',
         ok: 'Aggiorna',
       });
       if (!ok) return;
@@ -3207,7 +3200,7 @@
       const reload = h('button', { class: 'btn btn-primary hidden', style: 'margin-top:18px', text: 'Ricarica la pagina' });
       const note = h('p', { class: 'hidden', style: 'margin-top:14px' });
       reload.addEventListener('click', () => {
-        // Sull'hotspot (10.42.0.1) la pagina non tornerà: il Cucù è passato a un'altra rete
+        // Sull'hotspot (10.42.0.1) la pagina non tornerà: Cucù è passato a un'altra rete
         if (location.hostname === '10.42.0.1') {
           note.textContent = `Collega il telefono al Wi-Fi di casa e apri ${info ? info.hostname : 'cucu-xxxx'}.local`;
           note.classList.remove('hidden');
@@ -3309,7 +3302,7 @@
           btn.disabled = false;
         }
       });
-      lockView('Ciao! Serve il PIN', 'Le impostazioni del Cucù sono protette. Inserisci il PIN per entrare.',
+      lockView('Ciao! Serve il PIN', 'Le impostazioni di Cucù sono protette. Inserisci il PIN per entrare.',
         form,
         h('button', { class: 'btn btn-quiet', style: 'margin-top:8px', text: 'Ho dimenticato il PIN', onclick: renderLockForgot }));
       setTimeout(() => input.focus(), 100);
@@ -3328,8 +3321,8 @@
     function renderLockForgot() {
       stopResetPoll();
       lockView('Un PIN nuovo',
-        'Appoggia sul Cucù la stessa statuina 5 volte di fila, togliendola ogni volta. Quando la luce fa un doppio lampeggio, qui potrai scegliere un PIN nuovo.',
-        h('div', { class: 'muted small', role: 'status', style: 'margin-top:12px', text: 'Aspetto il Cucù…' }),
+        'Appoggia su Cucù la stessa statuina 5 volte di fila, togliendola ogni volta. Quando la luce fa un doppio lampeggio, qui potrai scegliere un PIN nuovo.',
+        h('div', { class: 'muted small', role: 'status', style: 'margin-top:12px', text: 'Aspetto Cucù…' }),
         h('button', { class: 'btn btn-quiet', style: 'margin-top:8px', text: 'Torna indietro', onclick: () => { stopResetPoll(); renderLockPin(); } }));
       const check = async () => {
         try {
@@ -3366,7 +3359,7 @@
           btn.disabled = false;
         }
       });
-      lockView('Ci siamo!', 'Il Cucù ti ha riconosciuto. Scegli il nuovo PIN entro 10 minuti.', form);
+      lockView('Ci siamo!', 'Cucù ti ha riconosciuto. Scegli il nuovo PIN entro 10 minuti.', form);
       setTimeout(() => pin.focus(), 100);
     }
 
@@ -3461,7 +3454,7 @@
       const root = $('security');
       if (authState.pin_set) {
         root.replaceChildren(
-          h('div', { class: 'panel-sub', style: 'margin-top:6px', text: 'Le impostazioni sono protette da un PIN. Se lo dimentichi, puoi sceglierne uno nuovo appoggiando la stessa statuina sul Cucù 5 volte di fila.' }),
+          h('div', { class: 'panel-sub', style: 'margin-top:6px', text: 'Le impostazioni sono protette da un PIN. Se lo dimentichi, puoi sceglierne uno nuovo appoggiando la stessa statuina su Cucù 5 volte di fila.' }),
           h('div', { class: 'stack' },
             h('button', { class: 'btn btn-block', text: 'Cambia il PIN', onclick: changePin }),
             h('button', { class: 'btn btn-block', text: 'Esci da questo telefono', onclick: logout }),
