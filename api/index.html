@@ -3188,11 +3188,33 @@
       });
     }
 
+    // Schermata a tutto schermo del PIN, con il gufetto che sbuca
+    function lockView(title, text, ...content) {
+      $('lock-root').replaceChildren(h('div', { class: 'reconnect lock', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'lock-title' },
+        h('div', { class: 'deco a pop' }),
+        h('div', { class: 'deco b pop', style: 'animation-delay:.1s' }),
+        h('div', { class: 'deco c pop', style: 'animation-delay:.2s' }),
+        h('div', { class: 'peek' }, h('img', { src: '/static/img/gufetto.png', alt: '' })),
+        h('h2', { id: 'lock-title', text: title }),
+        h('p', { text }),
+        ...content
+      ));
+    }
+
+    function enterApp() {
+      $('lock-root').replaceChildren();
+      if (started) route(); else start();
+    }
+
     function showLock() {
       if ($('lock-root').firstChild) return;
       closeSheet();
       stopNowPolling();
       stopTagScan();
+      renderLockPin();
+    }
+
+    function renderLockPin() {
       const input = pinField('lock-pin', 'current-password');
       const error = h('div', { class: 'form-error', role: 'alert' });
       const btn = h('button', { class: 'btn btn-primary btn-block', text: 'Entra' });
@@ -3209,8 +3231,7 @@
           });
           if (!res.ok) throw new Error(await errorText(res));
           authState = { pin_set: true, authenticated: true };
-          $('lock-root').replaceChildren();
-          if (started) route(); else start();
+          enterApp();
         } catch (err) {
           error.textContent = err.message;
           input.value = '';
@@ -3218,16 +3239,65 @@
           btn.disabled = false;
         }
       });
-      $('lock-root').replaceChildren(h('div', { class: 'reconnect lock', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'lock-title' },
-        h('div', { class: 'deco a pop' }),
-        h('div', { class: 'deco b pop', style: 'animation-delay:.1s' }),
-        h('div', { class: 'deco c pop', style: 'animation-delay:.2s' }),
-        h('div', { class: 'peek' }, h('img', { src: '/static/img/gufetto.png', alt: '' })),
-        h('h2', { id: 'lock-title', text: 'Ciao! Serve il PIN' }),
-        h('p', { text: 'Le impostazioni del Cucù sono protette. Inserisci il PIN per entrare.' }),
-        form
-      ));
+      lockView('Ciao! Serve il PIN', 'Le impostazioni del Cucù sono protette. Inserisci il PIN per entrare.',
+        form,
+        h('button', { class: 'btn btn-quiet', style: 'margin-top:8px', text: 'Ho dimenticato il PIN', onclick: renderLockForgot }));
       setTimeout(() => input.focus(), 100);
+    }
+
+    // PIN dimenticato: il gesto con la statuina (read_nfc.py) apre per 10 minuti
+    // una finestra in cui /auth/reset accetta un PIN nuovo. Qui si aspetta che
+    // /auth/status la segnali, poi si chiede il PIN nuovo
+    let resetPoll = null;
+
+    function stopResetPoll() {
+      clearTimeout(resetPoll);
+      resetPoll = null;
+    }
+
+    function renderLockForgot() {
+      stopResetPoll();
+      lockView('Un PIN nuovo',
+        'Appoggia sul Cucù la stessa statuina 5 volte di fila, togliendola ogni volta. Quando la luce fa un doppio lampeggio, qui potrai scegliere un PIN nuovo.',
+        h('div', { class: 'muted small', role: 'status', style: 'margin-top:12px', text: 'Aspetto il Cucù…' }),
+        h('button', { class: 'btn btn-quiet', style: 'margin-top:8px', text: 'Torna indietro', onclick: () => { stopResetPoll(); renderLockPin(); } }));
+      const check = async () => {
+        try {
+          const res = await fetch('/auth/status', { cache: 'no-store' });
+          if (res.ok && (await res.json()).reset_open) { resetPoll = null; renderLockReset(); return; }
+        } catch (_) { /* rete assente: si riprova */ }
+        resetPoll = setTimeout(check, 2000);
+      };
+      check();
+    }
+
+    function renderLockReset() {
+      const pin = pinField('reset-pin', 'new-password');
+      const repeat = pinField('reset-repeat', 'new-password');
+      const error = h('div', { class: 'form-error', role: 'alert' });
+      const btn = h('button', { class: 'btn btn-primary btn-block', text: 'Salva il nuovo PIN' });
+      const form = h('form', {},
+        h('label', { class: 'lbl', for: 'reset-pin', text: 'Nuovo PIN (da 4 a 8 cifre)' }), pin,
+        h('label', { class: 'lbl', for: 'reset-repeat', style: 'margin-top:14px', text: 'Ripeti il nuovo PIN' }), repeat,
+        btn, error);
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        error.textContent = '';
+        if (!/^\d{4,8}$/.test(pin.value)) { error.textContent = 'Il PIN deve avere da 4 a 8 cifre.'; return; }
+        if (pin.value !== repeat.value) { error.textContent = 'I due PIN non sono uguali.'; return; }
+        btn.disabled = true;
+        try {
+          await postAuth('/auth/reset', { pin: pin.value });
+          authState = { pin_set: true, authenticated: true };
+          enterApp();
+          toast('PIN cambiato: sugli altri telefoni andrà inserito di nuovo');
+        } catch (err) {
+          error.textContent = err.message;
+          btn.disabled = false;
+        }
+      });
+      lockView('Ci siamo!', 'Il Cucù ti ha riconosciuto. Scegli il nuovo PIN entro 10 minuti.', form);
+      setTimeout(() => pin.focus(), 100);
     }
 
     // Due campi (PIN e conferma) + eventuale PIN attuale, in un pannello dal basso
@@ -3321,7 +3391,7 @@
       const root = $('security');
       if (authState.pin_set) {
         root.replaceChildren(
-          h('div', { class: 'panel-sub', style: 'margin-top:6px', text: 'Le impostazioni sono protette da un PIN. Se lo dimentichi, si può azzerare dal computerino del Cucù.' }),
+          h('div', { class: 'panel-sub', style: 'margin-top:6px', text: 'Le impostazioni sono protette da un PIN. Se lo dimentichi, puoi sceglierne uno nuovo appoggiando la stessa statuina sul Cucù 5 volte di fila.' }),
           h('div', { class: 'stack' },
             h('button', { class: 'btn btn-block', text: 'Cambia il PIN', onclick: changePin }),
             h('button', { class: 'btn btn-block', text: 'Esci da questo telefono', onclick: logout }),

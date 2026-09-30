@@ -150,6 +150,48 @@ had_tag = False
 # appoggiata si mostra REST_IMAGE e non si ritenta a ogni tick
 start_blocked_uid = None
 
+# PIN genitore dimenticato: la stessa statuina appoggiata PIN_RESET_TAPS volte
+# entro PIN_RESET_TAPS_SEC apre una finestra di PIN_RESET_SEC in cui la web UI
+# accetta un PIN nuovo senza quello vecchio. Il gesto da solo non cambia nulla
+# (se lo fa un bambino per gioco non succede niente): serve anche il telefono.
+# La scadenza sta in pin_reset.json; l'API lo cancella quando il PIN è stato
+# reimpostato. Stesse costanti in api/main.py.
+UI_AUTH_FILE = BASE_DIR / "ui_auth.json"
+PIN_RESET_FILE = BASE_DIR / "pin_reset.json"
+PIN_RESET_TAPS = 5
+PIN_RESET_TAPS_SEC = 15.0
+PIN_RESET_SEC = 600
+pin_reset_uid = None
+pin_reset_taps = []  # istanti (monotoni) degli ultimi appoggi di pin_reset_uid
+
+def track_pin_reset_gesture(uid):
+    """Da chiamare a ogni statuina appoggiata (anche sconosciuta)."""
+    global pin_reset_uid, pin_reset_taps
+    now = time.monotonic()
+    if uid != pin_reset_uid:
+        pin_reset_uid, pin_reset_taps = uid, []
+    pin_reset_taps = [t for t in pin_reset_taps if now - t < PIN_RESET_TAPS_SEC] + [now]
+    if len(pin_reset_taps) < PIN_RESET_TAPS:
+        return
+    pin_reset_taps = []
+    if not UI_AUTH_FILE.exists():
+        return  # nessun PIN da azzerare
+    try:
+        _write_json_atomic(PIN_RESET_FILE, {"until": time.time() + PIN_RESET_SEC})
+        print(f"Finestra per un nuovo PIN aperta per {PIN_RESET_SEC // 60} minuti.")
+    except OSError as e:
+        print(f"[WARN] Impossibile aprire la finestra per il nuovo PIN: {e}")
+
+def pin_reset_open():
+    """Vero se la finestra è aperta. Una scadenza oltre PIN_RESET_SEC da ora
+    (orologio tornato indietro, il Pi non ha RTC) non vale."""
+    try:
+        with PIN_RESET_FILE.open() as f:
+            until = float(json.load(f).get("until", 0))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+    return 0 < until - time.time() <= PIN_RESET_SEC
+
 # Stato episodi persistente
 EPISODE_STATE_FILE = BASE_DIR / "episode_state.json"
 episode_state = {} 
@@ -642,7 +684,8 @@ try:
         # "blocked" (visione bloccata ora dai limiti di tempo) e "ts" li usa
         # led.py per scegliere l'effetto del LED di stato.
         # "character"/"episode"/"pos_ms"/"len_ms" servono alla web UI per mostrare
-        # cosa c'è sulla TV e a che punto è l'episodio.
+        # cosa c'è sulla TV e a che punto è l'episodio. "pin_reset" (finestra per
+        # un nuovo PIN aperta) fa lampeggiare il LED.
         try:
             blocked = not is_viewing_allowed_now(None)[0]
             pos_ms = len_ms = None
@@ -655,6 +698,7 @@ try:
                     "character": current_character,
                     "episode": current_video_path.name if current_video_path else None,
                     "pos_ms": pos_ms, "len_ms": len_ms,
+                    "pin_reset": pin_reset_open(),
                 }, _f)
         except Exception:
             pass
@@ -666,7 +710,10 @@ try:
         tag_just_added = (has_tag and not had_tag) or tag_swapped
         # tag_removed: vero se tolto O se swappato (conta come rimozione del vecchio)
         tag_removed = ((not has_tag) and had_tag) or tag_swapped
-        
+
+        if tag_just_added:
+            track_pin_reset_gesture(uid)
+
         # 3. Logica stati
         if mode == "idle":
             if tag_just_added:

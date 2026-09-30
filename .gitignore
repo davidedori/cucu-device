@@ -41,6 +41,7 @@ time_limits.json
 daily_usage.json
 tag_labels.json
 ui_auth.json
+pin_reset.json
 # File temporanei delle scritture atomiche (rinominati subito dopo)
 *.json.tmp
 

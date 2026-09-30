@@ -353,7 +353,10 @@ def api_root():
 # Facoltativo: finché non viene impostato la UI resta aperta come prima.
 # Non è sicurezza contro un attaccante (la pagina viaggia in HTTP sulla rete di
 # casa): serve a evitare che bambini o ospiti cambino le impostazioni.
-# Il PIN si recupera cancellando ui_auth.json via SSH (vedi CHEATSHEET.md).
+# PIN dimenticato: la stessa statuina appoggiata 5 volte di fila apre per 10
+# minuti una finestra (pin_reset.json, scritto da read_nfc.py) in cui
+# /auth/reset accetta un PIN nuovo. In alternativa si cancella ui_auth.json
+# via SSH (vedi CHEATSHEET.md).
 
 SESSION_COOKIE = "cucu_session"
 SESSION_DAYS = 90
@@ -361,7 +364,20 @@ PIN_ITERATIONS = 100_000  # PBKDF2: circa mezzo secondo sul Pi Zero 2 W, solo al
 _PIN_RE = re.compile(r"^\d{4,8}$")
 
 # Percorsi sempre aperti: la pagina, i suoi asset e il login stesso
-_PUBLIC_PATHS = {"/", "/api", "/manifest.webmanifest", "/auth/status", "/auth/login", "/auth/setup", "/auth/logout"}
+_PUBLIC_PATHS = {"/", "/api", "/manifest.webmanifest", "/auth/status", "/auth/login", "/auth/setup", "/auth/logout", "/auth/reset"}
+
+PIN_RESET_FILE = BASE_DIR / "pin_reset.json"
+PIN_RESET_SEC = 600  # stessa costante in read_nfc.py
+
+def pin_reset_open() -> bool:
+    """Finestra per un nuovo PIN aperta dal gesto con la statuina. Una scadenza
+    oltre PIN_RESET_SEC da ora (orologio tornato indietro) non vale."""
+    try:
+        with PIN_RESET_FILE.open() as f:
+            until = float(json.load(f).get("until", 0))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+    return 0 < until - time.time() <= PIN_RESET_SEC
 
 _auth_cache = {"mtime": None, "data": None}
 
@@ -480,6 +496,7 @@ def auth_status(request: Request):
     return {
         "pin_set": auth is not None,
         "authenticated": auth is None or _session_valid(auth, request.cookies.get(SESSION_COOKIE)),
+        "reset_open": auth is not None and pin_reset_open(),
     }
 
 @app.post("/auth/setup")
@@ -503,6 +520,20 @@ def auth_login(payload: PinPayload, request: Request):
         raise HTTPException(status_code=403, detail="PIN sbagliato.")
     _login_failures.pop(ip, None)
     return _with_session({"status": "ok"}, auth)
+
+@app.post("/auth/reset")
+def auth_reset(payload: PinPayload):
+    """PIN dimenticato: imposta un PIN nuovo senza quello vecchio, solo mentre
+    la finestra aperta dal gesto con la statuina è valida."""
+    if load_ui_auth() is None:
+        raise HTTPException(status_code=400, detail="Nessun PIN impostato.")
+    if not pin_reset_open():
+        raise HTTPException(status_code=403, detail="Il tempo per il nuovo PIN è scaduto: ripeti il gesto con la statuina.")
+    _validate_new_pin(payload.pin)
+    _save_pin(payload.pin)
+    # Una finestra serve per un solo PIN nuovo
+    PIN_RESET_FILE.unlink(missing_ok=True)
+    return _with_session({"status": "ok"}, load_ui_auth())
 
 @app.post("/auth/logout")
 def auth_logout():
