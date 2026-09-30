@@ -179,6 +179,27 @@
     .app-header .deco.b { width: 56px; height: 56px; right: 96px; top: -34px; background: var(--peach); border-radius: 16px; transform: rotate(18deg); }
     .app-header .deco.c { width: 38px; height: 38px; right: 22px; bottom: -22px; background: var(--green); border-radius: 46% 54% 50% 50%; }
 
+    /* Striscia sotto la Dynamic Island / la barra di stato: con l'app aperta
+       dalla Home la pagina scorre fin lassù. Compare solo dopo aver scorso,
+       così a pagina ferma le forme della testata arrivano fino al bordo */
+    .status-cover {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--safe-t);
+      z-index: 150;
+      background: var(--bg);
+      pointer-events: none;
+      visibility: hidden;
+    }
+
+    body.scrolled .status-cover { visibility: visible; }
+
+    /* Con un pannello o una schermata sopra, la pagina sotto resta ferma
+       (top impostato da JS alla posizione di scorrimento) */
+    body.scroll-locked { position: fixed; left: 0; right: 0; }
+
     /* ---------- Navigazione ---------- */
     .nav {
       position: fixed;
@@ -1237,6 +1258,7 @@
   <div id="toast-root" aria-live="polite"></div>
   <div id="reconnect-root"></div>
   <div id="lock-root"></div>
+  <div class="status-cover" aria-hidden="true"></div>
 
 
   <script>
@@ -1372,6 +1394,36 @@
       root.append(el);
       toastTimer = setTimeout(() => root.replaceChildren(), action ? 5000 : 3200);
     }
+
+    /* ================= Scorrimento ================= */
+    // "scrolled" mostra la striscia sotto la Dynamic Island. Con qualcosa in
+    // sheet-root, reconnect-root o lock-root la pagina sotto si blocca:
+    // overflow:hidden da solo su iOS non ferma il trascinamento, quindi il
+    // body diventa fixed alla posizione corrente e la si ripristina dopo
+    let lockedScrollY = null;
+
+    window.addEventListener('scroll', () => {
+      if (lockedScrollY === null) document.body.classList.toggle('scrolled', window.scrollY > 0);
+    }, { passive: true });
+
+    function syncScrollLock() {
+      const open = ['sheet-root', 'reconnect-root', 'lock-root'].some(id => $(id).firstChild);
+      const body = document.body;
+      if (open && lockedScrollY === null) {
+        lockedScrollY = window.scrollY;
+        body.style.top = `-${lockedScrollY}px`;
+        body.classList.add('scroll-locked');
+      } else if (!open && lockedScrollY !== null) {
+        const y = lockedScrollY;
+        lockedScrollY = null;
+        body.classList.remove('scroll-locked');
+        body.style.top = '';
+        window.scrollTo(0, y);
+      }
+    }
+
+    const overlayObserver = new MutationObserver(syncScrollLock);
+    ['sheet-root', 'reconnect-root', 'lock-root'].forEach(id => overlayObserver.observe($(id), { childList: true }));
 
     /* ================= Sheet (pannelli dal basso) ================= */
 
