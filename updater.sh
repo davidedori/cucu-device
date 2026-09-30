@@ -237,6 +237,22 @@ _apply_service_files() {
 # Senza questo passaggio, un aggiornamento che cambia i frame di boot lascia il
 # tema installato (e l'initramfs) disallineato dal repo: al boot successivo
 # Plymouth cerca frame che non corrispondono più a quelli attesi dallo script.
+# ---- HELPER: REGOLA POLKIT PER LA SCANSIONE WI-FI ---------------------------
+# Stessa regola installata da setup.sh, retrofit sui device aggiornati via OTA.
+# Non blocca mai l'aggiornamento: senza, la web UI mostra solo le reti in memoria.
+_apply_polkit_rules() {
+    local src="$PROJECT_DIR/polkit/50-cucu-device.rules"
+    local dst="/etc/polkit-1/rules.d/50-cucu-device.rules"
+    [ -f "$src" ] && [ -d /etc/polkit-1/rules.d ] || return 0
+    if sed "s|__DEPLOY_USER__|${DEPLOY_USER}|g" "$src" > "$dst.tmp" 2>>"$LOG_FILE" \
+        && chmod 644 "$dst.tmp" && mv "$dst.tmp" "$dst"; then
+        ok "Regola polkit per la scansione Wi-Fi aggiornata"
+    else
+        rm -f "$dst.tmp"
+        warn "Regola polkit non installata"
+    fi
+}
+
 _apply_plymouth_theme() {
     local theme_dir="/usr/share/plymouth/themes/cucu"
     if [ ! -d "$PROJECT_DIR/plymouth" ]; then
@@ -357,6 +373,9 @@ _apply_service_files
 
 # ---- SINCRONIZZA TEMA PLYMOUTH ----------------------------------------------
 _apply_plymouth_theme
+
+# ---- REGOLA POLKIT ----------------------------------------------------------
+_apply_polkit_rules
 
 # ---- RIAVVIA SERVIZI --------------------------------------------------------
 log "Riavvio servizi..."
