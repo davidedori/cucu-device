@@ -581,7 +581,7 @@ def web_manifest():
         "scope": "/",
         "display": "standalone",
         "background_color": "#f5f6f3",
-        "theme_color": "#f1f1ef",  # sfondo con la grana, come il meta in index.html
+        "theme_color": "#f5f6f3",  # = media visibile della pagina, come il meta in index.html
         "lang": "it",
         "icons": [
             {"src": "/static/img/icon-192.png", "sizes": "192x192", "type": "image/png"},
