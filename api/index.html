@@ -893,6 +893,12 @@
     .how-to ol { margin: 8px 0 0; padding-left: 22px; color: var(--muted); }
     .how-to li + li { margin-top: 4px; }
 
+    /* Guida per aggiungere Cucù alla schermata Home */
+    .home-steps { margin: 0 0 4px; padding-left: 22px; }
+    .home-steps li + li { margin-top: 10px; }
+    .home-steps .key { display: inline-flex; vertical-align: -5px; margin: 0 2px; padding: 2px; border-radius: 7px; background: var(--bg); color: var(--blue-ink); }
+    .home-steps .key svg { width: 18px; height: 18px; }
+
     /* ---------- Wi-Fi ---------- */
     .signal { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; }
     .signal i { display: block; width: 4px; border-radius: 2px; background: var(--line); }
@@ -1229,6 +1235,7 @@
         <div class="panel how-to" id="homescreen">
           <h2>Cucù sulla schermata Home</h2>
           <div class="panel-sub" style="margin-top:6px">Così lo apri come un'app, senza cercare l'indirizzo.</div>
+          <button class="btn btn-block hidden" id="homescreen-guide" style="margin-top:14px">Mostrami come</button>
           <details class="more">
             <summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Su iPhone</summary>
             <ol>
@@ -1292,6 +1299,9 @@
     }
 
     const ICONS = {
+      share: '<path d="M12 14.5V4M8 7.5 12 3.5l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 10.5h-2a1.5 1.5 0 0 0-1.5 1.5v7a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5v-7a1.5 1.5 0 0 0-1.5-1.5h-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+      more: '<circle cx="5.5" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="18.5" cy="12" r="1.9" fill="currentColor"/>',
+      menu: '<circle cx="12" cy="5.5" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="18.5" r="1.9" fill="currentColor"/>',
       plus: '<path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
       remove: '<path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
       edit: '<path d="M4.5 19.5h4l10-10a2.8 2.8 0 0 0-4-4l-10 10v4Z" fill="currentColor" opacity=".3"/><path d="M13.5 6.5l4 4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
@@ -3469,6 +3479,72 @@
       }
     }
 
+    /* ================= Cucù sulla schermata Home ================= */
+    // Il pulsante di installazione vero non si può offrire: su Android
+    // (beforeinstallprompt) serve HTTPS, su iPhone non esiste. Quindi una guida
+    // con i passaggi giusti per il telefono, solo se la pagina è aperta nel
+    // browser (non già dalla Home). Vedi docs/https.md
+
+    function isStandalone() {
+      return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    }
+
+    function phonePlatform() {
+      const ua = navigator.userAgent;
+      if (/Android/.test(ua)) return 'android';
+      // L'iPad si presenta come un Mac: lo tradisce il touch
+      if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'ios';
+      return null;
+    }
+
+    function homeScreenSteps(platform) {
+      const key = (name, label) => h('span', { class: 'key', role: 'img', 'aria-label': label }, icon(name));
+      const li = (...parts) => h('li', {}, ...parts);
+      return platform === 'ios'
+        ? h('ol', { class: 'home-steps' },
+            li('Tocca Condividi ', key('share', 'Condividi'), '. Se non lo vedi, tocca prima ', key('more', 'Altro'), '.'),
+            li('Scegli «Aggiungi alla schermata Home».'),
+            li('Tocca «Aggiungi».'))
+        : h('ol', { class: 'home-steps' },
+            li('Tocca il menu ', key('menu', 'Menu'), ' in alto a destra.'),
+            li('Scegli «Aggiungi a schermata Home» (a volte si chiama «Installa app»).'),
+            li('Conferma con «Aggiungi».'));
+    }
+
+    function showHomeScreenGuide() {
+      const platform = phonePlatform();
+      if (!platform) return;
+      openSheet({
+        title: 'Cucù sulla schermata Home',
+        content: h('div', {},
+          h('p', { class: 'sheet-text', text: 'Così lo apri con un tocco, a tutto schermo come un\'app, senza cercare l\'indirizzo.' }),
+          homeScreenSteps(platform),
+          h('div', { class: 'actions' },
+            h('button', { class: 'btn btn-primary btn-block', text: 'Ho capito', onclick: closeSheet })))
+      });
+    }
+
+    // Una volta per telefono, solo nel browser di un iPhone o di un Android
+    function shouldOfferHomeScreen() {
+      if (isStandalone() || !phonePlatform()) return false;
+      try { return localStorage.getItem('cucu-home-offered') !== '1'; } catch (_) { return false; }
+    }
+
+    // All'avvio al massimo una proposta: prima la schermata Home (nel browser),
+    // il PIN alla volta dopo. Su iPhone l'app sulla Home ha una memoria sua,
+    // quindi lì la proposta del PIN arriva comunque
+    function maybeOfferOnStart() {
+      if (shouldOfferHomeScreen()) {
+        setTimeout(() => {
+          if ($('sheet-root').firstChild || parseRoute().name) return;
+          try { localStorage.setItem('cucu-home-offered', '1'); } catch (_) { /* pazienza */ }
+          showHomeScreenGuide();
+        }, 1500);
+        return;
+      }
+      maybeOfferPin();
+    }
+
     // Al primo avvio senza PIN, una proposta gentile (una volta per telefono)
     function maybeOfferPin() {
       if (authState.pin_set) return;
@@ -3496,7 +3572,13 @@
       loadInfo();
       if (!location.hash) history.replaceState(null, '', '#/adesso');
       route();
-      maybeOfferPin();
+      // Già sulla Home: il riquadro con le istruzioni non serve
+      if (isStandalone()) $('homescreen').classList.add('hidden');
+      else if (phonePlatform()) {
+        $('homescreen-guide').classList.remove('hidden');
+        $('homescreen-guide').addEventListener('click', showHomeScreenGuide);
+      }
+      maybeOfferOnStart();
     }
 
     (async () => {
