@@ -24,7 +24,7 @@ Il progetto è in fase prototipo/early product. Il codice è funzionante e viene
 - **Branch attivi:**
   - `main` — codice stabile, canale OTA `stable`
   - `dev` — sviluppo attivo, canale OTA `beta`
-- **Hardware di riferimento:** Raspberry Pi Zero 2 W (512MB RAM fisici, ~415MB disponibili dopo lo split GPU — dispositivo molto vincolato in RAM, non un Pi 4), lettore NFC PN532 su I2C (hardware v2; l'ACR122U USB del v1 resta supportato), TV via HDMI
+- **Hardware di riferimento:** Raspberry Pi Zero 2 W (512MB RAM fisici, ~415MB disponibili dopo lo split GPU — dispositivo molto vincolato in RAM, non un Pi 4), lettore NFC PN532 su I2C (l'ACR122U USB del v1 non è più supportato), TV via HDMI
 - **OS:** Debian GNU/Linux 13 (trixie), kernel 6.12 aarch64
 - **Python:** 3.13.5
 
@@ -37,7 +37,7 @@ Il refactor da "TinyWorlds" a "cucu-device" è stato completato. Tutti i path, n
 ### Componenti principali
 
 **`read_nfc.py`** — il cuore del sistema. Gira come servizio systemd (`cucu-device.service`). Loop a 10 Hz che:
-1. Legge il tag NFC corrente tramite il backend creato da `nfc_reader.create_reader()`: PN532 su I2C (driver nativo, solo stdlib) oppure ACR122U via `nfc-list -v`. Il backend si sceglie con `NFC_READER` in `config.env` (`auto` di default: usa il PN532 se risponde). Entrambi restituiscono l'UID nello stesso formato (`"04 a1 b2 ..."`), su cui si basa `tags.json`
+1. Legge il tag NFC corrente con il lettore creato da `nfc_reader.create_reader()`: PN532 su I2C, driver nativo solo stdlib. Se il chip non risponde, `create_reader()` riprova finché risponde (il servizio resta attivo con la schermata idle). L'UID è nel formato `"04 a1 b2 ..."`, su cui si basa `tags.json`
 2. Gestisce una macchina a stati con 5 stati: `idle`, `playing`, `paused`, `ended_wait_remove`, `ended_wait_return`
 3. Controlla VLC tramite `python-vlc` (binding nativo, non subprocess)
 4. Gestisce la sequenza degli episodi per ogni personaggio (round-robin senza ripetizioni, stato persistito in `episode_state.json`)
@@ -103,8 +103,7 @@ Quando si rilascia una nuova versione, vanno aggiornati **entrambi** `VERSION` e
 
 **Sistema (apt, non pip):**
 - `python3-vlc` — binding VLC usato da `read_nfc.py`
-- `libnfc-bin` — fornisce `/usr/bin/nfc-list` (backend ACR122U)
-- `i2c-tools` — crea il gruppo `i2c` e fornisce `i2cdetect` (backend PN532)
+- `i2c-tools` — crea il gruppo `i2c` e fornisce `i2cdetect` (lettore PN532)
 - `fbi` — framebuffer image viewer per splash screen
 - `ffmpeg` — anteprime degli episodi nella web UI (facoltativo: senza, la UI mostra un'icona). Non viene installato dall'OTA: sui dispositivi esistenti serve `sudo apt install ffmpeg` una volta
 
@@ -249,10 +248,10 @@ Ogni dispositivo deve avere un hostname distinto sulla rete locale per evitare c
 
 ## Decisioni architetturali rilevanti
 
-**Perché `nfc-list` via subprocess invece di una libreria Python NFC?**
-Le librerie Python per libnfc sono poco mantenute e richiedono build nativa. `nfc-list` è il tool ufficiale di libnfc, stabile e già presente come pacchetto Debian. Il polling ogni 100ms via subprocess è sufficiente per il caso d'uso. Vale solo per l'ACR122U (hardware v1).
+**Perché solo il PN532 e non più l'ACR122U?**
+Il case è progettato intorno al PN532, che si è dimostrato affidabile. Con due lettori, `NFC_READER=auto` ripiegava in silenzio sull'ACR122U se il PN532 non rispondeva al primo colpo (per esempio subito dopo un riavvio del servizio), e da lì nessuna statuina veniva più letta fino al riavvio successivo. Con un solo lettore il servizio riprova il PN532 finché risponde. All'avvio `_abort_pending()` manda un frame ACK per annullare un comando rimasto a metà dal processo precedente.
 
-**Perché un driver PN532 nativo invece di libnfc per l'hardware v2?**
+**Perché un driver PN532 nativo invece di libnfc?**
 Con `nfc-list` ogni poll riapre il bus e reinizializza il chip. Su I2C con il Zero 2 W sarebbe lento, e i driver `pn532_i2c` di libnfc sono noti per essere instabili. `nfc_reader.Pn532I2cReader` tiene la connessione aperta e usa solo la stdlib (`/dev/i2c-1` + ioctl), niente Blinka/CircuitPython che pesano in RAM. Gli errori I2C transitori (clock stretching del Pi) vengono assorbiti restituendo l'ultimo UID valido per qualche poll: altrimenti un glitch sembrerebbe una statuetta tolta e metterebbe in pausa il video.
 
 **Perché `git reset --hard` invece di `git pull` nell'OTA?**

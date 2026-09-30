@@ -613,29 +613,15 @@ def refresh_graphic(force_path=None):
         player.play_media(path)
         current_graphic_path = path
 
-# --- LETTORE NFC --------------------------------------------------------
-
-def read_nfc_reader_mode():
-    """Legge NFC_READER da config.env (auto | pn532_i2c | acr122u). Parser
-    minimo KEY=VALUE: python-dotenv è solo nel venv dell'API, non qui."""
-    try:
-        with (BASE_DIR / "config.env").open() as f:
-            for line in f:
-                key, sep, value = line.strip().partition("=")
-                if sep and key.strip() == "NFC_READER":
-                    return value.strip().strip("\"'") or "auto"
-    except OSError:
-        pass
-    return "auto"
-
 # --- LOOP PRINCIPALE ----------------------------------------------------
 
 print("cucu-device player avviato.")
 load_episode_state()
 refresh_graphic(IDLE_IMAGE) # Avvio con idle
-# Dopo la grafica idle: il probe del PN532 può richiedere qualche istante e
-# lo schermo non deve restare grigio nel frattempo.
-reader = create_reader(read_nfc_reader_mode())
+# Dopo la grafica idle: il probe del PN532 può richiedere qualche istante (o
+# riprovare a lungo se il chip non risponde) e lo schermo non deve restare
+# grigio nel frattempo.
+reader = create_reader()
 
 last_tick_ts = time.time()
 usage_unsaved_seconds = 0.0
