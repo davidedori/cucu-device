@@ -261,5 +261,8 @@ Con `nfc-list` ogni poll riapre il bus e reinizializza il chip. Su I2C con il Ze
 **Perché `index.html` è un file singolo invece di un'app React/Vue?**
 Il frontend viene distribuito via git pull insieme al codice Python. Un file singolo non richiede build step, node_modules, bundler. Sul Pi non c'è npm e non ci deve essere.
 
+**Perché la web UI è in HTTP e non HTTPS?**
+Su `.local` non esiste un certificato valido. Senza HTTPS mancano service worker (niente pagina "Cucù non è raggiungibile" ad app chiusa: compare una pagina bianca) e `beforeinstallprompt` (niente pulsante di installazione su Android: la UI mostra una guida). L'unica soluzione vera (dominio pubblico per dispositivo + certificati, schema Plex) e perché non è stata fatta sono in `docs/https.md`.
+
 **Perché il venv è in `api/venv/` e non nella root?**
 `read_nfc.py` usa solo pacchetti di sistema (`python3-vlc`, via apt). Il venv serve solo per l'API FastAPI. Tenerli separati evita conflitti e rende più chiaro che `read_nfc.py` non dipende dal venv.
