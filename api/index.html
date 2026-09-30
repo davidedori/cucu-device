@@ -1423,6 +1423,10 @@
       const dimmed = $('sheet-root').firstChild && !$('lock-root').firstChild && !$('reconnect-root').firstChild;
       if (meta) meta.setAttribute('content', dimmed ? THEME_COLOR_DIMMED : THEME_COLOR);
       const body = document.body;
+      // iOS 26 ignora i cambi di theme-color e taglia gli elementi fixed sotto
+      // la barra di stato: prova a colorarla dallo sfondo di body, che nessuno
+      // vede (lo copre lo strato --paper di body::before)
+      body.style.backgroundColor = dimmed ? THEME_COLOR_DIMMED : '';
       if (open && lockedScrollY === null) {
         lockedScrollY = window.scrollY;
         body.style.top = `-${lockedScrollY}px`;
