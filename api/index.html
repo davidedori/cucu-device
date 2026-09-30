@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <title>Cucù</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f1f1ef">
+  <meta name="theme-color" content="#f5f6f3">
   <meta name="color-scheme" content="light">
   <link rel="icon" type="image/png" href="/static/img/gufetto.png">
   <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
@@ -45,6 +45,10 @@
        l'arancione del logo, usato solo per le azioni. Il resto è grigio caldo e tinte tenui */
     :root {
       --bg: #f5f6f3;
+      /* Fondo della pagina sotto la grana: più chiaro di --bg perché con la
+         grana di body::after sopra la media visibile torni --bg. Così la barra
+         di stato opaca di iOS (theme-color, o lo sfondo di body) combacia */
+      --paper: #fafbf8;
       --surface: #ffffff;
       --ink: #3d3d3a;
       --muted: #6e6e69;
@@ -89,6 +93,15 @@
       -webkit-font-smoothing: antialiased;
       -webkit-tap-highlight-color: transparent;
       overscroll-behavior-y: none;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background: var(--paper);
     }
 
     /* Grana fine come carta stampata (DESIGN §6), attenuata per uno strumento */
@@ -716,7 +729,7 @@
       gap: 10px;
       margin: 20px calc(-1 * var(--gutter)) 0;
       padding: 16px var(--gutter) 0;
-      background: linear-gradient(rgba(245, 246, 243, 0), var(--bg) 16px);
+      background: linear-gradient(rgba(250, 251, 248, 0), var(--paper) 16px);
     }
 
     .save-bar .btn-primary { flex: 1; }
@@ -963,7 +976,7 @@
       position: fixed;
       inset: 0;
       z-index: 500;
-      background: var(--bg);
+      background: var(--paper);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -1388,12 +1401,12 @@
     // quindi il body diventa fixed alla posizione corrente e la si ripristina
     // dopo. Dalla Home iOS mette la pagina sotto una barra di stato opaca
     // colorata con theme-color: con un pannello aperto la si scurisce come la
-    // velatura, così resta tutt'uno con la pagina. I colori sono la media della
-    // pagina CON la grana di body::after (misurata in un canvas): --bg pieno
-    // risultava più chiaro e si vedeva lo stacco. Chiaro = --bg + grana,
-    // velato = --bg sotto rgba(61,61,58,.38) + grana
-    const THEME_COLOR = '#f1f1ef';
-    const THEME_COLOR_DIMMED = '#adaeab';
+    // velatura, così resta tutt'uno con la pagina. La pagina visibile è --paper
+    // + grana, che in media fa --bg (misurato in un canvas); velato = --paper
+    // sotto rgba(61,61,58,.38) + grana. iOS 26 può ignorare i cambi e tenere
+    // --bg: per questo la pagina è tarata perché valga --bg
+    const THEME_COLOR = '#f5f6f3';
+    const THEME_COLOR_DIMMED = '#b0b1ae';
     let lockedScrollY = null;
 
     function syncOverlays() {
