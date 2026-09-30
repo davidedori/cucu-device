@@ -939,6 +939,7 @@
       animation: sale .3s steps(3, end) both;
     }
 
+    .sheet:focus { outline: none; }
     .sheet-grip { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 12px; }
 
     .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
@@ -1454,7 +1455,7 @@
       closeSheet();
       sheetOnClose = onClose || null;
       const titleId = 'sheet-title';
-      const sheet = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId },
+      const sheet = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId, tabindex: '-1' },
         h('div', { class: 'sheet-grip' }),
         h('div', { class: 'sheet-head' },
           h('h2', { id: titleId, text: title }),
@@ -1468,8 +1469,11 @@
       }, sheet);
       $('sheet-root').append(backdrop);
       document.body.classList.add('sheet-open');
-      const first = sheet.querySelector('input, .actions button');
-      if (first) setTimeout(() => first.focus(), 60);
+      // Il focus dato dal codice a un pulsante mostra l'anello di tastiera
+      // (Safari lo considera :focus-visible): sui pulsanti lo prende il
+      // pannello, che parte comunque da lì per tastiera e lettori di schermo
+      const first = sheet.querySelector('input') || sheet;
+      setTimeout(() => first.focus(), 60);
       return sheet;
     }
 
