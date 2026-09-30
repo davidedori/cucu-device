@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <title>Cucù</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f5f6f3">
+  <meta name="theme-color" content="#f1f1ef">
   <meta name="color-scheme" content="light">
   <link rel="icon" type="image/png" href="/static/img/gufetto.png">
   <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
@@ -129,9 +129,12 @@
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
     /* ---------- Testata ---------- */
+    /* Niente overflow:hidden: su iPhone la pagina parte sotto una barra di
+       stato opaca dello stesso colore dello sfondo, e una forma tagliata dal
+       bordo alto sembrava uno sfondo che si ferma prima. Le forme partono
+       dentro la pagina e scendono dietro i contenuti (main sta sopra) */
     .app-header {
       position: relative;
-      overflow: hidden;
       padding: calc(14px + var(--safe-t)) var(--gutter) 12px;
     }
 
@@ -175,26 +178,9 @@
       filter: url(#mano);
     }
 
-    .app-header .deco.a { width: 150px; height: 130px; right: -58px; top: -64px; background: var(--blue); border-radius: 50%; }
-    .app-header .deco.b { width: 56px; height: 56px; right: 96px; top: -34px; background: var(--peach); border-radius: 16px; transform: rotate(18deg); }
-    .app-header .deco.c { width: 38px; height: 38px; right: 22px; bottom: -22px; background: var(--green); border-radius: 46% 54% 50% 50%; }
-
-    /* Striscia sotto la Dynamic Island / la barra di stato: con l'app aperta
-       dalla Home la pagina scorre fin lassù. Compare solo dopo aver scorso,
-       così a pagina ferma le forme della testata arrivano fino al bordo */
-    .status-cover {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: var(--safe-t);
-      z-index: 150;
-      background: var(--bg);
-      pointer-events: none;
-      visibility: hidden;
-    }
-
-    body.scrolled .status-cover { visibility: visible; }
+    .app-header .deco.a { width: 150px; height: 130px; right: -70px; top: 6px; background: var(--blue); border-radius: 50%; }
+    .app-header .deco.b { width: 50px; height: 50px; right: 112px; top: 8px; background: var(--peach); border-radius: 16px; transform: rotate(18deg); }
+    .app-header .deco.c { width: 38px; height: 38px; right: 34px; bottom: -30px; background: var(--green); border-radius: 46% 54% 50% 50%; }
 
     /* Con un pannello o una schermata sopra, la pagina sotto resta ferma
        (top impostato da JS alla posizione di scorrimento) */
@@ -232,6 +218,8 @@
 
     /* ---------- Layout ---------- */
     main {
+      position: relative;
+      z-index: 1; /* sopra le forme della testata */
       max-width: 760px;
       margin: 0 auto;
       padding: 4px var(--gutter) calc(var(--nav-h) + var(--safe-b) + 32px);
@@ -988,7 +976,7 @@
     .reconnect h2 { font-size: 26px; margin: 18px 0 8px; }
     .reconnect p { color: var(--muted); max-width: 22rem; }
     .reconnect .timer { font-family: var(--serif); font-size: 20px; margin-top: 14px; color: var(--muted); }
-    .reconnect .deco.a { width: 220px; height: 200px; left: -90px; top: -60px; background: var(--peach); border-radius: 50%; }
+    .reconnect .deco.a { width: 220px; height: 200px; left: -110px; top: 12px; background: var(--peach); border-radius: 50%; }
     .reconnect .deco.b { width: 120px; height: 120px; right: -40px; top: 30%; background: var(--blue); border-radius: 28px; transform: rotate(20deg); }
     .reconnect .deco.c { width: 160px; height: 150px; left: 12%; bottom: -80px; background: var(--green); border-radius: 46% 54% 50% 50%; }
     .reconnect > *:not(.deco) { position: relative; }
@@ -1258,7 +1246,6 @@
   <div id="toast-root" aria-live="polite"></div>
   <div id="reconnect-root"></div>
   <div id="lock-root"></div>
-  <div class="status-cover" aria-hidden="true"></div>
 
 
   <script>
@@ -1395,19 +1382,26 @@
       toastTimer = setTimeout(() => root.replaceChildren(), action ? 5000 : 3200);
     }
 
-    /* ================= Scorrimento ================= */
-    // "scrolled" mostra la striscia sotto la Dynamic Island. Con qualcosa in
-    // sheet-root, reconnect-root o lock-root la pagina sotto si blocca:
-    // overflow:hidden da solo su iOS non ferma il trascinamento, quindi il
-    // body diventa fixed alla posizione corrente e la si ripristina dopo
+    /* ================= Sovrapposizioni ================= */
+    // Con qualcosa in sheet-root, reconnect-root o lock-root la pagina sotto
+    // si blocca: overflow:hidden da solo su iOS non ferma il trascinamento,
+    // quindi il body diventa fixed alla posizione corrente e la si ripristina
+    // dopo. Dalla Home iOS mette la pagina sotto una barra di stato opaca
+    // colorata con theme-color: con un pannello aperto la si scurisce come la
+    // velatura, così resta tutt'uno con la pagina. I colori sono la media della
+    // pagina CON la grana di body::after (misurata in un canvas): --bg pieno
+    // risultava più chiaro e si vedeva lo stacco. Chiaro = --bg + grana,
+    // velato = --bg sotto rgba(61,61,58,.38) + grana
+    const THEME_COLOR = '#f1f1ef';
+    const THEME_COLOR_DIMMED = '#adaeab';
     let lockedScrollY = null;
 
-    window.addEventListener('scroll', () => {
-      if (lockedScrollY === null) document.body.classList.toggle('scrolled', window.scrollY > 0);
-    }, { passive: true });
-
-    function syncScrollLock() {
+    function syncOverlays() {
       const open = ['sheet-root', 'reconnect-root', 'lock-root'].some(id => $(id).firstChild);
+      const meta = document.querySelector('meta[name="theme-color"]');
+      // Schermate PIN e riconnessione hanno lo sfondo della pagina: barra chiara
+      const dimmed = $('sheet-root').firstChild && !$('lock-root').firstChild && !$('reconnect-root').firstChild;
+      if (meta) meta.setAttribute('content', dimmed ? THEME_COLOR_DIMMED : THEME_COLOR);
       const body = document.body;
       if (open && lockedScrollY === null) {
         lockedScrollY = window.scrollY;
@@ -1422,7 +1416,7 @@
       }
     }
 
-    const overlayObserver = new MutationObserver(syncScrollLock);
+    const overlayObserver = new MutationObserver(syncOverlays);
     ['sheet-root', 'reconnect-root', 'lock-root'].forEach(id => overlayObserver.observe($(id), { childList: true }));
 
     /* ================= Sheet (pannelli dal basso) ================= */
