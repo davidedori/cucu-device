@@ -1,0 +1,13 @@
+// cucu-device: installato da setup.sh e updater.sh in /etc/polkit-1/rules.d/
+//
+// La web UI (cucu-device-api.service) gira senza una sessione utente, e per
+// NetworkManager chiedere una nuova scansione Wi-Fi fuori da una sessione
+// richiede la password: "nmcli dev wifi list --rescan yes" fallirebbe in
+// silenzio e mostrerebbe solo le reti rimaste in memoria dall'ultima scansione
+// fatta in automatico. Qui si concede solo la scansione, a quest'utente.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.NetworkManager.wifi.scan" &&
+        subject.user == "__DEPLOY_USER__") {
+        return polkit.Result.YES;
+    }
+});

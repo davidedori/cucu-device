@@ -285,6 +285,16 @@ else
     fail "Errore nella sintassi del file sudoers. File rimosso."
 fi
 
+# Permesso di scansione Wi-Fi per la web UI (vedi il commento nel file)
+POLKIT_RULE="/etc/polkit-1/rules.d/50-cucu-device.rules"
+if [ -d /etc/polkit-1/rules.d ]; then
+    sed "s|__DEPLOY_USER__|${DEPLOY_USER}|g" "$REPO_DIR/polkit/50-cucu-device.rules" > "$POLKIT_RULE"
+    chmod 644 "$POLKIT_RULE"
+    ok "Regola polkit per la scansione Wi-Fi: $POLKIT_RULE"
+else
+    warn "/etc/polkit-1/rules.d non trovata: la web UI mostrerà solo le reti già in memoria"
+fi
+
 # =============================================================================
 # STEP 8 — SERVIZI SYSTEMD
 # =============================================================================

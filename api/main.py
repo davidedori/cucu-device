@@ -1827,8 +1827,12 @@ def list_wifi():
     try:
         res = subprocess.run(
             ["nmcli", "-t", "-f", "SSID,SIGNAL,BARS,SECURITY", "dev", "wifi", "list", "--rescan", "yes"],
-            capture_output=True, text=True
+            capture_output=True, text=True, timeout=30
         )
+        # Senza il permesso di scansione (regola polkit di setup.sh) nmcli
+        # ripiega sulle reti in memoria: lo lasciamo nel log per capirlo
+        if res.stderr.strip():
+            print(f"Scan wifi: {res.stderr.strip()}")
         for line in res.stdout.splitlines():
             # es: Vodafone-123:89:▂▄▆_:WPA2
             # Usa regex per splittare sui : non preceduti da \
