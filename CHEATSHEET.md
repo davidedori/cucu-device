@@ -75,7 +75,7 @@ python3 ~/cucu-device/nfc_reader.py
 sudo systemctl start cucu-device.service
 ```
 
-**PIN della Web UI dimenticato:** cancellare il file del PIN (non serve riavviare; la UI torna aperta e il PIN si reimposta da Impostazioni):
+**PIN della Web UI dimenticato:** dalla UI, "Ho dimenticato il PIN" e la stessa statuina appoggiata 5 volte di fila (il LED fa un doppio lampeggio, poi 10 minuti per sceglierne uno nuovo). Oppure cancellare il file del PIN (non serve riavviare; la UI torna aperta e il PIN si reimposta da Impostazioni):
 ```bash
 rm ~/cucu-device/ui_auth.json
 ```

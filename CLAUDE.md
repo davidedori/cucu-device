@@ -57,7 +57,7 @@ La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene carica
 - `GET /characters/{name}/episodes/{filename}/thumb`: anteprima JPEG 320px, creata con ffmpeg alla prima richiesta e salvata in `characters/<nome>/.thumbs/` (valida finché è più recente del video). Una alla volta (lock), `nice 19`, `-threads 1`, e 503 + `Retry-After` se un episodio è in riproduzione. Rinomina/eliminazione episodio spostano/cancellano l'anteprima
 - `GET /system/now`: cosa succede sulla TV (legge `mode`, `character`, `episode`, `pos_ms`/`len_ms`, `blocked` da `last_seen_tag.json`) + statuina appoggiata, anteprima già pronta, giro e uso di oggi. Alimenta la pagina iniziale "Adesso" (TV disegnata come sul sito + render del dispositivo in `api/static/img/dispositivo.webp`)
 - Un thread dell'API (`_thumb_worker`) prepara in background le anteprime mancanti, una ogni pochi secondi e mai durante la riproduzione; i file illeggibili vengono segnati con `.failed` e non ritentati
-- PIN genitore facoltativo: `/auth/*` e il middleware ASGI `PinGuard` (puro ASGI, per non bufferizzare gli upload). Senza `ui_auth.json` non blocca nulla; con il PIN restano aperti solo `/`, `/static/*`, `/api`, `/manifest.webmanifest` e `/auth/*`. `updater.sh` e il suo health check non usano HTTP, quindi non ne sono toccati
+- PIN genitore facoltativo: `/auth/*` e il middleware ASGI `PinGuard` (puro ASGI, per non bufferizzare gli upload). Senza `ui_auth.json` non blocca nulla; con il PIN restano aperti solo `/`, `/static/*`, `/api`, `/manifest.webmanifest` e `/auth/*`. `updater.sh` e il suo health check non usano HTTP, quindi non ne sono toccati. PIN dimenticato: la stessa statuina appoggiata 5 volte in 15 s fa scrivere a `read_nfc.py` `pin_reset.json` (scadenza a 10 minuti, LED con doppio lampeggio); finché vale, `POST /auth/reset` accetta un PIN nuovo senza quello vecchio e poi cancella il file. Il gesto da solo non cambia nulla
 - `GET /manifest.webmanifest`: icona sulla schermata Home (niente service worker: su `http://*.local` non sarebbe disponibile)
 
 **`api/index.html`** — frontend SPA single-file (HTML/CSS/JS inline), mobile-first, con lo stile del sito (`cucu-website/DESIGN.md`): routing via hash (`#/personaggi`, `#/personaggi/<nome>`, `#/tempo`, `#/impostazioni`), DOM costruito con `h()` senza `innerHTML` sui dati utente. Nessuna dipendenza da npm o bundler. Si aggiorna via git pull come tutto il resto.
@@ -91,6 +91,7 @@ Tutto il progetto vive in `/home/davidedorigatti/cucu-device/`. Questo path è h
 | `episode_state.json` | No | Stato episodi visti, generato a runtime |
 | `tag_labels.json` | No | Nomi dati alle statuine dal genitore (UID → nome); `tags.json` resta UID → personaggio |
 | `ui_auth.json` | No | PIN genitore della web UI (hash PBKDF2 + chiave delle sessioni). Se manca, la UI è aperta. Per azzerare un PIN dimenticato basta cancellarlo |
+| `pin_reset.json` | No | Scadenza della finestra per un nuovo PIN, aperta dal gesto con la statuina (scritto da `read_nfc.py`, cancellato dall'API) |
 | `config.env` | No | Configurazione OTA specifica del dispositivo |
 | `config.env.template` | Sì | Template da cui generare `config.env` |
 | `VERSION` | Sì | Versione corrente (plain text, es. `0.1.0`) |

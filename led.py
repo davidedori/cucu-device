@@ -9,6 +9,8 @@ Comportamento:
 - idle, pausa, fine episodio          → respiro lento
 - video in corso, o visione bloccata  → fisso (30%)
   dai limiti di tempo
+- finestra per un nuovo PIN aperta    → doppio lampeggio (vince sugli altri,
+  così il genitore vede che il gesto con la statuina ha funzionato)
 
 Lo stato viene letto da last_seen_tag.json, che read_nfc.py riscrive ad ogni
 tick con "mode", "blocked" e "ts". Se "ts" non cambia da STALE_AFTER_SEC
@@ -62,16 +64,30 @@ def breath(t, period):
     return (lo + (hi - lo) * x) ** GAMMA
 
 
+# Doppio lampeggio: acceso 200 ms, spento 200 ms, acceso 200 ms, spento 800 ms.
+# Pieno/spento invece del respiro, per non confonderlo con gli altri stati.
+BLINK_ON = ((0.0, 0.2), (0.4, 0.6))
+BLINK_PERIOD_SEC = 1.4
+
+
+def double_blink(t):
+    x = t % BLINK_PERIOD_SEC
+    return BREATH_MAX if any(a <= x < b for a, b in BLINK_ON) else 0.0
+
+
 EFFECTS = {
     "fast": lambda t: breath(t, FAST_PERIOD_SEC),
     "slow": lambda t: breath(t, SLOW_PERIOD_SEC),
     "steady": lambda t: STEADY,
+    "blink": double_blink,
 }
 
 
 def effect_for_state(state, alive):
     if state is None or not alive:
         return "fast"
+    if state.get("pin_reset"):
+        return "blink"
     if state.get("mode") == "playing" or state.get("blocked"):
         return "steady"
     return "slow"
