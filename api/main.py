@@ -343,7 +343,10 @@ def serve_frontend():
     if not index_path.exists():
         # fallback: messaggio semplice se manca il file
         return "<h1>cucu-device API</h1><p>index.html non trovato.</p>"
-    return FileResponse(index_path)
+    # no-cache: il telefono chiede sempre se la pagina è cambiata. Senza, Safari
+    # (soprattutto l'app sulla Home) stima la validità dalla data di modifica e
+    # dopo un aggiornamento continua a mostrare la copia vecchia senza chiederla
+    return FileResponse(index_path, headers={"Cache-Control": "no-cache"})
 
 @app.get("/api")
 def api_root():
