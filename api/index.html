@@ -169,7 +169,7 @@
       text-decoration: none;
     }
 
-    .brand .owl { height: 40px; width: auto; }
+    .brand .owl { width: 31.4px; }
     .brand .word { height: 22px; width: auto; margin-bottom: 3px; }
 
     .device-pill {
@@ -999,17 +999,33 @@
     .reconnect .deco.c { width: 160px; height: 150px; left: 12%; bottom: -80px; background: var(--green); border-radius: 46% 54% 50% 50%; }
     .reconnect > *:not(.deco) { position: relative; }
 
-    /* Il gufetto fa "cucù": sbuca da una linea invisibile, si inclina e si ferma */
-    .peek { width: 96px; height: 114px; clip-path: inset(-60px -60px 0 -60px); }
-    .peek img { display: block; width: 88px; margin: 0 auto; transform-origin: 50% 100%; animation: cucu 1.2s steps(12, end) .2s both; }
+    /* Gufetto delle schermate a tutto schermo (PIN, riconnessione) */
+    .peek { width: 96px; display: flex; justify-content: center; }
+    .peek .owl { width: 88px; }
 
-    @keyframes cucu {
-      0% { transform: translateY(100%); }
-      45% { transform: translateY(-4%) rotate(0); }
-      65% { transform: translateY(0) rotate(-7deg); }
-      85% { transform: rotate(3deg); }
-      100% { transform: none; }
+    /* ---------- Gufetto animato ----------
+       Rig del laboratorio cucu-animazioni (forme di cucu-parti.svg), lo stesso
+       del sito: le parti si muovono nelle coordinate del disegno (viewBox
+       785.88 × 1000) attorno ai loro perni, l'animazione la fa owl() nello
+       script. Fermo è identico al logo, con occhi e becco trasparenti */
+    .owl-peek {
+      display: block;
+      line-height: 0;
+      /* sbuca da una linea invisibile: taglia solo in basso, ai lati e sopra
+         c'è spazio per l'ala che saluta e per il saltello */
+      clip-path: inset(-100% -100% 0 -100%);
     }
+    .owl { display: block; height: auto; overflow: visible; }
+    .owl * { transform-box: view-box; }
+    .owl .o { fill: var(--orange); }
+    .owl .hole { fill: none; }   /* occhi e becco: li buca la maschera del corpo */
+    .owl .squash { transform-origin: 393px 1000px; }      /* base del corpo */
+    .owl .crest { transform-origin: 440px 250px; }        /* attacco del ciuffo */
+    .owl .wing { transform-origin: 657.65px 721.25px; }   /* spalla dell'ala */
+    .owl .eye-r .eye-scale, .owl .eye-r .pupil { transform-origin: 171.32px 355.76px; }
+    .owl .eye-l .eye-scale, .owl .eye-l .pupil { transform-origin: 614.56px 355.76px; }
+    .owl .eye-r .pupil-core { transform-origin: 120.69px 355.69px; }
+    .owl .eye-l .pupil-core { transform-origin: 563.7px 355.7px; }
 
     /* ---------- Comparse a scatti (10 fps, come uno stop-motion) ---------- */
     .appear { animation: comparsa .4s steps(4, end) both; animation-delay: calc(var(--i, 0) * 100ms); }
@@ -1085,7 +1101,7 @@
     <div class="deco c pop" style="animation-delay:.2s"></div>
     <div class="header-inner">
       <a class="brand" href="#/adesso" aria-label="Cucù, torna alla pagina iniziale">
-        <img class="owl" src="/static/img/gufetto.png" alt="">
+        <span id="brand-owl"></span>
         <img class="word" src="/static/img/scritta.png" alt="cucù">
       </a>
       <div class="device-pill" id="device-pill" hidden></div>
@@ -1428,6 +1444,127 @@
 
     const overlayObserver = new MutationObserver(syncOverlays);
     ['sheet-root', 'reconnect-root', 'lock-root'].forEach(id => overlayObserver.observe($(id), { childList: true }));
+
+    /* ================= Gufetto animato ================= */
+    // Come sul sito (cucu-website/script.js), a 10 fotogrammi al secondo come
+    // tutte le animazioni di Cucù: le parti del disegno hanno animazioni Web
+    // Animations ferme, un orologio le porta avanti di un fotogramma ogni
+    // 100 ms. Sbuca dalla linea ("cucù"), poi in un giro di 12 s respira,
+    // sbatte le palpebre, si guarda intorno e saluta con l'ala. Toccato, fa un
+    // saltello. Con "riduci movimento" resta fermo, identico al logo.
+    // Ogni copia ha id propri per maschera e ritagli (più gufetti nella pagina)
+
+    const OWL_SVG = `<defs><clipPath id="owl-clip-r-__N__"><circle cx="171.32" cy="355.76" r="134.54"/></clipPath><clipPath id="owl-clip-l-__N__"><circle cx="614.56" cy="355.76" r="134.54"/></clipPath><mask id="owl-holes-__N__" maskUnits="userSpaceOnUse" x="-400" y="-400" width="1600" height="1800"><rect x="-400" y="-400" width="1600" height="1800" fill="#fff"/><g class="face"><g fill="#000"><path d="M307.27,258.73c-17.2,0-31.14,13.94-31.14,31.14v387.22c0,13.29,11.27,23.92,24.56,23.04,183.42-12.78,206.71-152.91,208.73-208.99v-201.27c0-17.2-13.94-31.14-31.14-31.14h-171.02Z"/></g><g class="eye eye-r"><g class="eye-scale"><circle cx="171.32" cy="355.76" r="133.54"/></g></g><g class="eye eye-l"><g class="eye-scale"><circle cx="614.56" cy="355.76" r="133.54"/></g></g></g><g class="wing" fill="#000"><path d="M758.45,995.41c2.26,16.94-16.94,41.79-63.25,33.88s-93.14-26.23-111.25-39.53c-44.61-32.75-69.46-74.32-69.46-74.32-8.48-16.33-14.56-32.91-18.99-48.36-12.53-44.43-10.76-80.51-10.63-83.04.13-2.91.89-5.82,2.03-8.35,2.28-2.91,4.43-5.82,6.33-8.99,4.81-4.3,11.27-6.96,18.23-6.58,14.05.89,24.68,12.78,23.92,26.71,0,.89-1.52,38.23,13.42,80.25,7.59,21.39,19.37,44.05,37.97,63.67,31.77,33.42,77.59,52.03,136.33,55.32,7.97-.89,14.68-4.05,20-9.87,0,0,13.09,2.27,15.35,19.21Z"/></g></mask></defs><g class="mover"><g class="squash"><g class="o" mask="url(#owl-holes-__N__)"><ellipse cx="356.45" cy="283.5" rx="178.88" ry="116.65"/><path d="M571.13,234.19H214.99c-100.46,0-181.9,81.44-181.9,181.9v275.93c0,66.33,11.4,122.41,34.05,168.36,22.79,45.82,54.31,80.63,94.69,104.18,40.5,23.67,86.58,35.44,138.35,35.44s96.58-8.35,134.31-25.19c31.64-14.18,58.48-33.92,80-59.37,12.19-14.41,26.59-30.44,40.74-42.79,12.39-10.82,44.86-4.78,60.76-4.78h41.65c52.44,0,94.95-42.51,94.95-94.95v-357.26c0-100.22-81.25-181.47-181.47-181.47Z"/></g><g class="wing o"><path d="M589.71,656.12c59.14-61.28,162.89-19.06,162.89,66.1v230.06c0,9.11-3.17,17.09-9.5,23.92-5.31,5.83-12.02,8.99-20,9.88-58.73-3.3-104.55-21.9-136.33-55.32-18.6-19.62-30.38-42.28-37.97-63.67-14.94-42.03-13.42-79.37-13.42-80.26,0,0,.51-74.94,54.33-130.71Z"/></g><g class="face"><g class="hole"><path d="M307.27,258.73c-17.2,0-31.14,13.94-31.14,31.14v387.22c0,13.29,11.27,23.92,24.56,23.04,183.42-12.78,206.71-152.91,208.73-208.99v-201.27c0-17.2-13.94-31.14-31.14-31.14h-171.02Z"/></g><g class="crest o"><path d="M224.61,192.78l85.7,62.66c7.97,2.15,17.85,3.29,29.62,3.29h133.16s24.53,2.23,38.93-12.17c14.4-14.4.31-28.59.31-28.59-1.39-2.78-3.16-5.44-5.44-7.72L359.93,31.65c-11.14-13.29-20.63-21.9-28.35-25.82-7.85-3.92-18.99-5.82-33.42-5.82H77.91c-21.14,0-31.77,10.51-31.77,31.65,0,8.99,2.78,16.2,8.35,21.77l170.13,139.37Z"/></g><g class="eye eye-r"><g class="eye-scale"><circle class="hole" cx="171.32" cy="355.76" r="133.54"/><g clip-path="url(#owl-clip-r-__N__)"><g class="pupil"><g class="pupil-core o"><path d="M120.69,404.3c26.84,0,48.61-21.77,48.61-48.61s-21.77-48.48-48.61-48.48-48.48,21.77-48.48,48.48,21.65,48.61,48.48,48.61Z"/></g></g><circle class="o lid lid-top" cx="171.32" cy="55.76" r="150"/><circle class="o lid lid-bot" cx="171.32" cy="655.76" r="150"/></g><g class="o"><path d="M342.65,355.76c0-94.62-76.7-171.32-171.32-171.32S0,261.14,0,355.76s76.7,171.32,171.32,171.32,171.32-76.7,171.32-171.32ZM37.78,355.7c0-28.99,9.37-55.82,25.19-77.72,24.18-33.67,63.8-55.69,108.35-55.69s80.38,19.87,104.81,50.89c8.1,10.25,14.81,21.65,19.62,34.05,5.95,15.06,9.11,31.39,9.11,48.48,0,31.14-10.76,60-28.73,82.66-1.01,1.39-2.02,2.66-3.16,3.92-24.05,28.1-59.49,46.2-99.11,46.96h-2.53c-73.54,0-133.54-59.87-133.54-133.54Z"/></g></g></g><g class="eye eye-l"><g class="eye-scale"><circle class="hole" cx="614.56" cy="355.76" r="133.54"/><g clip-path="url(#owl-clip-l-__N__)"><g class="pupil"><g class="pupil-core o"><path d="M567.02,307.34v-.13h-3.29c-26.84,0-48.48,21.77-48.48,48.48s21.65,48.61,48.48,48.61c1.14,0,2.28,0,3.29-.13,25.32-1.64,45.32-22.78,45.32-48.48s-20-46.71-45.32-48.35Z"/></g></g><circle class="o lid lid-top" cx="614.56" cy="55.76" r="150"/><circle class="o lid lid-bot" cx="614.56" cy="655.76" r="150"/></g><g class="o"><path d="M783.29,325.95c-.03-.18-.06-.36-.09-.53-.09-.52-.2-1.04-.3-1.55-9.41-49.91-40.53-92.23-83.15-116.78-25.09-14.41-54.18-22.65-85.2-22.65-94.62,0-171.32,76.7-171.32,171.32s76.7,171.32,171.32,171.32c56.63,0,106.84-27.49,138.03-69.84v-.16c18.79-25.62,30.71-56.58,32.91-90.09.03-.41.05-.82.08-1.23.04-.76.08-1.53.12-2.29.03-.67.05-1.35.08-2.02.02-.6.04-1.19.05-1.79.03-1.21.04-2.43.05-3.64,0-.1,0-.2,0-.29,0-10.16-.89-20.11-2.59-29.78ZM614.36,489.24c-16.58,0-32.53-3.04-47.34-8.73-20.51-7.72-38.73-20.51-52.91-36.83-2.28-2.41-4.3-5.06-6.33-7.72-16.83-22.28-26.84-50.13-26.84-80.25,0-17.09,3.16-33.42,9.11-48.48,3.04-7.97,6.96-15.44,11.39-22.53,23.67-37.47,65.44-62.4,112.91-62.4,44.68,0,84.18,22.03,108.35,55.69,15.95,21.9,25.19,48.74,25.19,77.72,0,73.67-59.87,133.54-133.54,133.54Z"/></g></g></g></g></g></g>`;
+    let owlCount = 0;
+
+    function owl() {
+      const n = ++owlCount;
+      const svg = h('svg', {
+        class: 'owl', viewBox: '0 0 785.88 1000', width: '1024', height: '1303',
+        'aria-hidden': 'true', focusable: 'false', html: OWL_SVG.replaceAll('__N__', String(n)),
+      });
+      const wrap = h('span', { class: 'owl-peek' }, svg);
+      if (svg.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) animateOwl(svg);
+      return wrap;
+    }
+
+    function animateOwl(svg) {
+      const FRAME = 100;
+      const IO = 'cubic-bezier(.45,0,.55,1)', OUT = 'cubic-bezier(.2,.7,.3,1)', IN = 'cubic-bezier(.6,0,.8,.35)',
+        SAC = 'cubic-bezier(.3,0,.1,1)';
+      const T = (x, y = 0) => `translate(${x}px, ${y}px)`, TY = (y) => `translateY(${y}px)`;
+      const R = (d) => `rotate(${d}deg)`, S = (a, b = a) => `scale(${a}, ${b})`;
+      const anims = [];
+
+      // passi [secondi, trasformazione, curva verso il passo dopo] → un'animazione per parte
+      function track(sel, dur, steps, opts) {
+        const st = steps.slice().sort((a, b) => a[0] - b[0]);
+        if (st[0][0] > 0) st.unshift([0, st[0][1]]);
+        if (st[st.length - 1][0] < dur) st.push([dur, st[st.length - 1][1]]);
+        const kf = st.map(([t, v, e]) => ({ offset: t / dur, transform: v, easing: e || IO }));
+        for (const el of svg.querySelectorAll(sel)) {
+          const a = el.animate(kf, Object.assign({ duration: dur * 1000 }, opts));
+          a.pause();
+          anims.push(a);
+        }
+      }
+      // battito graduale, un valore per fotogramma: chiude in 2, resta chiuso un fotogramma, riapre in 3
+      const blink = (t) => [[t, TY(0), 'linear'], [t + 0.1, TY(150), 'linear'], [t + 0.2, TY(300), 'linear'],
+        [t + 0.3, TY(300), 'linear'], [t + 0.4, TY(180), 'linear'], [t + 0.5, TY(60), 'linear'], [t + 0.6, TY(0)]];
+
+      // --- entrata (1,6 s): sale dalla linea allungato, si schiaccia atterrando, occhi contenti ---
+      const INTRO = 1.6, intro = { fill: 'forwards' };
+      track('.mover', INTRO, [[0, TY(1100), OUT], [0.4, TY(-80), IN], [0.6, TY(0)]], intro);
+      track('.squash', INTRO, [[0, S(0.9, 1.12)], [0.4, S(0.95, 1.06)], [0.6, S(1.15, 0.85)], [0.75, S(0.96, 1.04)], [0.9, S(1)]], intro);
+      track('.crest', INTRO, [[0.3, R(0)], [0.4, R(14)], [0.6, R(-10)], [0.75, R(6)], [0.9, R(-3)], [1.05, R(0)]], intro);
+      track('.eye-scale', INTRO, [[0.2, S(1)], [0.35, S(1.12)], [0.8, S(1.12)], [1, S(1)]], intro);
+      track('.lid-bot', INTRO, [[0.8, TY(0)], [1, TY(-245)], [1.4, TY(-245)], [1.6, TY(0)]], intro);
+
+      // --- giro (12 s), parte dopo l'entrata ---
+      const LOOP = 12, loop = { delay: INTRO * 1000, iterations: Infinity };
+      const breathe = [];
+      for (let t = 0; t < LOOP; t += 4) breathe.push([t, S(1)], [t + 2, S(0.99, 1.018)]);
+      track('.squash', LOOP, breathe, loop);
+      track('.lid-top', LOOP, [...blink(2.6), ...blink(7.2), ...blink(7.9)], loop);   // uno singolo, poi uno doppio
+      track('.pupil', LOOP, [[4, T(0), SAC], [4.2, T(95, -12)], [5.4, T(95, -12), SAC], [5.6, T(45, 28)], [6.4, T(45, 28), SAC], [6.6, T(0)]], loop);
+      track('.face', LOOP, [[4.05, T(0)], [4.4, T(10, -3)], [5.45, T(10, -3)], [5.8, T(4, 3)], [6.45, T(4, 3)], [6.8, T(0)]], loop);
+      track('.wing', LOOP, [[9, R(0)], [9.25, R(-30)], [9.5, R(-10)], [9.75, R(-30)], [10, R(-10)], [10.25, R(-25)], [10.6, R(3)], [10.75, R(0)]], loop);
+      track('.lid-bot', LOOP, [[9, TY(0)], [9.2, TY(-245)], [10.6, TY(-245)], [10.85, TY(0)]], loop);
+      track('.crest', LOOP, [[0, R(0)], [2, R(2)], [4, R(0)], [6, R(2)], [8, R(0)], [9.25, R(-6)], [9.5, R(4)], [9.75, R(-4)],
+        [10, R(4)], [10.25, R(-3)], [10.6, R(5)], [10.8, R(-2)], [11, R(0)]], loop);
+
+      // --- saltello quando lo si tocca (1,1 s), sopra il giro ---
+      function hop(at) {
+        const once = { delay: at };
+        track('.mover', 1.1, [[0.15, TY(0), OUT], [0.45, TY(-110), IN], [0.75, TY(0)]], once);
+        track('.squash', 1.1, [[0, S(1)], [0.15, S(1.15, 0.85)], [0.25, S(0.9, 1.12)], [0.45, S(1)], [0.7, S(0.93, 1.08)],
+          [0.75, S(1.16, 0.85)], [0.9, S(0.97, 1.04)], [1.05, S(1)]], once);
+        track('.crest', 1.1, [[0.2, R(0)], [0.3, R(-10)], [0.45, R(8)], [0.75, R(10)], [0.85, R(-12)], [0.95, R(6)], [1.1, R(0)]], once);
+        track('.lid-bot', 1.1, [[0.1, TY(0)], [0.25, TY(-245)], [0.85, TY(-245)], [1.05, TY(0)]], once);
+        track('.wing', 1.1, [[0.2, R(0)], [0.4, R(-30)], [0.6, R(-12)], [0.8, R(3)], [0.9, R(0)]], once);
+      }
+
+      // orologio: avanza solo mentre il gufetto è visibile e la pagina in primo piano.
+      // Quando la sua schermata viene tolta dal DOM si ferma e libera le animazioni
+      let clock = 0, last = 0, visible = true, raf = 0, frame = -1, mounted = false;
+      const io = new IntersectionObserver((e) => { visible = e[0].isIntersecting; run(); });
+      function stop() {
+        cancelAnimationFrame(raf);
+        io.disconnect();
+        document.removeEventListener('visibilitychange', run);
+        anims.forEach(a => a.cancel());
+        anims.length = 0;
+      }
+      function tick(now) {
+        if (!svg.isConnected) {
+          if (mounted) { stop(); return; }
+          raf = requestAnimationFrame(tick);   // non ancora inserito nella pagina
+          return;
+        }
+        if (!mounted) { mounted = true; io.observe(svg); }
+        if (last) clock += Math.min(now - last, 250);
+        last = now;
+        const f = Math.floor(clock / FRAME);
+        if (f !== frame) {
+          frame = f;
+          for (let i = anims.length - 1; i >= 0; i--) {
+            const a = anims[i];
+            const end = a.effect.getComputedTiming().endTime;
+            if (end !== Infinity && a.effect.getTiming().fill !== 'forwards' && f * FRAME > end) { a.cancel(); anims.splice(i, 1); continue; }
+            a.currentTime = f * FRAME;
+          }
+        }
+        raf = requestAnimationFrame(tick);
+      }
+      function run() {
+        cancelAnimationFrame(raf);
+        last = 0;
+        if ((visible || !mounted) && !document.hidden) raf = requestAnimationFrame(tick);
+      }
+      document.addEventListener('visibilitychange', run);
+      svg.addEventListener('click', () => { if (clock > INTRO * 1000) hop(Math.ceil(clock / FRAME) * FRAME); });
+      setTimeout(run, 150);   // sbuca poco dopo la comparsa
+    }
 
     /* ================= Sheet (pannelli dal basso) ================= */
 
@@ -3208,7 +3345,7 @@
         h('div', { class: 'deco a pop' }),
         h('div', { class: 'deco b pop', style: 'animation-delay:.1s' }),
         h('div', { class: 'deco c pop', style: 'animation-delay:.2s' }),
-        h('div', { class: 'peek' }, h('img', { src: '/static/img/gufetto.png', alt: '' })),
+        h('div', { class: 'peek' }, owl()),
         h('h2', { text: title }),
         h('p', { text: text }),
         timer, reload, note
@@ -3253,7 +3390,7 @@
         h('div', { class: 'deco a pop' }),
         h('div', { class: 'deco b pop', style: 'animation-delay:.1s' }),
         h('div', { class: 'deco c pop', style: 'animation-delay:.2s' }),
-        h('div', { class: 'peek' }, h('img', { src: '/static/img/gufetto.png', alt: '' })),
+        h('div', { class: 'peek' }, owl()),
         h('h2', { id: 'lock-title', text: title }),
         h('p', { text }),
         ...content
@@ -3555,6 +3692,7 @@
 
     function start() {
       started = true;
+      if (!$('brand-owl').firstChild) $('brand-owl').replaceWith(owl());
       loadInfo();
       if (!location.hash) history.replaceState(null, '', '#/adesso');
       route();
