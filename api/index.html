@@ -1919,7 +1919,9 @@
     }
 
     const VIDEO_ACCEPT = '.mp4,.mkv,.avi,.mov,.m4v,video/*';
-    const AUDIO_ACCEPT = '.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac,audio/*';
+    // Sull'iPhone solo "audio/*": con estensioni che iOS non sa tradurre in un
+    // suo tipo di file (.opus, .ogg…) l'app File resta su "Carico" senza finire
+    const audioAccept = () => phonePlatform() === 'ios' ? 'audio/*' : '.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac,audio/*';
     const IMAGE_ACCEPT = 'image/png,image/jpeg';
 
     /* ---------- Foto: rimpicciolita sul telefono prima di inviarla ---------- */
@@ -2698,7 +2700,7 @@
 
     function pickVideos(charName, kind = 'video') {
       if (isUploading()) { toast('Aspetta che finiscano i caricamenti in corso'); return; }
-      pickFiles({ accept: kind === 'audio' ? AUDIO_ACCEPT : VIDEO_ACCEPT, multiple: true }, (files) => enqueueVideos(charName, files, kind));
+      pickFiles({ accept: kind === 'audio' ? audioAccept() : VIDEO_ACCEPT, multiple: true }, (files) => enqueueVideos(charName, files, kind));
     }
 
     function pickPhotos(charName) {
