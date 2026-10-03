@@ -28,7 +28,9 @@ from pathlib import Path
 KINDS = ("video", "photos", "audio")
 DEFAULT_KIND = "video"
 VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v"}
-AUDIO_EXT = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".flac"}
+# .qta: i memo vocali delle versioni recenti di iOS (QuickTime audio); .caf e
+# .aif/.aiff: altri formati Apple. ffprobe e VLC li leggono dal contenuto
+AUDIO_EXT = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".flac", ".qta", ".caf", ".aif", ".aiff"}
 PHOTO_EXT = {".jpg", ".jpeg", ".png"}
 PHOTO_SECONDS = 8
 PROFILE_STEM = "profile"  # profile.jpg/png è l'immagine del personaggio, non una foto dell'album
