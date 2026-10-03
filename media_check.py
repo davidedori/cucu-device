@@ -49,9 +49,42 @@ MAX_SHORT_SIDE = 1080
 PLAYABLE_PIX_FMTS = {"yuv420p", "yuvj420p"}
 CHECK_DIR_NAME = ".thumbs"  # la stessa cartella nascosta delle anteprime
 
-HOW_TO_1080P = "Sull'iPhone: Impostazioni › Fotocamera › Registra video › 1080p a 30 fps."
-HOW_TO_H264 = "Sull'iPhone: Impostazioni › Fotocamera › Formati › Più compatibile."
-HOW_TO_SDR = "Sull'iPhone: Impostazioni › Fotocamera › Registra video › disattiva Video HDR."
+CHECK_VERSION = 2  # esiti salvati con un formato più vecchio si ricalcolano
+
+# Cosa fare, per ogni problema, sul telefono di chi carica: il motivo resta
+# uno solo, il consiglio cambia (l'API riconosce il telefono dallo user
+# agent). Stessi testi nella web UI per il controllo delle misure (howToFix)
+FIX_1080P, FIX_H264, FIX_SDR = "1080p", "h264", "sdr"
+HOW_TO = {
+    "ios": {
+        FIX_1080P: "Sull'iPhone: Impostazioni › Fotocamera › Registra video › 1080p a 30 fps.",
+        FIX_H264: "Sull'iPhone: Impostazioni › Fotocamera › Formati › Più compatibile.",
+        FIX_SDR: "Sull'iPhone: Impostazioni › Fotocamera › Registra video › disattiva Video HDR.",
+    },
+    "android": {
+        FIX_1080P: "Sul telefono: nelle impostazioni della fotocamera scegli la risoluzione video 1080p (Full HD).",
+        FIX_H264: "Sul telefono: nelle impostazioni della fotocamera disattiva i video ad alta efficienza (HEVC).",
+        FIX_SDR: "Sul telefono: nelle impostazioni della fotocamera disattiva il video HDR (HDR10+ o 10 bit).",
+    },
+    None: {
+        FIX_1080P: "Registra o esporta il video in 1080p.",
+        FIX_H264: "Registra o esporta il video in H.264, il formato più compatibile.",
+        FIX_SDR: "Registra o esporta il video senza HDR.",
+    },
+}
+
+
+def platform_from_user_agent(user_agent):
+    ua = user_agent or ""
+    if "Android" in ua:
+        return "android"
+    if any(k in ua for k in ("iPhone", "iPad", "iPod")):
+        return "ios"
+    return None
+
+
+def how_to(fix, platform=None):
+    return HOW_TO.get(platform, HOW_TO[None]).get(fix, "") if fix else ""
 
 
 def size_problem(width, height):
@@ -62,15 +95,15 @@ def size_problem(width, height):
     if long_side <= MAX_LONG_SIDE and short_side <= MAX_SHORT_SIDE:
         return None
     label = "4K" if long_side >= 3840 else "una risoluzione troppo alta"
-    return (f"è in {label} ({width}×{height}): Cucù riproduce video fino a 1080p. "
-            + HOW_TO_1080P)
+    return f"è in {label} ({width}×{height}): Cucù riproduce video fino a 1080p."
 
 
 def check_video(path, timeout=20):
-    """(True, None) se si riproduce, (False, motivo) se no, (None, None) se
-    non si può dire (ffprobe assente o bloccato): in quel caso non si scarta."""
+    """(True, None, None) se si riproduce; (False, motivo, consiglio) se no, dove
+    il consiglio è una chiave di HOW_TO (o None); (None, None, None) se non si
+    può dire (ffprobe assente o bloccato): in quel caso non si scarta."""
     if shutil.which("ffprobe") is None:
-        return None, None
+        return None, None, None
     try:
         res = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
@@ -79,20 +112,20 @@ def check_video(path, timeout=20):
         )
         streams = json.loads(res.stdout or "{}").get("streams") or []
     except (OSError, subprocess.TimeoutExpired, ValueError):
-        return None, None
+        return None, None, None
     if not streams:
-        return False, "non è un video che Cucù riesce a leggere."
+        return False, "non è un video che Cucù riesce a leggere.", None
     s = streams[0]
     codec = s.get("codec_name")
     if codec != "h264":
         name = "HEVC (H.265)" if codec == "hevc" else (codec or "un formato sconosciuto")
-        return False, f"è in {name}: Cucù riproduce solo video H.264. " + HOW_TO_H264
+        return False, f"è in {name}: Cucù riproduce solo video H.264.", FIX_H264
     problem = size_problem(s.get("width"), s.get("height"))
     if problem:
-        return False, problem
+        return False, problem, FIX_1080P
     if s.get("pix_fmt") not in PLAYABLE_PIX_FMTS:
-        return False, "ha colori a 10 bit (HDR): Cucù riproduce solo video a 8 bit. " + HOW_TO_SDR
-    return True, None
+        return False, "ha colori a 10 bit (HDR): Cucù riproduce solo video a 8 bit.", FIX_SDR
+    return True, None, None
 
 
 def _check_path(video: Path) -> Path:
@@ -100,19 +133,22 @@ def _check_path(video: Path) -> Path:
 
 
 def cached_check(video: Path):
-    """Esito salvato se ancora valido (più recente del video): (ok, motivo) o None."""
+    """Esito salvato se ancora valido (più recente del video e nel formato
+    attuale): (ok, motivo, consiglio) o None."""
     cache = _check_path(video)
     try:
         if cache.stat().st_mtime < video.stat().st_mtime:
             return None
         with cache.open() as f:
             data = json.load(f)
-        return data.get("ok"), data.get("reason")
+        if data.get("v") != CHECK_VERSION:
+            return None
+        return data.get("ok"), data.get("reason"), data.get("fix")
     except (OSError, ValueError, AttributeError):
         return None
 
 
-def save_check(video: Path, ok, reason):
+def save_check(video: Path, ok, reason, fix=None):
     """Scrittura atomica: API e read_nfc.py possono salvare lo stesso esito."""
     if ok is None:
         return  # non si sa: si riproverà
@@ -121,7 +157,7 @@ def save_check(video: Path, ok, reason):
         cache.parent.mkdir(exist_ok=True)
         tmp = cache.with_name(cache.name + ".tmp")
         with tmp.open("w") as f:
-            json.dump({"ok": ok, "reason": reason}, f)
+            json.dump({"v": CHECK_VERSION, "ok": ok, "reason": reason, "fix": fix}, f)
         os.replace(tmp, cache)
     except OSError:
         pass
@@ -132,9 +168,9 @@ def checked(video: Path):
     result = cached_check(video)
     if result is not None:
         return result
-    ok, reason = check_video(video)
-    save_check(video, ok, reason)
-    return ok, reason
+    ok, reason, fix = check_video(video)
+    save_check(video, ok, reason, fix)
+    return ok, reason, fix
 
 
 def move_check(old: Path, new: Path):

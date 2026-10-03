@@ -25,7 +25,8 @@ import sys
 # regole su cosa Cucù riesce a riprodurre sono le stesse per entrambi
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from media_check import (checked, cached_check, check_video, save_check, move_check, drop_check,
-                         character_kind, photo_files, PHOTO_EXT, PHOTO_SECONDS, PROFILE_STEM)
+                         character_kind, photo_files, PHOTO_EXT, PHOTO_SECONDS, PROFILE_STEM,
+                         how_to, platform_from_user_agent)
 
 VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v"}
 IMAGE_EXT = {".png", ".jpg", ".jpeg"}
@@ -292,7 +293,7 @@ def _thumb_worker():
                     if unchecked:
                         break
             if unchecked:
-                ok, _ = checked(unchecked)
+                ok = checked(unchecked)[0]
                 if ok is False:
                     print(f"[check] {unchecked.parent.name}/{unchecked.name} non riproducibile")
                 time.sleep(2)
@@ -965,7 +966,7 @@ def rename_character(name: str, payload: CharacterRename):
     }
 
 @app.get("/characters/{name}")
-def get_character(name: str):
+def get_character(name: str, request: Request):
     """
     Ritorna la 'scheda' completa di un personaggio:
     - info base
@@ -975,6 +976,9 @@ def get_character(name: str):
     """
     episode_state = load_episode_state()
     tags_map = load_tags()
+    # Il consiglio su come risolvere un video non riproducibile dipende dal
+    # telefono di chi guarda la scheda (iPhone, Android o altro)
+    platform = platform_from_user_agent(request.headers.get("user-agent"))
 
     char_dir = CHARACTERS_DIR / name
     if not char_dir.exists() or not char_dir.is_dir():
@@ -1020,7 +1024,8 @@ def get_character(name: str):
             # False = Cucù non riesce a riprodurlo e read_nfc.py lo salta;
             # None = non ancora controllato (lo fa il worker in background)
             "playable": check[0] if check else None,
-            "unplayable_reason": check[1] if check and check[0] is False else None,
+            "unplayable_reason": (f"{check[1]} {how_to(check[2], platform)}".strip()
+                                  if check and check[0] is False else None),
             "status": {
                 "known": fname in known,
                 "remaining": fname in remaining,
@@ -1348,6 +1353,7 @@ def get_character_episodes(name: str):
 async def upload_character_episodes(
     name: str,
     background_tasks: BackgroundTasks,
+    request: Request,
     files: List[UploadFile] = File(...)
 ):
     """
@@ -1397,12 +1403,13 @@ async def upload_character_episodes(
                     f.write(chunk)
             # Prima che diventi un episodio: un video che Cucù non riesce a
             # riprodurre (4K, HEVC, HDR) bloccherebbe la TV su un fotogramma
-            ok, reason = check_video(tmp_path)
+            ok, reason, fix = check_video(tmp_path)
             if ok is False:
                 tmp_path.unlink(missing_ok=True)
-                raise HTTPException(status_code=400, detail=reason)
+                tip = how_to(fix, platform_from_user_agent(request.headers.get("user-agent")))
+                raise HTTPException(status_code=400, detail=f"{reason} {tip}".strip())
             tmp_path.rename(dest_path)
-            save_check(dest_path, ok, reason)
+            save_check(dest_path, ok, reason, fix)
         except BaseException:
             tmp_path.unlink(missing_ok=True)
             raise

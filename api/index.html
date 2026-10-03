@@ -2718,13 +2718,16 @@
       runQueue();
     }
 
-    // Stesse regole di size_problem() in media_check.py
+    // Stesse regole di size_problem() e stessi consigli di HOW_TO["1080p"] in media_check.py
     function videoSizeProblem(w, h) {
       const long = Math.max(w, h), short = Math.min(w, h);
       if (long <= 1920 && short <= 1080) return null;
       const label = long >= 3840 ? '4K' : 'una risoluzione troppo alta';
-      return `è in ${label} (${w}×${h}): Cucù riproduce video fino a 1080p. `
-        + 'Sull\'iPhone: Impostazioni › Fotocamera › Registra video › 1080p a 30 fps.';
+      const tip = {
+        ios: 'Sull\'iPhone: Impostazioni › Fotocamera › Registra video › 1080p a 30 fps.',
+        android: 'Sul telefono: nelle impostazioni della fotocamera scegli la risoluzione video 1080p (Full HD).',
+      }[phonePlatform()] || 'Registra o esporta il video in 1080p.';
+      return `è in ${label} (${w}×${h}): Cucù riproduce video fino a 1080p. ${tip}`;
     }
 
     // Misure del video lette dal telefono, senza caricarlo (null se non si riesce)
