@@ -1,48 +1,66 @@
-// Cucu boot splash: 5-frame animation, time-based (loop infinito).
-// Usa SetBootProgressFunction: duration = secondi reali dall'inizio del boot.
+// Cucù boot splash: lo stesso gufetto animato delle schermate TV, a 10 fps.
+// I fotogrammi si generano con  node graphics/src/render_loops.mjs boot  (graphics/src/tv-loops.html#boot).
+//
+// Per stare leggeri (i file finiscono nell'initramfs e in RAM durante l'avvio) ogni fotogramma
+// è in due pezzi, che qui si sovrappongono:
+//   boot_bg_0..2.png   fondo a tutto schermo con sole e nuvole; 3 ritagli del passo uno, uno ogni 0,4 s
+//   boot_owl_N.png     solo il gufetto, su fondo trasparente, nel riquadro OWL_*
+// Fotogrammi 0..INTRO-1: entrata con saluto (una volta sola); poi INTRO..OWL_FRAMES-1 in loop.
+// Le costanti devono combaciare con BOOT in render_loops.mjs.
+
+FPS = 10;
+OWL_FRAMES = 72;
+INTRO = 24;
+LOOP = OWL_FRAMES - INTRO;
+BG_VARIANTS = 3;
+BOIL = 4;                       // fotogrammi per variante del fondo
+OWL_X = 800; OWL_Y = 330; OWL_W = 330; OWL_H = 420;
 
 screen_width = Window.GetWidth();
 screen_height = Window.GetHeight();
-
 if (screen_width == 0 || screen_height == 0) {
     screen_width = 1920;
     screen_height = 1080;
 }
+// i fotogrammi sono pensati per 1920×1080: su altri schermi si scala tutto insieme
+sx = screen_width / 1920;
+sy = screen_height / 1080;
 
-frames = [];
-frames[0] = Image("boot_01.png").Scale(screen_width, screen_height);
-frames[1] = Image("boot_02.png").Scale(screen_width, screen_height);
-frames[2] = Image("boot_03.png").Scale(screen_width, screen_height);
-frames[3] = Image("boot_04.png").Scale(screen_width, screen_height);
-frames[4] = Image("boot_05.png").Scale(screen_width, screen_height);
+for (i = 0; i < BG_VARIANTS; i++)
+    bg_image[i] = Image("boot_bg_" + i + ".png").Scale(screen_width, screen_height);
+for (i = 0; i < OWL_FRAMES; i++)
+    owl_image[i] = Image("boot_owl_" + i + ".png").Scale(OWL_W * sx, OWL_H * sy);
 
-// Durate in secondi reali
-durations_sec = [1.5, 0.1, 1.5, 1.5, 1.5];
-total_duration = 6.1;
-n_frames = 5;
+bg_sprite = Sprite(bg_image[0]);
+bg_sprite.SetZ(-100);
+owl_sprite = Sprite(owl_image[0]);
+owl_sprite.SetX(Math.Int(OWL_X * sx));
+owl_sprite.SetY(Math.Int(OWL_Y * sy));
+owl_sprite.SetZ(-90);
 
-sprite = Sprite(frames[0]);
-sprite.SetZ(-100);
-
-fun pick_frame(t) {
-    // Ripiega t in [0, total_duration) per il loop
-    while (t >= total_duration) {
-        t = t - total_duration;
-    }
-    cumulative = 0;
-    cumulative = cumulative + durations_sec[0];
-    if (t < cumulative) return 0;
-    cumulative = cumulative + durations_sec[1];
-    if (t < cumulative) return 1;
-    cumulative = cumulative + durations_sec[2];
-    if (t < cumulative) return 2;
-    cumulative = cumulative + durations_sec[3];
-    if (t < cumulative) return 3;
-    return 4;
-}
+// l'animazione parte quando Plymouth compare, non dall'inizio del boot: così l'entrata si vede
+global.t0 = -1;
+global.last = -1;
 
 fun on_boot_progress(duration, progress) {
-    sprite.SetImage(frames[pick_frame(duration)]);
+    if (global.t0 < 0) global.t0 = duration;
+    f = Math.Int((duration - global.t0) * FPS);
+    // si cambia immagine solo a fotogramma nuovo (la funzione è chiamata più spesso di 10 volte al secondo)
+    if (f != global.last) {
+        global.last = f;
+        owl = f;
+        if (owl >= INTRO) {
+            owl = owl - INTRO;
+            while (owl >= LOOP) owl = owl - LOOP;
+            owl = owl + INTRO;
+        }
+        // il loop dura un multiplo di BG_VARIANTS × BOIL: le varianti del fondo restano in fila
+        bg = Math.Int(f / BOIL);
+        while (bg >= BG_VARIANTS) bg = bg - BG_VARIANTS;
+
+        owl_sprite.SetImage(owl_image[owl]);
+        bg_sprite.SetImage(bg_image[bg]);
+    }
 }
 
 Plymouth.SetBootProgressFunction(on_boot_progress);

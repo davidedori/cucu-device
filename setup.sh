@@ -378,6 +378,8 @@ PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/cucu"
 mkdir -p "$PLYMOUTH_THEME_DIR"
 cp "$REPO_DIR/plymouth/cucu.plymouth" "$PLYMOUTH_THEME_DIR/"
 cp "$REPO_DIR/plymouth/cucu.script"   "$PLYMOUTH_THEME_DIR/"
+# i fotogrammi cambiano di nome e numero tra le versioni: via i vecchi prima di ricopiare
+rm -f "$PLYMOUTH_THEME_DIR"/boot_*.png
 cp "$REPO_DIR/plymouth/"*.png         "$PLYMOUTH_THEME_DIR/" 2>/dev/null || true
 cp "$REPO_DIR/graphics/splash.png"    "$PLYMOUTH_THEME_DIR/"
 ok "Tema Plymouth copiato in: $PLYMOUTH_THEME_DIR"
