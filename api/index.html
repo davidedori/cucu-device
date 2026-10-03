@@ -735,6 +735,12 @@
 
     .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
     .chip.day { width: 44px; padding: 0; }
+
+    /* Filtro per tipo nella pagina Personaggi: sempre su una riga (al limite scorre) */
+    .kind-filter { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-bottom: 14px; }
+    .kind-filter::-webkit-scrollbar { display: none; }
+    .kind-filter .chip { flex: none; padding: 6px 12px; }
+    .kind-filter .n { font-weight: 500; opacity: .6; margin-left: 4px; }
     .chip.link { border-color: transparent; color: var(--orange-text); padding: 6px 8px; }
 
     .stepper { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
@@ -1381,6 +1387,34 @@
 
     const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
+    // Le parole di ogni tipo di personaggio (kind): cartoni, album di foto, audio
+    const KIND_WORDS = {
+      video: {
+        one: 'episodio', many: 'episodi', title: 'Episodi', some: 'qualche episodio', none: 'Ancora nessun episodio.',
+        notFound: 'Nessun episodio trovato.', missing: 'Mancano gli episodi', start: 'un episodio', all: 'i suoi episodi',
+        thing: 'Questo cartone', ended: 'Episodio finito', icon: 'film', add: 'Aggiungi episodi', choose: 'Scegli i video',
+        search: 'Cerca un episodio', showAll: 'Mostra tutti gli episodi', rename: "Nome dell'episodio",
+        dup: "c'è già un episodio con questo nome", allBack: 'Tutti gli episodi', next: 'dal prossimo episodio',
+        seen: 'visti', seenOne: 'Visto', todo: 'Da vedere', seenAll: 'Li ha visti tutti',
+        uploaded: ['episodio caricato', 'episodi caricati'], failed: ['non caricato', 'non caricati'],
+      },
+      audio: {
+        one: 'audio', many: 'audio', title: 'Audio', some: 'qualche audio', none: 'Ancora nessun audio.',
+        notFound: 'Nessun audio trovato.', missing: 'Mancano gli audio', start: 'un audio', all: 'i suoi audio',
+        thing: 'Questo personaggio', ended: 'Audio finito', icon: 'audio', add: 'Aggiungi audio', choose: 'Scegli gli audio',
+        search: 'Cerca un audio', showAll: 'Mostra tutti gli audio', rename: "Nome dell'audio",
+        dup: "c'è già un audio con questo nome", allBack: 'Tutti gli audio', next: 'dal prossimo audio',
+        seen: 'ascoltati', seenOne: 'Ascoltato', todo: 'Da ascoltare', seenAll: 'Li ha ascoltati tutti',
+        uploaded: ['audio caricato', 'audio caricati'], failed: ['non caricato', 'non caricati'],
+      },
+      photos: {
+        one: 'foto', many: 'foto', missing: 'Mancano le foto', start: "l'album", all: 'le sue foto',
+        thing: 'Questo album', ended: 'Album finito', choose: 'Scegli le foto', some: 'qualche foto',
+        uploaded: ['foto caricata', 'foto caricate'], failed: ['non caricata', 'non caricate'],
+      },
+    };
+    const words = (kind) => KIND_WORDS[kind] || KIND_WORDS.video;
+
     function formatBytes(b) {
       if (b == null) return '—';
       const gb = b / 1e9;
@@ -1786,6 +1820,12 @@
       }
     }
 
+    // Filtro per tipo: compare solo se ci sono personaggi di almeno due tipi.
+    // La scelta resta su questo telefono (comodità, non dati condivisi)
+    const KIND_FILTERS = [['video', 'Cartoni'], ['photos', 'Foto'], ['audio', 'Audio']];
+    let charFilter = 'all';
+    try { charFilter = localStorage.getItem('cucu-char-filter') || 'all'; } catch (_) { /* storage bloccato */ }
+
     function renderCharacters() {
       const root = $('characters');
 
@@ -1801,13 +1841,29 @@
         return;
       }
 
+      const counts = {};
+      characters.forEach(c => { const k = c.kind || 'video'; counts[k] = (counts[k] || 0) + 1; });
+      const present = KIND_FILTERS.filter(([k]) => counts[k]);
+      if (present.length < 2 || !counts[charFilter]) charFilter = 'all';
+      const filters = present.length < 2 ? null : h('div', { class: 'chips kind-filter', role: 'group', 'aria-label': 'Mostra' },
+        [['all', 'Tutti', characters.length], ...present.map(([k, label]) => [k, label, counts[k]])].map(([k, label, n]) =>
+          h('button', {
+            class: 'chip', type: 'button', 'aria-pressed': String(charFilter === k),
+            onclick: () => {
+              charFilter = k;
+              try { localStorage.setItem('cucu-char-filter', k); } catch (_) { /* pazienza */ }
+              renderCharacters();
+            },
+          }, label, h('span', { class: 'n', text: String(n) }))));
+
       const grid = h('div', { class: 'char-grid' });
       characters.forEach((c, i) => {
-        const album = c.kind === 'photos';
+        if (charFilter !== 'all' && (c.kind || 'video') !== charFilter) return;
+        const w = words(c.kind);
         const eps = c.items_count ?? c.stats.known ?? 0;
         let hint = null;
         if (!c.tags_count) hint = 'Manca la statuina';
-        else if (!eps) hint = album ? 'Mancano le foto' : 'Mancano gli episodi';
+        else if (!eps) hint = w.missing;
         const card = h('a', {
           class: 'char-card appear',
           href: '#/personaggi/' + enc(c.name),
@@ -1815,7 +1871,7 @@
         },
           avatar(c, i),
           h('div', { class: 'char-name', text: c.display_name }),
-          h('div', { class: 'char-meta', text: `${album ? plural(eps, 'foto', 'foto') : plural(eps, 'episodio', 'episodi')} · ${plural(c.tags_count, 'statuina', 'statuine')}` }),
+          h('div', { class: 'char-meta', text: `${plural(eps, w.one, w.many)} · ${plural(c.tags_count, 'statuina', 'statuine')}` }),
           hint ? h('div', { class: 'char-hint', text: hint }) : null
         );
         grid.append(card);
@@ -1830,7 +1886,7 @@
         h('div', { class: 'char-name', text: 'Nuovo personaggio' })
       ));
 
-      root.replaceChildren(grid);
+      root.replaceChildren(...[filters, grid].filter(Boolean));
     }
 
     /* ---------- Scelta file ---------- */
@@ -1851,14 +1907,19 @@
     // Dopo "Aggiungi" il selettore di iOS resta aperto mentre prepara i file
     // (converte video e foto in formati compatibili) e la pagina non può
     // mostrare niente sopra: lo si dice prima, così l'attesa non sembra un blocco
-    function pickerHint(album) {
+    function pickerHint(kind) {
       if (phonePlatform() !== 'ios') return null;
-      return h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: album
-        ? "Dopo la scelta l'iPhone prepara le foto per qualche istante prima di chiudere: è normale."
-        : "Dopo la scelta l'iPhone prepara i video per qualche istante prima di chiudere: è normale." });
+      const text = {
+        photos: "Dopo la scelta l'iPhone prepara le foto per qualche istante prima di chiudere: è normale.",
+        video: "Dopo la scelta l'iPhone prepara i video per qualche istante prima di chiudere: è normale.",
+        // gli audio si scelgono dall'app File, non dalla galleria
+        audio: "Sull'iPhone gli audio si scelgono dall'app File: un memo vocale va prima salvato lì (Condividi › Salva su File).",
+      }[kind] || null;
+      return text && h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text });
     }
 
     const VIDEO_ACCEPT = '.mp4,.mkv,.avi,.mov,.m4v,video/*';
+    const AUDIO_ACCEPT = '.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac,audio/*';
     const IMAGE_ACCEPT = 'image/png,image/jpeg';
 
     /* ---------- Foto: rimpicciolita sul telefono prima di inviarla ---------- */
@@ -1919,7 +1980,7 @@
       const drawKinds = () => kinds.replaceChildren(
         kindButton('video', 'Cartoni', 'film'),
         kindButton('photos', 'Foto', 'photo'),
-        kindButton('audio', 'Storie da ascoltare', 'audio', true));
+        kindButton('audio', 'Audio', 'audio'));
       drawKinds();
       const input = h('input', {
         class: 'field', id: 'nc-name', type: 'text', placeholder: 'Es. il gufo Bubo',
@@ -1985,21 +2046,20 @@
       function stepEpisodes(char) {
         const detail = '#/personaggi/' + enc(char.name);
         const album = char.kind === 'photos';
+        const w = words(char.kind);
         body.replaceChildren(
           stepsLabel(3),
-          h('p', { class: 'sheet-text', text: album
-            ? 'Ultimo passo: carica qualche foto. Puoi aggiungerne altre quando vuoi.'
-            : 'Ultimo passo: carica qualche episodio. Puoi aggiungerne altri quando vuoi.' }),
+          h('p', { class: 'sheet-text', text: `Ultimo passo: carica ${w.some}. Puoi aggiungerne ${album ? 'altre' : 'altri'} quando vuoi.` }),
           h('div', { class: 'actions' },
             h('button', {
               class: 'btn btn-primary btn-block',
               onclick: () => {
                 closeSheet();
                 location.hash = detail;
-                if (album) pickPhotos(char.name); else pickVideos(char.name);
+                if (album) pickPhotos(char.name); else pickVideos(char.name, char.kind);
               },
-            }, icon('upload'), album ? 'Scegli le foto' : 'Scegli i video'),
-            pickerHint(album),
+            }, icon('upload'), w.choose),
+            pickerHint(char.kind),
             h('button', { class: 'btn btn-block', text: 'Lo faccio dopo', onclick: () => { closeSheet(); location.hash = detail; } })
           )
         );
@@ -2165,7 +2225,7 @@
           h('h1', { text: c.display_name }),
           h('button', { class: 'icon-btn', 'aria-label': 'Cambia nome', onclick: startRename }, icon('edit'))
         ),
-        h('div', { class: 'muted', text: `${c.kind === 'photos' ? plural(c.photos.length, 'foto', 'foto') : plural(c.stats.total_episodes, 'episodio', 'episodi')} · ${plural(c.tag_uids.length, 'statuina', 'statuine')}` })
+        h('div', { class: 'muted', text: `${c.kind === 'photos' ? plural(c.photos.length, 'foto', 'foto') : plural(c.stats.total_episodes, words(c.kind).one, words(c.kind).many)} · ${plural(c.tag_uids.length, 'statuina', 'statuine')}` })
       );
 
       function startRename() {
@@ -2209,7 +2269,7 @@
     function figuresPanel(c, index) {
       const rows = h('div', { class: 'rows' });
       if (!c.tag_uids.length) {
-        rows.append(h('div', { class: 'row-empty', text: `Ancora nessuna statuina: abbinane una per far partire ${c.kind === 'photos' ? 'le sue foto' : 'i suoi episodi'}.` }));
+        rows.append(h('div', { class: 'row-empty', text: `Ancora nessuna statuina: abbinane una per far partire ${words(c.kind).all}.` }));
       }
       c.tag_uids.forEach((t, i) => {
         const [bg, fg] = TINTS[(index + i) % TINTS.length];
@@ -2283,7 +2343,7 @@
 
       return h('div', { class: 'panel' },
         h('h2', { text: 'Statuine' }),
-        h('div', { class: 'panel-sub', style: 'margin-top:4px', text: `Appoggiane una su Cucù per far partire ${c.kind === 'photos' ? "l'album" : 'un episodio'}. Puoi dare un nome a ciascuna.` }),
+        h('div', { class: 'panel-sub', style: 'margin-top:4px', text: `Appoggiane una su Cucù per far partire ${words(c.kind).start}. Puoi dare un nome a ciascuna.` }),
         rows, scanSlot, addBtn, manual);
     }
 
@@ -2315,7 +2375,7 @@
             h('div', { class: 'bar' }, h('div', { style: `width:${Math.round(watched / total * 100)}%;background:var(--green-ink)` })),
             h('div', {
               class: 'muted small', style: 'margin-top:6px',
-              text: all ? 'Li ha visti tutti: al prossimo giro si ricomincia.' : `${watched} di ${total} già visti in questo giro`,
+              text: all ? `${words(c.kind).seenAll}: al prossimo giro si ricomincia.` : `${watched} di ${total} già ${words(c.kind).seen} in questo giro`,
             })),
           watched ? h('button', { class: 'btn btn-quiet', text: 'Ricomincia il giro', onclick: () => resetRound(c) }) : null
         );
@@ -2334,15 +2394,15 @@
         const filtering = q || epView.filter !== 'all';
         const shown = epView.expanded || filtering ? items : items.slice(0, EPISODES_PREVIEW);
 
-        if (!total) list.replaceChildren(h('div', { class: 'row-empty', text: 'Ancora nessun episodio.' }));
-        else if (!items.length) list.replaceChildren(h('div', { class: 'row-empty', text: 'Nessun episodio trovato.' }));
+        if (!total) list.replaceChildren(h('div', { class: 'row-empty', text: words(c.kind).none }));
+        else if (!items.length) list.replaceChildren(h('div', { class: 'row-empty', text: words(c.kind).notFound }));
         else list.replaceChildren(...shown.map(ep => episodeRow(c, ep)));
 
         const hidden = items.length - shown.length;
         more.replaceChildren(...[
           hidden > 0
             ? h('button', { class: 'btn btn-block', style: 'margin-top:12px', onclick: () => { epView.expanded = true; draw(); drawTools(); } },
-              `Mostra tutti gli episodi (${total})`)
+              `${words(c.kind).showAll} (${total})`)
             : epView.expanded && total > EPISODES_PREVIEW && !filtering
               ? h('button', { class: 'btn btn-quiet btn-block', style: 'margin-top:4px', text: 'Mostra meno', onclick: () => { epView.expanded = false; draw(); drawTools(); list.scrollIntoView({ block: 'nearest' }); } })
               : null
@@ -2354,12 +2414,12 @@
         if (!(epView.expanded && total > EPISODES_PREVIEW)) { tools.replaceChildren(); return; }
         if (tools.firstChild) return; // già disegnati: non perdere il focus della ricerca
         const search = h('input', {
-          class: 'field', type: 'search', placeholder: 'Cerca un episodio', 'aria-label': 'Cerca un episodio',
+          class: 'field', type: 'search', placeholder: words(c.kind).search, 'aria-label': words(c.kind).search,
           value: epView.q, enterkeyhint: 'search', autocomplete: 'off',
         });
         search.addEventListener('input', () => { epView.q = search.value; draw(); });
         const chips = h('div', { class: 'chips', style: 'margin-top:10px' });
-        const drawChips = () => chips.replaceChildren(...[['all', 'Tutti'], ['todo', 'Da vedere'], ['seen', 'Visti']].map(([k, label]) =>
+        const drawChips = () => chips.replaceChildren(...[['all', 'Tutti'], ['todo', words(c.kind).todo], ['seen', words(c.kind).seen.charAt(0).toUpperCase() + words(c.kind).seen.slice(1)]].map(([k, label]) =>
           h('button', {
             class: 'chip', type: 'button', 'aria-pressed': String(epView.filter === k), text: label,
             onclick: () => { epView.filter = k; drawChips(); draw(); },
@@ -2373,16 +2433,16 @@
 
       return h('div', { class: 'panel' },
         h('div', { class: 'panel-head', style: 'margin:0' },
-          h('h2', { text: 'Episodi' }),
-          total ? h('span', { class: 'muted small', text: plural(total, 'episodio', 'episodi') }) : null),
-        h('div', { class: 'panel-sub', style: 'margin-top:4px', text: 'Partono uno alla volta, senza ripetizioni finché non li ha visti tutti.' }),
+          h('h2', { text: words(c.kind).title }),
+          total ? h('span', { class: 'muted small', text: plural(total, words(c.kind).one, words(c.kind).many) }) : null),
+        h('div', { class: 'panel-sub', style: 'margin-top:4px', text: `Partono uno alla volta, senza ripetizioni finché non ${words(c.kind).seenAll.charAt(0).toLowerCase() + words(c.kind).seenAll.slice(1)}.` }),
         round,
         tools,
         list,
         more,
         h('div', { id: 'upload-slot' }),
-        h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => pickVideos(c.name) }, icon('upload'), 'Aggiungi episodi'),
-        pickerHint(false),
+        h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => pickVideos(c.name, c.kind) }, icon('upload'), words(c.kind).add),
+        pickerHint(c.kind),
         info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.free_bytes)}` }) : null
       );
     }
@@ -2398,7 +2458,7 @@
         h('div', { class: 'row-sub' },
           ep.playable === false ? h('span', { class: 'tag bad', style: 'margin-left:0', text: 'Non si riproduce' })
             : ep.isNew ? h('span', { class: 'tag new', style: 'margin-left:0', text: 'Nuovo' })
-            : ep.watched ? h('span', { class: 'tag known', style: 'margin-left:0', text: 'Visto' }) : 'Da vedere',
+            : ep.watched ? h('span', { class: 'tag known', style: 'margin-left:0', text: words(c.kind).seenOne }) : words(c.kind).todo,
           ` · ${formatBytes(ep.size_bytes)}`),
         ep.playable === false && ep.unplayable_reason
           ? h('div', { class: 'row-sub', style: 'margin-top:4px', text: 'Cucù lo salta perché ' + ep.unplayable_reason })
@@ -2412,7 +2472,7 @@
           onclick: () => {
             actions.classList.add('hidden');
             inlineEdit(main, {
-              value: base, label: 'Nome dell\'episodio', suffix: ext,
+              value: base, label: words(c.kind).rename, suffix: ext,
               onCancel: () => { actions.classList.remove('hidden'); showMain(); },
               onSave: async (newBase) => {
                 if (!newBase || newBase === base) { actions.classList.remove('hidden'); showMain(); return; }
@@ -2455,8 +2515,8 @@
       : null;
 
     function episodeThumb(c, ep) {
-      const box = h('div', { class: 'ep-thumb', 'aria-hidden': 'true' }, icon('film'));
-      if (!info || !info.thumbnails) return box;
+      const box = h('div', { class: 'ep-thumb', 'aria-hidden': 'true' }, icon(words(c.kind).icon));
+      if (c.kind === 'audio' || !info || !info.thumbnails) return box;   // gli audio non hanno anteprime
       const url = `/characters/${enc(c.name)}/episodes/${enc(ep.filename)}/thumb`;
       const show = (src) => {
         const img = h('img', { alt: '', src, decoding: 'async' });
@@ -2504,7 +2564,7 @@
     async function resetRound(c) {
       const ok = await confirmSheet({
         title: 'Ricominciare il giro?',
-        text: `Tutti gli episodi di ${c.display_name} tornano da vedere. Vale dal prossimo episodio.`,
+        text: `${words(c.kind).allBack} di ${c.display_name} tornano da ${c.kind === 'audio' ? 'ascoltare' : 'vedere'}. Vale ${words(c.kind).next}.`,
         ok: 'Ricomincia',
       });
       if (!ok) return;
@@ -2536,7 +2596,7 @@
           : h('div', { class: 'row-empty', text: 'Ancora nessuna foto.' }),
         h('div', { id: 'upload-slot' }),
         h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => pickPhotos(c.name) }, icon('upload'), 'Aggiungi foto'),
-        pickerHint(true),
+        pickerHint('photos'),
         info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.free_bytes)}` }) : null
       );
     }
@@ -2564,7 +2624,7 @@
         h('div', { class: 'panel-head', style: 'margin:0' },
           h('div', {},
             h('h2', { text: 'Sempre disponibile' }),
-            h('div', { class: 'panel-sub', style: 'margin:4px 0 0', text: `${c.kind === 'photos' ? 'Questo album' : 'Questo cartone'} può partire a qualsiasi ora, anche oltre i minuti del giorno.` })
+            h('div', { class: 'panel-sub', style: 'margin:4px 0 0', text: `${words(c.kind).thing} può partire a qualsiasi ora, anche oltre i minuti del giorno.` })
           ),
           h('label', { class: 'switch' }, exempt, h('span', { class: 'slider' }))
         )
@@ -2611,7 +2671,7 @@
       const c = current;
       const parts = [];
       if (c.kind === 'photos' && c.photos.length) parts.push(plural(c.photos.length, 'foto', 'foto'));
-      else if (c.stats.total_episodes) parts.push(plural(c.stats.total_episodes, 'episodio', 'episodi'));
+      else if (c.stats.total_episodes) parts.push(plural(c.stats.total_episodes, words(c.kind).one, words(c.kind).many));
       if (c.tag_uids.length) parts.push(plural(c.tag_uids.length, 'statuina abbinata', 'statuine abbinate'));
       const ok = await confirmSheet({
         title: `Eliminare ${c.display_name}?`,
@@ -2631,14 +2691,14 @@
     // Un file alla volta, ognuno con la sua barra e il suo "annulla".
     // La coda sopravvive alla navigazione: si vede quando si torna sul personaggio
 
-    // kind: 'video' (episodi) o 'photos' (foto, preparate sul telefono una alla volta)
+    // kind: 'video' o 'audio' (episodi) oppure 'photos' (foto, preparate sul telefono una alla volta)
     let queue = null; // { target, displayName, kind, items: [{ file, status, loaded, error, xhr, upload, uploadName }] }
 
     const isUploading = () => !!queue && queue.items.some(i => i.status === 'waiting' || i.status === 'uploading');
 
-    function pickVideos(charName) {
+    function pickVideos(charName, kind = 'video') {
       if (isUploading()) { toast('Aspetta che finiscano i caricamenti in corso'); return; }
-      pickFiles({ accept: VIDEO_ACCEPT, multiple: true }, (files) => enqueueVideos(charName, files));
+      pickFiles({ accept: kind === 'audio' ? AUDIO_ACCEPT : VIDEO_ACCEPT, multiple: true }, (files) => enqueueVideos(charName, files, kind));
     }
 
     function pickPhotos(charName) {
@@ -2681,7 +2741,7 @@
       }
     }
 
-    async function enqueueVideos(charName, files) {
+    async function enqueueVideos(charName, files, kind = 'video') {
       let existing = [];
       let displayName = charName;
       try {
@@ -2693,7 +2753,7 @@
       const seen = new Set(existing);
       const items = files.map(file => {
         const item = { file, status: 'waiting', loaded: 0, error: null, xhr: null };
-        if (seen.has(file.name)) { item.status = 'error'; item.error = 'c\'è già un episodio con questo nome'; }
+        if (seen.has(file.name)) { item.status = 'error'; item.error = words(kind).dup; }
         seen.add(file.name);
         return item;
       });
@@ -2701,7 +2761,7 @@
       // Un 4K si riconosce già sul telefono: inutile caricarne decine di MB per
       // farselo rifiutare dopo. Il formato (HEVC, HDR) invece lo controlla Cucù
       for (const item of items) {
-        if (item.status !== 'waiting') continue;
+        if (item.status !== 'waiting' || kind !== 'video') continue;
         const size = await videoSize(item.file);
         const problem = size && videoSizeProblem(size.w, size.h);
         if (problem) { item.status = 'error'; item.error = problem; }
@@ -2713,7 +2773,7 @@
         return;
       }
 
-      queue = { target: charName, displayName, kind: 'video', items };
+      queue = { target: charName, displayName, kind, items };
       renderUploadQueue();
       runQueue();
     }
@@ -2779,14 +2839,15 @@
 
       const ok = q.items.filter(i => i.status === 'done').length;
       const failed = q.items.filter(i => i.status === 'error').length;
-      const done = album ? ['foto caricata', 'foto caricate'] : ['episodio caricato', 'episodi caricati'];
+      const done = words(q.kind).uploaded;
+      const notDone = words(q.kind).failed;
       if (!failed) {
         queue = null;
         if (ok) toast(ok === 1 ? done[0].charAt(0).toUpperCase() + done[0].slice(1) : `${ok} ${done[1]}`);
       } else {
         // Restano visibili solo i file non caricati, con il motivo
         q.items = q.items.filter(i => i.status === 'error');
-        toast(`${ok ? plural(ok, done[0], done[1]) + ', ' : ''}${album ? plural(failed, 'non caricata', 'non caricate') : plural(failed, 'non caricato', 'non caricati')}`);
+        toast(`${ok ? plural(ok, done[0], done[1]) + ', ' : ''}${plural(failed, notDone[0], notDone[1])}`);
       }
       if (current && current.name === q.target) refreshCharacter();
       else renderUploadQueue();
@@ -3226,7 +3287,7 @@
       if (n.mode === 'paused') return { state: 'pause', title: `${n.display_name} è in pausa`, sub: ep ? `${ep} · riparte quando torna la sua statuina` : 'Riparte quando torna la sua statuina.' };
       if (n.mode === 'ended_wait_remove') return n.kind === 'photos'
         ? { state: 'end', title: 'Album finito', sub: `${n.display_name}: riparte da capo dopo aver tolto e riappoggiato la statuina.`, big: 'Fine', small: 'togli la statuina' }
-        : { state: 'end', title: 'Episodio finito', sub: `${n.display_name}: il prossimo parte dopo aver tolto e riappoggiato la statuina.`, big: 'Fine', small: 'togli la statuina' };
+        : { state: 'end', title: words(n.kind).ended, sub: `${n.display_name}: il prossimo parte dopo aver tolto e riappoggiato la statuina.`, big: 'Fine', small: 'togli la statuina' };
       if (n.blocked) {
         if (u.remaining_minutes != null && u.remaining_minutes <= 0) return { state: 'rest', title: 'I minuti di oggi sono finiti', sub: 'Domani si ricomincia.', big: 'A domani', small: 'i minuti di oggi sono finiti' };
         const when = n.next_window_start ? `Si riparte alle ${hm(n.next_window_start)}.` : 'Per oggi gli orari sono finiti. Domani si ricomincia.';
@@ -3298,7 +3359,7 @@
       }
 
       if (n.round && n.round.total_episodes) {
-        facts.push(h('div', { class: 'fact muted small', text: `${n.round.watched_in_round} di ${n.round.total_episodes} episodi già visti in questo giro` }));
+        facts.push(h('div', { class: 'fact muted small', text: `${n.round.watched_in_round} di ${plural(n.round.total_episodes, words(n.kind).one, words(n.kind).many)} già ${words(n.kind).seen} in questo giro` }));
       }
 
       if (n.alive && u.enabled) {

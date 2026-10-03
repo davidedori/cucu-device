@@ -26,9 +26,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from media_check import (checked, cached_check, check_video, save_check, move_check, drop_check,
                          character_kind, photo_files, PHOTO_EXT, PHOTO_SECONDS, PROFILE_STEM,
-                         how_to, platform_from_user_agent)
+                         how_to, platform_from_user_agent, check_audio, episode_files,
+                         VIDEO_EXT, AUDIO_EXT)
 
-VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v"}
 IMAGE_EXT = {".png", ".jpg", ".jpeg"}
 
 API_DIR = Path(__file__).resolve().parent
@@ -58,7 +58,7 @@ app.mount("/static", StaticFiles(directory=API_DIR / "static"), name="static")
 class CharacterCreate(BaseModel):
     name: str
     display_name: Optional[str] = None
-    # "video" (cartoni) o "photos" (album); "audio" è in arrivo
+    # "video" (cartoni), "photos" (album) o "audio"
     kind: str = "video"
 
 class TagCreate(BaseModel):
@@ -349,8 +349,9 @@ def _video_files(char_dir: Path):
     return [p for p in char_dir.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT]
 
 def _media_files(char_dir: Path, kind: str):
-    """Quello che fa partire la statuina: video per i cartoni, foto per gli album."""
-    return photo_files(char_dir) if kind == "photos" else _video_files(char_dir)
+    """Quello che fa partire la statuina: video per i cartoni, foto per gli
+    album, audio per i personaggi audio."""
+    return photo_files(char_dir) if kind == "photos" else episode_files(char_dir, kind)
 
 def load_time_limits():
     default = {"enabled": False, "days": {}, "exempt_characters": []}
@@ -706,8 +707,8 @@ def system_now():
         video = char_dir / episode if episode else None
         if video is not None and video.is_file():
             episode_thumb_v = _thumb_version(char_dir, video)
-        if char_dir.is_dir() and kind == "video":
-            files = [p.name for p in _video_files(char_dir)]
+        if char_dir.is_dir() and kind in ("video", "audio"):
+            files = [p.name for p in episode_files(char_dir, kind)]
             state = episode_state.get(character, {})
             remaining = set(state.get("remaining", []))
             known = set(state.get("known", []))
@@ -803,9 +804,7 @@ def create_character(payload: CharacterCreate):
 
     if not raw_name:
         raise HTTPException(status_code=400, detail="Il nome del personaggio non può essere vuoto.")
-    if payload.kind == "audio":
-        raise HTTPException(status_code=400, detail="Le storie da ascoltare arrivano presto.")
-    if payload.kind not in ("video", "photos"):
+    if payload.kind not in ("video", "photos", "audio"):
         raise HTTPException(status_code=400, detail="Tipo di personaggio non valido.")
 
     # normalizziamo il nome: minuscolo, spazi -> underscore
@@ -992,7 +991,7 @@ def get_character(name: str, request: Request):
     seen = state.get("seen", [])
 
     # Episodi realmente presenti in cartella (un album non ne ha: ha le foto)
-    files = _video_files(char_dir) if kind == "video" else []
+    files = episode_files(char_dir, kind) if kind in ("video", "audio") else []
     file_names = [p.name for p in files]
     photos = [
         {"filename": p.name, "size_bytes": p.stat().st_size, "thumb_v": _thumb_version(char_dir, p)}
@@ -1013,7 +1012,7 @@ def get_character(name: str, request: Request):
     episodes = []
     for p in files:
         fname = p.name
-        check = cached_check(p)
+        check = cached_check(p) if kind == "video" else None
         episodes.append({
             "filename": fname,
             "size_bytes": p.stat().st_size,
@@ -1320,10 +1319,7 @@ def get_character_episodes(name: str):
     remaining = state.get("remaining", [])
     seen = state.get("seen", [])
 
-    files = [
-        p for p in char_dir.iterdir()
-        if p.is_file() and p.suffix.lower() in VIDEO_EXT
-    ]
+    files = episode_files(char_dir, character_kind(state))
 
     episodes = []
     for p in files:
@@ -1371,6 +1367,10 @@ async def upload_character_episodes(
     known = state.get("known", [])
     remaining = state.get("remaining", [])
     seen = state.get("seen", [])
+    kind = character_kind(state)
+    if kind == "photos":
+        raise HTTPException(status_code=400, detail="Questo personaggio è un album: si caricano foto.")
+    allowed_ext = AUDIO_EXT if kind == "audio" else VIDEO_EXT
 
     saved_files = []
 
@@ -1380,10 +1380,11 @@ async def upload_character_episodes(
             continue
 
         ext = os.path.splitext(original_name)[1].lower()
-        if ext not in VIDEO_EXT:
+        if ext not in allowed_ext:
             raise HTTPException(
                 status_code=400,
-                detail=f"Estensione non supportata per file '{original_name}'."
+                detail=("serve un file audio (mp3, m4a, wav…)." if kind == "audio"
+                        else f"Estensione non supportata per file '{original_name}'.")
             )
 
         dest_path = char_dir / original_name
@@ -1403,13 +1404,14 @@ async def upload_character_episodes(
                     f.write(chunk)
             # Prima che diventi un episodio: un video che Cucù non riesce a
             # riprodurre (4K, HEVC, HDR) bloccherebbe la TV su un fotogramma
-            ok, reason, fix = check_video(tmp_path)
+            ok, reason, fix = check_audio(tmp_path) if kind == "audio" else check_video(tmp_path)
             if ok is False:
                 tmp_path.unlink(missing_ok=True)
                 tip = how_to(fix, platform_from_user_agent(request.headers.get("user-agent")))
                 raise HTTPException(status_code=400, detail=f"{reason} {tip}".strip())
             tmp_path.rename(dest_path)
-            save_check(dest_path, ok, reason, fix)
+            if kind == "video":
+                save_check(dest_path, ok, reason, fix)
         except BaseException:
             tmp_path.unlink(missing_ok=True)
             raise
@@ -1426,7 +1428,8 @@ async def upload_character_episodes(
     episode_state[name] = new_state
     save_episode_state(episode_state)
 
-    background_tasks.add_task(_generate_thumbs_task, char_dir, saved_files)
+    if kind == "video":
+        background_tasks.add_task(_generate_thumbs_task, char_dir, saved_files)
 
     return {
         "character": name,
@@ -1562,9 +1565,9 @@ def reset_character_round(name: str):
     if not char_dir.exists() or not char_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"Personaggio '{name}' non trovato")
 
-    file_names = [p.name for p in _video_files(char_dir)]
     episode_state = load_episode_state()
     state = episode_state.get(name, {})
+    file_names = [p.name for p in episode_files(char_dir, character_kind(state))]
     known = [f for f in state.get("known", []) if f in file_names]
     known += [f for f in file_names if f not in known]
 
@@ -1601,7 +1604,7 @@ def rename_character_episode(name: str, filename: str, payload: EpisodeRename):
         )
 
     ext = os.path.splitext(new_name)[1].lower()
-    if ext not in VIDEO_EXT:
+    if ext not in VIDEO_EXT | AUDIO_EXT:
         raise HTTPException(
             status_code=400,
             detail=f"Estensione non supportata per file '{new_name}'."

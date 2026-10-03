@@ -16,7 +16,8 @@ except ImportError:
     sys.exit(1)
 
 from nfc_reader import create_reader
-from media_check import cached_check, checked, character_kind, photo_files, PHOTO_SECONDS
+from media_check import (cached_check, checked, character_kind, photo_files, PHOTO_SECONDS,
+                         episode_files, VIDEO_EXT)
 
 # --- CONFIG -------------------------------------------------------------
 
@@ -32,10 +33,10 @@ IDLE_IMAGE = GRAPHICS_DIR / "idle.png"            # appoggia una statuina
 END_IMAGE = GRAPHICS_DIR / "end.png"              # episodio finito: togli la statuina
 WAIT_NEXT_IMAGE = GRAPHICS_DIR / "wait_next.png"  # statuina tolta: un altro? si decide insieme
 REST_IMAGE = GRAPHICS_DIR / "rest.png"            # statuina bloccata dai limiti di tempo
+LISTEN_IMAGE = GRAPHICS_DIR / "listen.png"        # audio in corso: "Si ascolta"
 HOURGLASS_DIR = GRAPHICS_DIR / "hourglass"
 HOURGLASS_LEVELS = 10  # 0 = vuoto/limite raggiunto, 9 = pieno
 
-VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v"}
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 # Persistiamo il conteggio minuti solo ogni tot secondi di riproduzione continua,
 # per non stressare la SD card scrivendo ad ogni tick del loop (10Hz).
@@ -90,6 +91,25 @@ class CucuPlayer:
         self.player.set_media(media)
         self.player.play()
         # Imposta fullscreen ad ogni play per sicurezza
+        self.player.set_fullscreen(True)
+
+    def play_listen(self, path: Path, seconds=None):
+        """Audio con la schermata "Si ascolta" sulla TV (l'audio esce dall'HDMI,
+        quindi qualcosa va mostrato). Provato sul Pi: con l'immagine come file
+        principale, lunga quanto l'audio, e l'audio agganciato (input-slave) il
+        tempo parte subito, la pausa ferma entrambi e la fine arriva puntuale.
+        Senza durata si fa il contrario: audio principale, immagine agganciata"""
+        self.has_ended = False
+        image = LISTEN_IMAGE if LISTEN_IMAGE.exists() else IDLE_IMAGE
+        if seconds:
+            media = self.instance.media_new(str(image))
+            media.add_option(f":image-duration={seconds:.1f}")
+            media.add_option(f":input-slave={path.resolve().as_uri()}")
+        else:
+            media = self.instance.media_new(str(path))
+            media.add_option(f":input-slave={image.resolve().as_uri()}")
+        self.player.set_media(media)
+        self.player.play()
         self.player.set_fullscreen(True)
 
     def pause(self):
@@ -316,7 +336,7 @@ def load_episode_state():
     for char_dir in CHARACTERS_DIR.iterdir():
         if not char_dir.is_dir(): continue
         character = char_dir.name
-        files = [p.name for p in char_dir.iterdir() if p.suffix.lower() in VIDEO_EXT]
+        files = [p.name for p in episode_files(char_dir, character_kind(episode_state.get(character)))]
         if not files: continue
 
         state = episode_state.get(character, {})
@@ -355,13 +375,16 @@ def _select_episode(character: str):
     così un episodio bloccato dai limiti di tempo non viene "sprecato"."""
     char_dir = CHARACTERS_DIR / character
     if not char_dir.exists(): return None
-    files = [p for p in char_dir.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT]
+    state = _read_episode_state_file().get(character, {})
+    kind = character_kind(state)
+    files = episode_files(char_dir, kind)
     # I video che Cucù non riesce a riprodurre (4K, HEVC, HDR: vedi
-    # media_check.py) non entrano nel giro: bloccherebbero la TV su un fotogramma
-    files = [p for p in files if (cached_check(p) or (None,))[0] is not False]
+    # media_check.py) non entrano nel giro: bloccherebbero la TV su un fotogramma.
+    # Gli audio non hanno questo controllo: VLC li legge tutti
+    if kind == "video":
+        files = [p for p in files if (cached_check(p) or (None,))[0] is not False]
     if not files: return None
 
-    state = _read_episode_state_file().get(character, {})
     known = list(state.get("known", []))
     remaining = list(state.get("remaining", []))
     seen = list(state.get("seen", []))
@@ -398,7 +421,7 @@ def _select_episode(character: str):
     # Di solito l'esito c'è già (lo prepara l'API); se manca si controlla
     # adesso. Se il file non va, l'esito resta salvato e si sceglie di nuovo:
     # al giro dopo il file è escluso, quindi la ricorsione finisce
-    if checked(char_dir / chosen_name)[0] is False:
+    if kind == "video" and checked(char_dir / chosen_name)[0] is False:
         print(f"Salto {chosen_name}: Cucù non riesce a riprodurlo")
         return _select_episode(character)
     remaining.remove(chosen_name)
@@ -605,7 +628,8 @@ def start_video(character):
         print(f"Visione non permessa ora per '{character}' (limiti di tempo attivi).")
         return "blocked"
 
-    if character_kind(_read_episode_state_file().get(character)) == "photos":
+    kind = character_kind(_read_episode_state_file().get(character))
+    if kind == "photos":
         return start_album(character, remaining_minutes)
     album = None
 
@@ -615,8 +639,8 @@ def start_video(character):
         return "missing"
     video, known, remaining, seen = selection
 
+    duration_min = get_media_duration_minutes(video)
     if remaining_minutes is not None:
-        duration_min = get_media_duration_minutes(video)
         if duration_min is not None and duration_min > remaining_minutes:
             print(
                 f"Episodio '{video.name}' ({duration_min:.1f} min) supera il tempo "
@@ -626,8 +650,12 @@ def start_video(character):
 
     _commit_episode(character, known, remaining, seen)
 
-    print(f"Riproduco video: {video.name}")
-    player.play_media(video)
+    if kind == "audio":
+        print(f"Riproduco audio: {video.name}")
+        player.play_listen(video, duration_min * 60 if duration_min else None)
+    else:
+        print(f"Riproduco video: {video.name}")
+        player.play_media(video)
     current_character = character
     current_video_path = video
     mode = "playing"
