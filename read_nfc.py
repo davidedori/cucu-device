@@ -16,7 +16,7 @@ except ImportError:
     sys.exit(1)
 
 from nfc_reader import create_reader
-from media_check import cached_check, checked
+from media_check import cached_check, checked, character_kind, photo_files, PHOTO_SECONDS
 
 # --- CONFIG -------------------------------------------------------------
 
@@ -151,6 +151,9 @@ mode = "idle"
 
 current_character = None
 current_video_path = None
+# Album di foto in corso: {"files": [Path], "index": foto mostrata, "shown": secondi
+# già passati su questa foto}. None quando va un cartone o non va niente
+album = None
 
 last_uid = None
 had_tag = False
@@ -551,13 +554,60 @@ def _compute_hourglass_level(character):
     fraction = max(0.0, min(1.0, remaining / budget))
     return min(HOURGLASS_LEVELS - 1, int(fraction * HOURGLASS_LEVELS))
 
+def start_album(character, remaining_minutes):
+    """Album di foto: tutte, nell'ordine di caricamento, PHOTO_SECONDS l'una.
+    Ritorna "played", "blocked" o "missing" come start_video()."""
+    global current_character, mode, current_video_path, album
+    char_dir = CHARACTERS_DIR / character
+    photos = photo_files(char_dir) if char_dir.is_dir() else []
+    if not photos:
+        print(f"Nessuna foto per {character}")
+        return "missing"
+    duration_min = len(photos) * PHOTO_SECONDS / 60
+    if remaining_minutes is not None and duration_min > remaining_minutes:
+        print(f"Album '{character}' ({duration_min:.1f} min) supera il tempo residuo oggi "
+              f"({remaining_minutes:.1f} min): resto in idle.")
+        return "blocked"
+    album = {"files": photos, "index": 0, "shown": 0.0}
+    print(f"Album {character}: {len(photos)} foto")
+    player.play_media(photos[0])
+    current_character = character
+    current_video_path = photos[0]
+    mode = "playing"
+    player.set_hourglass_level(_compute_hourglass_level(character))
+    return "played"
+
+def advance_album(elapsed):
+    """Fa scorrere l'album di `elapsed` secondi di visione: dopo PHOTO_SECONDS
+    passa alla foto dopo (saltando quelle eliminate nel frattempo). Ritorna
+    True quando è finita l'ultima. Chiamata solo in "playing": in pausa la
+    foto resta ferma e il suo tempo non avanza."""
+    global current_video_path
+    album["shown"] += elapsed
+    if album["shown"] < PHOTO_SECONDS:
+        return False
+    album["shown"] = 0.0
+    album["index"] += 1
+    while album["index"] < len(album["files"]):
+        photo = album["files"][album["index"]]
+        if photo.exists():
+            current_video_path = photo
+            player.play_media(photo)
+            return False
+        album["index"] += 1
+    return True
+
 def start_video(character):
     """Ritorna "played", "blocked" (limiti di tempo) o "missing" (nessun video)."""
-    global current_character, mode, current_video_path
+    global current_character, mode, current_video_path, album
     allowed, remaining_minutes = is_viewing_allowed_now(character)
     if not allowed:
         print(f"Visione non permessa ora per '{character}' (limiti di tempo attivi).")
         return "blocked"
+
+    if character_kind(_read_episode_state_file().get(character)) == "photos":
+        return start_album(character, remaining_minutes)
+    album = None
 
     selection = _select_episode(character)
     if not selection:
@@ -667,10 +717,20 @@ try:
         # chiamate reali, non ad ogni tick).
         player.set_hourglass_level(_compute_hourglass_level(current_character))
 
-        # 1. Controllo fine video
+        # 1. Controllo fine video (o fine album: le foto non "finiscono" da sole,
+        # le fa scorrere advance_album; elapsed limitato contro i salti
+        # dell'orologio, il Pi non ha RTC)
         if mode == "playing":
-            if player.check_ended():
-                print("Video finito.")
+            if album is not None:
+                ended = advance_album(min(max(elapsed, 0.0), 1.0))
+                if ended:
+                    print("Album finito.")
+                    album = None
+            else:
+                ended = player.check_ended()
+                if ended:
+                    print("Video finito.")
+            if ended:
                 mode = "ended_wait_remove"
                 refresh_graphic(END_IMAGE) # "Fine": togli la statuina
                 save_daily_usage()
@@ -692,7 +752,11 @@ try:
         try:
             blocked = not is_viewing_allowed_now(None)[0]
             pos_ms = len_ms = None
-            if mode in ("playing", "paused"):
+            if mode in ("playing", "paused") and album is not None:
+                # avanzamento dell'album intero, non della singola foto
+                pos_ms = int((album["index"] * PHOTO_SECONDS + album["shown"]) * 1000)
+                len_ms = len(album["files"]) * PHOTO_SECONDS * 1000
+            elif mode in ("playing", "paused"):
                 pos_ms = player.player.get_time()
                 len_ms = player.player.get_length()
             with (BASE_DIR / "last_seen_tag.json").open("w") as _f:
@@ -701,6 +765,7 @@ try:
                     "character": current_character,
                     "episode": current_video_path.name if current_video_path else None,
                     "pos_ms": pos_ms, "len_ms": len_ms,
+                    "album": {"index": album["index"] + 1, "total": len(album["files"])} if album else None,
                     "pin_reset": pin_reset_open(),
                 }, _f)
         except Exception:

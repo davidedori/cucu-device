@@ -24,7 +24,8 @@ import sys
 # media_check.py sta nella cartella del progetto, accanto a read_nfc.py: le
 # regole su cosa Cucù riesce a riprodurre sono le stesse per entrambi
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from media_check import checked, cached_check, check_video, save_check, move_check, drop_check
+from media_check import (checked, cached_check, check_video, save_check, move_check, drop_check,
+                         character_kind, photo_files, PHOTO_EXT, PHOTO_SECONDS, PROFILE_STEM)
 
 VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v"}
 IMAGE_EXT = {".png", ".jpg", ".jpeg"}
@@ -56,6 +57,8 @@ app.mount("/static", StaticFiles(directory=API_DIR / "static"), name="static")
 class CharacterCreate(BaseModel):
     name: str
     display_name: Optional[str] = None
+    # "video" (cartoni) o "photos" (album); "audio" è in arrivo
+    kind: str = "video"
 
 class TagCreate(BaseModel):
     uid: str
@@ -194,8 +197,33 @@ def _video_duration(path: Path):
     except Exception:
         return None
 
+def _generate_photo_thumb(char_dir: Path, photo: Path) -> bool:
+    """Miniatura di una foto dell'album: Pillow, leggero, niente ffmpeg."""
+    try:
+        from PIL import Image, ImageOps
+    except ImportError:
+        return False
+    thumb = _thumb_path(char_dir, photo.name)
+    thumb.parent.mkdir(exist_ok=True)
+    tmp = thumb.with_name(thumb.name + ".tmp.jpg")
+    try:
+        with Image.open(photo) as im:
+            im.draft("RGB", (THUMB_WIDTH * 2, THUMB_WIDTH * 2))  # JPEG: decodifica già ridotta
+            im = ImageOps.exif_transpose(im).convert("RGB")
+            im.thumbnail((THUMB_WIDTH, THUMB_WIDTH * 2))
+            im.save(tmp, "JPEG", quality=80)
+        os.replace(tmp, thumb)
+        return True
+    except Exception as e:
+        print(f"[thumb] foto illeggibile {photo.name}: {e}")
+        tmp.unlink(missing_ok=True)
+        return False
+
 def _generate_thumb(char_dir: Path, video: Path) -> bool:
-    """Estrae un fotogramma (circa al 30% del video, massimo 90 s: dopo la sigla)."""
+    """Estrae un fotogramma (circa al 30% del video, massimo 90 s: dopo la sigla).
+    Per le foto degli album fa una miniatura della foto."""
+    if video.suffix.lower() in PHOTO_EXT:
+        return _generate_photo_thumb(char_dir, video)
     thumb = _thumb_path(char_dir, video.name)
     thumb.parent.mkdir(exist_ok=True)
     tmp = thumb.with_name(thumb.name + ".tmp.jpg")
@@ -229,12 +257,12 @@ def _player_playing() -> bool:
     return (time.time() - data.get("ts", 0)) <= 5 and data.get("mode") == "playing"
 
 def _generate_thumbs_task(char_dir: Path, filenames: List[str]):
-    """Background dopo un upload: anteprime dei nuovi episodi, se il lettore è libero."""
-    if not _ffmpeg_available():
-        return
+    """Background dopo un upload: anteprime dei nuovi episodi (o foto), se il lettore è libero."""
     for name in filenames:
         video = char_dir / name
         if _player_playing() or not video.exists() or _thumb_version(char_dir, video):
+            continue
+        if video.suffix.lower() not in PHOTO_EXT and not _ffmpeg_available():
             continue
         with _thumb_lock:
             _generate_thumb(char_dir, video)
@@ -248,17 +276,15 @@ def _thumb_worker():
     time.sleep(60)  # lascia finire l'avvio del dispositivo
     while True:
         try:
-            if not _ffmpeg_available():
-                time.sleep(3600)
-                continue
             if _player_playing():
                 time.sleep(30)
                 continue
+            have_ffmpeg = _ffmpeg_available()
             # Prima si controlla che gli episodi si possano riprodurre (solo
             # ffprobe, leggero): i file non riproducibili compaiono così nella
             # scheda del personaggio e read_nfc.py li salta senza ricontrollarli
             unchecked = None
-            if CHARACTERS_DIR.exists():
+            if have_ffmpeg and CHARACTERS_DIR.exists():
                 for char_dir in sorted(CHARACTERS_DIR.iterdir()):
                     if not char_dir.is_dir():
                         continue
@@ -276,7 +302,9 @@ def _thumb_worker():
                 for char_dir in sorted(CHARACTERS_DIR.iterdir()):
                     if not char_dir.is_dir():
                         continue
-                    for video in sorted(_video_files(char_dir)):
+                    # foto (Pillow) sempre; video solo con ffmpeg
+                    candidates = photo_files(char_dir) + (sorted(_video_files(char_dir)) if have_ffmpeg else [])
+                    for video in candidates:
                         if not _thumb_version(char_dir, video) and not _thumb_failed(char_dir, video):
                             missing = (char_dir, video)
                             break
@@ -318,6 +346,10 @@ def _start_thumb_worker():
 
 def _video_files(char_dir: Path):
     return [p for p in char_dir.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT]
+
+def _media_files(char_dir: Path, kind: str):
+    """Quello che fa partire la statuina: video per i cartoni, foto per gli album."""
+    return photo_files(char_dir) if kind == "photos" else _video_files(char_dir)
 
 def load_time_limits():
     default = {"enabled": False, "days": {}, "exempt_characters": []}
@@ -667,12 +699,13 @@ def system_now():
     # Anteprima dell'episodio solo se già pronta: mentre va il video non la si genera
     episode_thumb_v = None
     char_info = None
+    kind = character_kind(episode_state.get(character)) if character else None
     if character:
         char_dir = CHARACTERS_DIR / character
         video = char_dir / episode if episode else None
         if video is not None and video.is_file():
             episode_thumb_v = _thumb_version(char_dir, video)
-        if char_dir.is_dir():
+        if char_dir.is_dir() and kind == "video":
             files = [p.name for p in _video_files(char_dir)]
             state = episode_state.get(character, {})
             remaining = set(state.get("remaining", []))
@@ -694,8 +727,11 @@ def system_now():
         "tag_character": tag_character,
         "character": character,
         "display_name": _display_name(episode_state, character) if character else None,
+        "kind": kind,
         "episode": episode,
         "episode_thumb_v": episode_thumb_v,
+        # album in corso: {"index": foto mostrata (da 1), "total": foto} (scritto da read_nfc.py)
+        "album": data.get("album") if kind == "photos" else None,
         "pos_ms": data.get("pos_ms") if character else None,
         "len_ms": data.get("len_ms") if character else None,
         "round": char_info,
@@ -728,6 +764,7 @@ def list_characters():
 
         # conta quanti tag puntano a questo personaggio
         tags_count = sum(1 for uid, char in tags_map.items() if char == name)
+        kind = character_kind(state)
 
         # Check image
         has_image = any((char_dir / f"profile{ext}").exists() for ext in IMAGE_EXT)
@@ -739,6 +776,9 @@ def list_characters():
             "active": True,  # per ora li consideriamo tutti attivi
             "has_image": has_image,
             "image_url": image_url,
+            "kind": kind,
+            # episodi (cartoni) o foto (album) presenti davvero nella cartella
+            "items_count": len(_media_files(char_dir, kind)),
             "stats": {
                 "known": len(known),
                 "remaining": len(remaining),
@@ -762,6 +802,10 @@ def create_character(payload: CharacterCreate):
 
     if not raw_name:
         raise HTTPException(status_code=400, detail="Il nome del personaggio non può essere vuoto.")
+    if payload.kind == "audio":
+        raise HTTPException(status_code=400, detail="Le storie da ascoltare arrivano presto.")
+    if payload.kind not in ("video", "photos"):
+        raise HTTPException(status_code=400, detail="Tipo di personaggio non valido.")
 
     # normalizziamo il nome: minuscolo, spazi -> underscore
     safe_name = raw_name.lower().replace(" ", "_")
@@ -809,7 +853,8 @@ def create_character(payload: CharacterCreate):
         "known": [],
         "remaining": [],
         "seen": [],
-        "display_name": payload.display_name or payload.name.strip()
+        "display_name": payload.display_name or payload.name.strip(),
+        "kind": payload.kind,
     }
     save_episode_state(episode_state)
 
@@ -821,6 +866,8 @@ def create_character(payload: CharacterCreate):
         "name": safe_name,
         "display_name": display_name,
         "active": True,
+        "kind": payload.kind,
+        "items_count": 0,
         "stats": {
             "known": 0,
             "remaining": 0,
@@ -935,16 +982,18 @@ def get_character(name: str):
 
     # Stato episodi per questo personaggio
     state = episode_state.get(name, {})
+    kind = character_kind(state)
     known = state.get("known", [])
     remaining = state.get("remaining", [])
     seen = state.get("seen", [])
 
-    # Episodi realmente presenti in cartella
-    files = [
-        p for p in char_dir.iterdir()
-        if p.is_file() and p.suffix.lower() in VIDEO_EXT
-    ]
+    # Episodi realmente presenti in cartella (un album non ne ha: ha le foto)
+    files = _video_files(char_dir) if kind == "video" else []
     file_names = [p.name for p in files]
+    photos = [
+        {"filename": p.name, "size_bytes": p.stat().st_size, "thumb_v": _thumb_version(char_dir, p)}
+        for p in (photo_files(char_dir) if kind == "photos" else [])
+    ]
 
     # Tag NFC associati a questo personaggio, con l'eventuale nome dato dal genitore
     labels = load_tag_labels()
@@ -1000,10 +1049,13 @@ def get_character(name: str):
         "has_image": has_image,
         "image_url": image_url,
         "time_limit_exempt": name in time_limits.get("exempt_characters", []),
+        "kind": kind,
 
         "tag_uids": tag_uids,
 
         "episodes": episodes,
+        "photos": photos,
+        "photo_seconds": PHOTO_SECONDS,
 
         "stats": {
             "total_episodes": total_episodes,
@@ -1362,13 +1414,8 @@ async def upload_character_episodes(
         if original_name not in remaining:
             remaining.append(original_name)
 
-    new_state = {
-        "known": known,
-        "remaining": remaining,
-        "seen": seen,
-    }
-    if "display_name" in state:
-        new_state["display_name"] = state["display_name"]
+    # {**state}: conserva le altre chiavi (display_name, kind)
+    new_state = {**state, "known": known, "remaining": remaining, "seen": seen}
     episode_state[name] = new_state
     save_episode_state(episode_state)
 
@@ -1385,6 +1432,82 @@ async def upload_character_episodes(
     }
 
 
+# --- Foto degli album -----------------------------------------------------------
+# Il telefono le riduce già prima di inviarle (a 1920×1080, JPEG, raddrizzate);
+# qui si ricontrolla con Pillow: è davvero un'immagine, va dritta e non supera
+# lo schermo. Una foto da 12 megapixel aperta da VLC occuperebbe ~50 MB sui 415
+# del Pi. Il nome resta quello originale (in .jpg); l'ordine dell'album è quello
+# di caricamento (photo_files in media_check.py)
+
+PHOTO_MAX = (1920, 1080)
+
+def _unique_photo_name(char_dir: Path, original: str) -> str:
+    stem = re.sub(r"[^\w\-. ]", "_", Path(original).stem).strip(" .") or "foto"
+    if stem.lower() == PROFILE_STEM:
+        stem = "foto"
+    name, n = f"{stem}.jpg", 2
+    while (char_dir / name).exists():
+        name, n = f"{stem}-{n}.jpg", n + 1
+    return name
+
+def _save_photo(src: Path, dest: Path):
+    """Raddrizza, riduce a PHOTO_MAX e salva in JPEG. Solleva ValueError se non è una foto."""
+    try:
+        from PIL import Image, ImageOps
+    except ImportError:
+        raise ValueError("su Cucù manca la libreria per le foto (Pillow): va aggiornato.")
+    try:
+        with Image.open(src) as im:
+            im.draft("RGB", PHOTO_MAX)
+            im = ImageOps.exif_transpose(im).convert("RGB")
+            im.thumbnail(PHOTO_MAX)
+            tmp = dest.with_name(dest.name + ".part")
+            im.save(tmp, "JPEG", quality=86)
+        os.replace(tmp, dest)
+    except ValueError:
+        raise
+    except Exception:
+        raise ValueError("non è una foto che Cucù riesce a leggere (usa JPEG o PNG).")
+
+@app.post("/characters/{name}/photos")
+def upload_character_photos(name: str, background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)):
+    """Aggiunge foto all'album. Funzione sincrona: FastAPI la esegue in un thread,
+    così il lavoro di Pillow non blocca le altre richieste."""
+    char_dir = CHARACTERS_DIR / name
+    if not char_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Personaggio '{name}' non trovato")
+    if character_kind(load_episode_state().get(name)) != "photos":
+        raise HTTPException(status_code=400, detail="Questo personaggio non è un album di foto.")
+
+    saved = []
+    for upload in files:
+        dest = char_dir / _unique_photo_name(char_dir, upload.filename or "foto")
+        tmp = dest.with_name(dest.name + ".upload")
+        try:
+            with tmp.open("wb") as f:
+                shutil.copyfileobj(upload.file, f, 1024 * 1024)
+            _save_photo(tmp, dest)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        finally:
+            tmp.unlink(missing_ok=True)
+        saved.append(dest.name)
+
+    background_tasks.add_task(_generate_thumbs_task, char_dir, saved)
+    return {"character": name, "uploaded": saved, "total": len(photo_files(char_dir))}
+
+@app.delete("/characters/{name}/photos/{filename}")
+def delete_character_photo(name: str, filename: str):
+    char_dir = CHARACTERS_DIR / name
+    photo = char_dir / os.path.basename(filename)
+    if (not photo.is_file() or photo.suffix.lower() not in PHOTO_EXT
+            or photo.stem.lower() == PROFILE_STEM):
+        raise HTTPException(status_code=404, detail="Foto non trovata.")
+    photo.unlink()
+    _thumb_path(char_dir, photo.name).unlink(missing_ok=True)
+    _thumb_path(char_dir, photo.name).with_suffix(".failed").unlink(missing_ok=True)
+    return {"character": name, "deleted": photo.name, "total": len(photo_files(char_dir))}
+
 @app.get("/characters/{name}/episodes/{filename}/thumb")
 def get_episode_thumb(name: str, filename: str):
     """
@@ -1393,10 +1516,14 @@ def get_episode_thumb(name: str, filename: str):
     """
     char_dir = CHARACTERS_DIR / name
     video = char_dir / os.path.basename(filename)
-    if not video.is_file() or video.suffix.lower() not in VIDEO_EXT:
+    if not video.is_file() or video.suffix.lower() not in VIDEO_EXT | PHOTO_EXT:
         raise HTTPException(status_code=404, detail="Episodio non trovato.")
 
-    if _thumb_version(char_dir, video) is None:
+    if video.suffix.lower() in PHOTO_EXT:
+        # Foto: miniatura con Pillow, leggera, anche durante la riproduzione
+        if _thumb_version(char_dir, video) is None and not _generate_photo_thumb(char_dir, video):
+            raise HTTPException(status_code=404, detail="Non riesco a leggere questa foto.")
+    elif _thumb_version(char_dir, video) is None:
         if _thumb_failed(char_dir, video):
             raise HTTPException(status_code=404, detail="Non riesco a estrarre un fotogramma da questo video.")
         if not _ffmpeg_available():
@@ -1493,13 +1620,8 @@ def rename_character_episode(name: str, filename: str, payload: EpisodeRename):
     remaining = [new_name if f == old_name else f for f in state.get("remaining", [])]
     seen = [new_name if f == old_name else f for f in state.get("seen", [])]
 
-    new_state = {
-        "known": known,
-        "remaining": remaining,
-        "seen": seen,
-    }
-    if "display_name" in state:
-        new_state["display_name"] = state["display_name"]
+    # {**state}: conserva le altre chiavi (display_name, kind)
+    new_state = {**state, "known": known, "remaining": remaining, "seen": seen}
     episode_state[name] = new_state
     save_episode_state(episode_state)
 
@@ -1539,13 +1661,8 @@ def delete_character_episode(name: str, filename: str):
     remaining = [f for f in state.get("remaining", []) if f != file_name]
     seen = [f for f in state.get("seen", []) if f != file_name]
 
-    new_state = {
-        "known": known,
-        "remaining": remaining,
-        "seen": seen,
-    }
-    if "display_name" in state:
-        new_state["display_name"] = state["display_name"]
+    # {**state}: conserva le altre chiavi (display_name, kind)
+    new_state = {**state, "known": known, "remaining": remaining, "seen": seen}
     episode_state[name] = new_state
     save_episode_state(episode_state)
 

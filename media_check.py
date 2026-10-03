@@ -1,4 +1,5 @@
-"""Controllo che un video si possa riprodurre su Cucù (Pi Zero 2 W).
+"""Cosa Cucù riesce a riprodurre: tipi di personaggio, foto degli album e
+controllo dei video (Pi Zero 2 W).
 
 Usato dall'API (al caricamento e dal worker delle anteprime) e da read_nfc.py
 (per saltare i file che bloccherebbero la TV su un fotogramma). Le regole
@@ -16,6 +17,32 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+
+# --- Tipi di personaggio --------------------------------------------------
+# Scelto alla creazione e salvato in episode_state.json ("kind") accanto a
+# display_name. I personaggi creati prima non hanno il campo: sono cartoni.
+#   video  → cartoni: un episodio alla volta, giro senza ripetizioni
+#   photos → album: la statuina fa partire tutte le foto, PHOTO_SECONDS l'una
+#   audio  → storie da ascoltare (in arrivo: per ora non si possono creare)
+KINDS = ("video", "photos", "audio")
+DEFAULT_KIND = "video"
+PHOTO_EXT = {".jpg", ".jpeg", ".png"}
+PHOTO_SECONDS = 8
+PROFILE_STEM = "profile"  # profile.jpg/png è l'immagine del personaggio, non una foto dell'album
+
+
+def character_kind(state_entry):
+    kind = (state_entry or {}).get("kind")
+    return kind if kind in KINDS else DEFAULT_KIND
+
+
+def photo_files(char_dir: Path):
+    """Foto dell'album nell'ordine di caricamento (poi per nome): è l'ordine
+    in cui il genitore le ha scelte, e l'API scrive i file uno alla volta."""
+    files = [p for p in char_dir.iterdir()
+             if p.is_file() and p.suffix.lower() in PHOTO_EXT and p.stem.lower() != PROFILE_STEM]
+    return sorted(files, key=lambda p: (p.stat().st_mtime, p.name))
+
 
 MAX_LONG_SIDE = 1920
 MAX_SHORT_SIDE = 1080

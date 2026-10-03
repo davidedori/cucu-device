@@ -4,3 +4,4 @@ python-dotenv==1.2.1
 pydantic==2.12.4
 python-multipart==0.0.20
 PyYAML==6.0.3
+Pillow==12.3.0
