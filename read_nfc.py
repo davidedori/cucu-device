@@ -79,6 +79,13 @@ class CucuPlayer:
         """Riproduce un video o mostra un'immagine."""
         self.has_ended = False
         media = self.instance.media_new(str(path))
+        if path.suffix.lower() in VIDEO_EXT:
+            # Demuxer di ffmpeg invece di quello mp4 di VLC: con i video senza
+            # B-frame (quelli girati con l'iPhone) quello di VLC fa arrivare
+            # sullo schermo metà dei fotogrammi, e il video va "al rallentatore"
+            # con l'audio a tempo. Misurato sul Pi: 15 → 30 fps, invariati gli
+            # episodi con B-frame, la durata, la pausa e l'evento di fine
+            media.add_option(":demux=avformat")
         self.player.set_media(media)
         self.player.play()
         # Imposta fullscreen ad ogni play per sicurezza
