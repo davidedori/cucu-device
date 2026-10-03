@@ -1848,6 +1848,16 @@
       input.click();
     }
 
+    // Dopo "Aggiungi" il selettore di iOS resta aperto mentre prepara i file
+    // (converte video e foto in formati compatibili) e la pagina non può
+    // mostrare niente sopra: lo si dice prima, così l'attesa non sembra un blocco
+    function pickerHint(album) {
+      if (phonePlatform() !== 'ios') return null;
+      return h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: album
+        ? "Dopo la scelta l'iPhone prepara le foto per qualche istante prima di chiudere: è normale."
+        : "Dopo la scelta l'iPhone prepara i video per qualche istante prima di chiudere: è normale." });
+    }
+
     const VIDEO_ACCEPT = '.mp4,.mkv,.avi,.mov,.m4v,video/*';
     const IMAGE_ACCEPT = 'image/png,image/jpeg';
 
@@ -1989,6 +1999,7 @@
                 if (album) pickPhotos(char.name); else pickVideos(char.name);
               },
             }, icon('upload'), album ? 'Scegli le foto' : 'Scegli i video'),
+            pickerHint(album),
             h('button', { class: 'btn btn-block', text: 'Lo faccio dopo', onclick: () => { closeSheet(); location.hash = detail; } })
           )
         );
@@ -2371,6 +2382,7 @@
         more,
         h('div', { id: 'upload-slot' }),
         h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => pickVideos(c.name) }, icon('upload'), 'Aggiungi episodi'),
+        pickerHint(false),
         info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.free_bytes)}` }) : null
       );
     }
@@ -2524,6 +2536,7 @@
           : h('div', { class: 'row-empty', text: 'Ancora nessuna foto.' }),
         h('div', { id: 'upload-slot' }),
         h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => pickPhotos(c.name) }, icon('upload'), 'Aggiungi foto'),
+        pickerHint(true),
         info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.free_bytes)}` }) : null
       );
     }
