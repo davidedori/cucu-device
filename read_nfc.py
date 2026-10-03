@@ -28,7 +28,10 @@ GRAPHICS_DIR = BASE_DIR / "graphics"
 TIME_LIMITS_PATH = BASE_DIR / "time_limits.json"
 DAILY_USAGE_PATH = BASE_DIR / "daily_usage.json"
 
-# Schermate sulla TV (sorgente e rigenerazione: graphics/src/)
+# Schermate sulla TV (sorgente e rigenerazione: graphics/src/). Si mostra il loop
+# animato graphics/loops/<nome>.mp4 con lo stesso nome della PNG; la PNG resta
+# come ripiego se il video manca
+LOOPS_DIR = GRAPHICS_DIR / "loops"
 IDLE_IMAGE = GRAPHICS_DIR / "idle.png"            # appoggia una statuina
 END_IMAGE = GRAPHICS_DIR / "end.png"              # episodio finito: togli la statuina
 WAIT_NEXT_IMAGE = GRAPHICS_DIR / "wait_next.png"  # statuina tolta: un altro? si decide insieme
@@ -73,12 +76,16 @@ class CucuPlayer:
         self.has_ended = False
         self._hourglass_level = None
         self._logo_configured = False
+        # Secondo lettore, solo per l'audio: mostra il loop "si ascolta" mentre
+        # self.player suona il file audio (vedi play_listen)
+        self.screen = None
 
     def _on_end(self, event):
         self.has_ended = True
 
     def play_media(self, path: Path):
         """Riproduce un video o mostra un'immagine."""
+        self._stop_screen()
         self.has_ended = False
         media = self.instance.media_new(str(path))
         if path.suffix.lower() in VIDEO_EXT:
@@ -93,32 +100,70 @@ class CucuPlayer:
         # Imposta fullscreen ad ogni play per sicurezza
         self.player.set_fullscreen(True)
 
-    def play_listen(self, path: Path, seconds=None):
-        """Audio con la schermata "Si ascolta" sulla TV (l'audio esce dall'HDMI,
-        quindi qualcosa va mostrato). Provato sul Pi: con l'immagine come file
-        principale, lunga quanto l'audio, e l'audio agganciato (input-slave) il
-        tempo parte subito, la pausa ferma entrambi e la fine arriva puntuale.
-        Senza durata si fa il contrario: audio principale, immagine agganciata"""
+    def _screen_media(self, image: Path):
+        """Media di una schermata: il loop animato con lo stesso nome, ripetuto
+        all'infinito, oppure la PNG se il loop non c'è."""
+        loop = LOOPS_DIR / f"{image.stem}.mp4"
+        if loop.exists():
+            media = self.instance.media_new(str(loop))
+            media.add_option(":input-repeat=65535")
+            return media
+        return self.instance.media_new(str(image))
+
+    def show_screen(self, image: Path):
+        """Schermata a tutto schermo (attesa, fine, un altro?, riposo)."""
+        self._stop_screen()
         self.has_ended = False
-        image = LISTEN_IMAGE if LISTEN_IMAGE.exists() else IDLE_IMAGE
-        if seconds:
-            media = self.instance.media_new(str(image))
-            media.add_option(f":image-duration={seconds:.1f}")
-            media.add_option(f":input-slave={path.resolve().as_uri()}")
-        else:
-            media = self.instance.media_new(str(path))
-            media.add_option(f":input-slave={image.resolve().as_uri()}")
-        self.player.set_media(media)
+        self.player.set_media(self._screen_media(image))
         self.player.play()
         self.player.set_fullscreen(True)
 
+    def play_listen(self, path: Path):
+        """Audio con la schermata "si ascolta" sulla TV (l'audio esce dall'HDMI,
+        quindi qualcosa va mostrato). Due lettori: self.player suona l'audio
+        (senza video, anche se il file ha una copertina) e da lui dipendono
+        pausa, fine e posizione; self.screen mostra il loop animato. Con il
+        loop agganciato all'audio (input-slave) la ripetizione del video
+        ricomincerebbe anche l'audio"""
+        self._stop_screen()
+        self.has_ended = False
+        image = LISTEN_IMAGE if LISTEN_IMAGE.exists() else IDLE_IMAGE
+        self.screen = self.instance.media_player_new()
+        self.screen.set_media(self._screen_media(image))
+        self.screen.play()
+        self.screen.set_fullscreen(True)
+        media = self.instance.media_new(str(path))
+        media.add_option(":no-video")
+        self.player.set_media(media)
+        self.player.play()
+        self._reset_overlay()
+
+    def _stop_screen(self):
+        if self.screen is None:
+            return
+        self.screen.stop()
+        self.screen.release()
+        self.screen = None
+        self._reset_overlay()
+
+    def _reset_overlay(self):
+        """La clessidra va sul lettore che mostra il video: cambiando lettore
+        la si riapplica al prossimo tick"""
+        self._hourglass_level = None
+        self._logo_configured = False
+
     def pause(self):
         self.player.set_pause(1)
+        if self.screen is not None:
+            self.screen.set_pause(1)
 
     def resume(self):
         self.player.set_pause(0)
+        if self.screen is not None:
+            self.screen.set_pause(0)
 
     def stop(self):
+        self._stop_screen()
         self.player.stop()
 
     def is_playing(self):
@@ -145,21 +190,22 @@ class CucuPlayer:
         if level == self._hourglass_level:
             return
         self._hourglass_level = level
+        video = self.screen or self.player
         try:
             if level is None:
-                self.player.video_set_logo_int(_logo_opt("enable"), 0)
+                video.video_set_logo_int(_logo_opt("enable"), 0)
                 return
             path = HOURGLASS_DIR / f"hourglass_{level}.png"
             if not path.exists():
                 return
             if not self._logo_configured:
-                self.player.video_set_logo_int(_logo_opt("position"), 10)  # basso-destra
-                self.player.video_set_logo_int(_logo_opt("x"), 24)  # margine dal bordo
-                self.player.video_set_logo_int(_logo_opt("y"), 24)
-                self.player.video_set_logo_int(_logo_opt("opacity"), 200)
+                video.video_set_logo_int(_logo_opt("position"), 10)  # basso-destra
+                video.video_set_logo_int(_logo_opt("x"), 24)  # margine dal bordo
+                video.video_set_logo_int(_logo_opt("y"), 24)
+                video.video_set_logo_int(_logo_opt("opacity"), 200)
                 self._logo_configured = True
-            self.player.video_set_logo_string(_logo_opt("file"), str(path))
-            self.player.video_set_logo_int(_logo_opt("enable"), 1)
+            video.video_set_logo_string(_logo_opt("file"), str(path))
+            video.video_set_logo_int(_logo_opt("enable"), 1)
         except Exception as e:
             print(f"[WARN] Overlay clessidra non disponibile: {e}")
 
@@ -652,7 +698,7 @@ def start_video(character):
 
     if kind == "audio":
         print(f"Riproduco audio: {video.name}")
-        player.play_listen(video, duration_min * 60 if duration_min else None)
+        player.play_listen(video)
     else:
         print(f"Riproduco video: {video.name}")
         player.play_media(video)
@@ -705,7 +751,7 @@ def refresh_graphic(force_path=None):
     
     if path != current_graphic_path:
         print(f"Cambio grafica: {path.name}")
-        player.play_media(path)
+        player.show_screen(path)
         current_graphic_path = path
 
 # --- LOOP PRINCIPALE ----------------------------------------------------
