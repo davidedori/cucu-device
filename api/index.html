@@ -1919,9 +1919,11 @@
     }
 
     const VIDEO_ACCEPT = '.mp4,.mkv,.avi,.mov,.m4v,video/*';
-    // Sull'iPhone solo "audio/*": con estensioni che iOS non sa tradurre in un
-    // suo tipo di file (.opus, .ogg…) l'app File resta su "Carico" senza finire
-    const audioAccept = () => phonePlatform() === 'ios' ? 'audio/*' : '.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac,audio/*';
+    // Sull'iPhone nessun filtro: con estensioni che iOS non sa tradurre in un
+    // suo tipo di file (.opus, .ogg…) l'app File resta su "Carico", e con
+    // "audio/*" i memo vocali recenti (.qta) restano non selezionabili.
+    // Quello che non è audio lo rifiuta Cucù, con un messaggio
+    const audioAccept = () => phonePlatform() === 'ios' ? null : '.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac,.qta,.caf,.aif,.aiff,audio/*';
     const IMAGE_ACCEPT = 'image/png,image/jpeg';
 
     /* ---------- Foto: rimpicciolita sul telefono prima di inviarla ---------- */
