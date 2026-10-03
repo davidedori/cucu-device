@@ -30,6 +30,7 @@ SCREENS = {
     "end": GRAPHICS / "end.png",              # episodio finito: togli la statuina
     "next": GRAPHICS / "wait_next.png",       # statuina tolta: se ne sceglie un'altra
     "rest": GRAPHICS / "rest.png",            # bloccato dai limiti di tempo
+    "listen": GRAPHICS / "listen.png",        # audio in corso (personaggi audio)
     "splash": GRAPHICS / "splash.png",        # avvio (fallback di Plymouth)
 }
 

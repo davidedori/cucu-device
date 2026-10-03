@@ -23,9 +23,12 @@ from pathlib import Path
 # display_name. I personaggi creati prima non hanno il campo: sono cartoni.
 #   video  → cartoni: un episodio alla volta, giro senza ripetizioni
 #   photos → album: la statuina fa partire tutte le foto, PHOTO_SECONDS l'una
-#   audio  → storie da ascoltare (in arrivo: per ora non si possono creare)
+#   audio  → audio da ascoltare: un episodio alla volta come i cartoni, con
+#            sulla TV la schermata "Si ascolta" (graphics/listen.png)
 KINDS = ("video", "photos", "audio")
 DEFAULT_KIND = "video"
+VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v"}
+AUDIO_EXT = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".flac"}
 PHOTO_EXT = {".jpg", ".jpeg", ".png"}
 PHOTO_SECONDS = 8
 PROFILE_STEM = "profile"  # profile.jpg/png è l'immagine del personaggio, non una foto dell'album
@@ -34,6 +37,12 @@ PROFILE_STEM = "profile"  # profile.jpg/png è l'immagine del personaggio, non u
 def character_kind(state_entry):
     kind = (state_entry or {}).get("kind")
     return kind if kind in KINDS else DEFAULT_KIND
+
+
+def episode_files(char_dir: Path, kind):
+    """Episodi di un personaggio: video per i cartoni, audio per gli audio."""
+    ext = AUDIO_EXT if kind == "audio" else VIDEO_EXT
+    return [p for p in char_dir.iterdir() if p.is_file() and p.suffix.lower() in ext]
 
 
 def photo_files(char_dir: Path):
@@ -125,6 +134,25 @@ def check_video(path, timeout=20):
         return False, problem, FIX_1080P
     if s.get("pix_fmt") not in PLAYABLE_PIX_FMTS:
         return False, "ha colori a 10 bit (HDR): Cucù riproduce solo video a 8 bit.", FIX_SDR
+    return True, None, None
+
+
+def check_audio(path, timeout=20):
+    """Come check_video per gli audio: VLC li decodifica tutti in software, con
+    poco lavoro, quindi basta che il file contenga davvero dell'audio."""
+    if shutil.which("ffprobe") is None:
+        return None, None, None
+    try:
+        res = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "a:0",
+             "-show_entries", "stream=codec_name", "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        streams = json.loads(res.stdout or "{}").get("streams") or []
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None, None, None
+    if not streams:
+        return False, "non è un audio che Cucù riesce a leggere.", None
     return True, None, None
 
 
