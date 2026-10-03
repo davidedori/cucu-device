@@ -19,6 +19,12 @@ import socket
 import threading
 import urllib.request
 import urllib.error
+import sys
+
+# media_check.py sta nella cartella del progetto, accanto a read_nfc.py: le
+# regole su cosa Cucù riesce a riprodurre sono le stesse per entrambi
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from media_check import checked, cached_check, check_video, save_check, move_check, drop_check
 
 VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v"}
 IMAGE_EXT = {".png", ".jpg", ".jpeg"}
@@ -247,6 +253,23 @@ def _thumb_worker():
                 continue
             if _player_playing():
                 time.sleep(30)
+                continue
+            # Prima si controlla che gli episodi si possano riprodurre (solo
+            # ffprobe, leggero): i file non riproducibili compaiono così nella
+            # scheda del personaggio e read_nfc.py li salta senza ricontrollarli
+            unchecked = None
+            if CHARACTERS_DIR.exists():
+                for char_dir in sorted(CHARACTERS_DIR.iterdir()):
+                    if not char_dir.is_dir():
+                        continue
+                    unchecked = next((v for v in sorted(_video_files(char_dir)) if cached_check(v) is None), None)
+                    if unchecked:
+                        break
+            if unchecked:
+                ok, _ = checked(unchecked)
+                if ok is False:
+                    print(f"[check] {unchecked.parent.name}/{unchecked.name} non riproducibile")
+                time.sleep(2)
                 continue
             missing = None
             if CHARACTERS_DIR.exists():
@@ -937,6 +960,7 @@ def get_character(name: str):
     episodes = []
     for p in files:
         fname = p.name
+        check = cached_check(p)
         episodes.append({
             "filename": fname,
             "size_bytes": p.stat().st_size,
@@ -944,6 +968,10 @@ def get_character(name: str):
             "watched": fname in known and fname not in remaining,
             # Mai partito: read_nfc.py lo sceglie prima degli altri
             "new": fname not in seen,
+            # False = Cucù non riesce a riprodurlo e read_nfc.py lo salta;
+            # None = non ancora controllato (lo fa il worker in background)
+            "playable": check[0] if check else None,
+            "unplayable_reason": check[1] if check and check[0] is False else None,
             "status": {
                 "known": fname in known,
                 "remaining": fname in remaining,
@@ -1315,7 +1343,14 @@ async def upload_character_episodes(
             with tmp_path.open("wb") as f:
                 while chunk := await upload.read(1024 * 1024):
                     f.write(chunk)
+            # Prima che diventi un episodio: un video che Cucù non riesce a
+            # riprodurre (4K, HEVC, HDR) bloccherebbe la TV su un fotogramma
+            ok, reason = check_video(tmp_path)
+            if ok is False:
+                tmp_path.unlink(missing_ok=True)
+                raise HTTPException(status_code=400, detail=reason)
             tmp_path.rename(dest_path)
+            save_check(dest_path, ok, reason)
         except BaseException:
             tmp_path.unlink(missing_ok=True)
             raise
@@ -1443,7 +1478,8 @@ def rename_character_episode(name: str, filename: str, payload: EpisodeRename):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore nel rinominare il file: {e}")
 
-    # l'anteprima segue il file
+    # l'anteprima e l'esito del controllo seguono il file
+    move_check(old_path, new_path)
     old_thumb = _thumb_path(char_dir, old_name)
     if old_thumb.exists():
         try:
@@ -1495,6 +1531,7 @@ def delete_character_episode(name: str, filename: str):
         raise HTTPException(status_code=500, detail=f"Errore nell'eliminare il file: {e}")
     _thumb_path(char_dir, file_name).unlink(missing_ok=True)
     _thumb_path(char_dir, file_name).with_suffix(".failed").unlink(missing_ok=True)
+    drop_check(file_path)
 
     episode_state = load_episode_state()
     state = episode_state.get(name, {"known": [], "remaining": [], "seen": []})

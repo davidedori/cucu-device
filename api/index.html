@@ -909,6 +909,7 @@
     .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 2px; }
     .tag.known { background: var(--green); color: var(--green-ink); }
     .tag.new { background: var(--apricot); color: var(--apricot-ink); }
+    .tag.bad { background: var(--danger-soft); color: var(--danger); }
 
     .kv { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; }
     .kv:first-of-type { border-top: 0; }
@@ -2244,7 +2245,7 @@
       // "Nuovo" = mai partito, e parte prima degli altri. Su un personaggio
       // appena creato sarebbero tutti nuovi: lì l'etichetta non dice niente
       const showNew = (c.stats.seen || 0) > 0;
-      c.episodes.forEach(e => { e.isNew = showNew && !!e.new; });
+      c.episodes.forEach(e => { e.isNew = showNew && !!e.new && e.playable !== false; });
       const sorted = c.episodes.slice().sort((a, b) =>
         (b.isNew - a.isNew) || a.filename.localeCompare(b.filename, 'it', { numeric: true }));
 
@@ -2280,14 +2281,14 @@
         else list.replaceChildren(...shown.map(ep => episodeRow(c, ep)));
 
         const hidden = items.length - shown.length;
-        more.replaceChildren(
+        more.replaceChildren(...[
           hidden > 0
             ? h('button', { class: 'btn btn-block', style: 'margin-top:12px', onclick: () => { epView.expanded = true; draw(); drawTools(); } },
               `Mostra tutti gli episodi (${total})`)
             : epView.expanded && total > EPISODES_PREVIEW && !filtering
               ? h('button', { class: 'btn btn-quiet btn-block', style: 'margin-top:4px', text: 'Mostra meno', onclick: () => { epView.expanded = false; draw(); drawTools(); list.scrollIntoView({ block: 'nearest' }); } })
               : null
-        );
+        ].filter(Boolean));   // replaceChildren() scriverebbe "null" come testo
       };
 
       // Ricerca e filtri solo quando la lista è lunga e aperta
@@ -2331,12 +2332,19 @@
       const [base, ext] = splitExt(ep.filename);
       const title = prettyEpisode(ep.filename);
       const main = h('div', { class: 'row-main' });
-      const showMain = () => main.replaceChildren(
+      // playable === false: Cucù non riesce a riprodurlo (vedi media_check.py)
+      // e read_nfc.py lo salta. Si spiega perché, così il genitore sa cosa fare
+      const showMain = () => main.replaceChildren(...[
         h('div', { class: 'row-title ep-title', text: title }),
         h('div', { class: 'row-sub' },
-          ep.isNew ? h('span', { class: 'tag new', style: 'margin-left:0', text: 'Nuovo' })
+          ep.playable === false ? h('span', { class: 'tag bad', style: 'margin-left:0', text: 'Non si riproduce' })
+            : ep.isNew ? h('span', { class: 'tag new', style: 'margin-left:0', text: 'Nuovo' })
             : ep.watched ? h('span', { class: 'tag known', style: 'margin-left:0', text: 'Visto' }) : 'Da vedere',
-          ` · ${formatBytes(ep.size_bytes)}`));
+          ` · ${formatBytes(ep.size_bytes)}`),
+        ep.playable === false && ep.unplayable_reason
+          ? h('div', { class: 'row-sub', style: 'margin-top:4px', text: 'Cucù lo salta perché ' + ep.unplayable_reason })
+          : null,
+      ].filter(Boolean));
       showMain();
 
       const actions = h('div', { class: 'row-actions' },
@@ -2548,6 +2556,15 @@
         return item;
       });
 
+      // Un 4K si riconosce già sul telefono: inutile caricarne decine di MB per
+      // farselo rifiutare dopo. Il formato (HEVC, HDR) invece lo controlla Cucù
+      for (const item of items) {
+        if (item.status !== 'waiting') continue;
+        const size = await videoSize(item.file);
+        const problem = size && videoSizeProblem(size.w, size.h);
+        if (problem) { item.status = 'error'; item.error = problem; }
+      }
+
       const needed = items.filter(i => i.status === 'waiting').reduce((a, i) => a + i.file.size, 0);
       if (info && info.disk && needed > info.disk.free_bytes) {
         toast(`Non c'è abbastanza spazio: servono ${formatBytes(needed)}, liberi ${formatBytes(info.disk.free_bytes)}.`);
@@ -2557,6 +2574,36 @@
       queue = { target: charName, displayName, items };
       renderUploadQueue();
       runQueue();
+    }
+
+    // Stesse regole di size_problem() in media_check.py
+    function videoSizeProblem(w, h) {
+      const long = Math.max(w, h), short = Math.min(w, h);
+      if (long <= 1920 && short <= 1080) return null;
+      const label = long >= 3840 ? '4K' : 'una risoluzione troppo alta';
+      return `è in ${label} (${w}×${h}): Cucù riproduce video fino a 1080p. `
+        + 'Sull\'iPhone: Impostazioni › Fotocamera › Registra video › 1080p a 30 fps.';
+    }
+
+    // Misure del video lette dal telefono, senza caricarlo (null se non si riesce)
+    function videoSize(file) {
+      return new Promise((resolve) => {
+        const v = document.createElement('video');
+        const url = URL.createObjectURL(file);
+        let timer = null;
+        const done = (result) => {
+          clearTimeout(timer);
+          v.removeAttribute('src');
+          URL.revokeObjectURL(url);
+          resolve(result);
+        };
+        timer = setTimeout(() => done(null), 4000);
+        v.preload = 'metadata';
+        v.muted = true;
+        v.onloadedmetadata = () => done(v.videoWidth ? { w: v.videoWidth, h: v.videoHeight } : null);
+        v.onerror = () => done(null);
+        v.src = url;
+      });
     }
 
     async function runQueue() {
