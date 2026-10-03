@@ -41,6 +41,7 @@ Il refactor da "TinyWorlds" a "cucu-device" è stato completato. Tutti i path, n
 2. Gestisce una macchina a stati con 5 stati: `idle`, `playing`, `paused`, `ended_wait_remove`, `ended_wait_return`
 3. Controlla VLC tramite `python-vlc` (binding nativo, non subprocess)
 4. Gestisce la sequenza degli episodi per ogni personaggio (round-robin senza ripetizioni, stato persistito in `episode_state.json`)
+5. Per i personaggi di tipo album (`kind: "photos"`) fa partire tutte le foto in ordine di caricamento, `PHOTO_SECONDS` (8) secondi l'una: `start_album()` e `advance_album()`, avanzamento solo in `playing` (togliere la statuina mette in pausa sulla foto), poi `ended_wait_remove` come un episodio. In `last_seen_tag.json` scrive anche `album: {index, total}`
 
 La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene caricato/salvato in `episode_state.json` (non tracciato in git, specifico del dispositivo). La web UI lo modifica mentre il servizio gira (upload, rinomina, "ricomincia il giro", nome del personaggio), quindi `read_nfc.py` lo **rilegge dal disco** prima di scegliere un episodio e lo riscrive toccando solo la voce del personaggio, conservando le altre chiavi (es. `display_name`). Anche `tags.json` viene ricaricato quando cambia (una `stat()` per tick): le statuine abbinate dal web funzionano senza riavviare il servizio. I JSON di stato si scrivono in modo atomico (file `.tmp` + `os.replace`), sia qui sia nell'API.
 
@@ -52,6 +53,7 @@ La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene carica
 - Gestione rete Wi-Fi via nmcli (scan, connessione, hotspot)
 - Serve `index.html` come SPA alla root e gli asset in `api/static/` su `/static`
 - `GET /system/info`: hostname, versione, canale OTA, spazio libero su disco
+- Tipo di personaggio scelto alla creazione (`kind` in `episode_state.json`: `video` di default, `photos`; `audio` previsto ma ancora rifiutato). Album: `POST /characters/{name}/photos` (Pillow: raddrizza con l'EXIF, riduce entro 1920×1080, salva JPEG; il telefono le riduce già prima di inviarle), `DELETE /characters/{name}/photos/{filename}`; le miniature passano dallo stesso endpoint `/episodes/{filename}/thumb`. `profile.*` resta l'immagine del personaggio, non una foto dell'album
 - Statuine: `move: true` nel POST sposta una statuina da un altro personaggio; `PUT /characters/{name}/tags/{uid}/label` le dà un nome. Gli UID si confrontano senza distinguere maiuscole/minuscole (i lettori scrivono esadecimale minuscolo)
 - `POST /characters/{name}/episodes/reset-round`: tutti gli episodi tornano da vedere
 - `GET /characters/{name}/episodes/{filename}/thumb`: anteprima JPEG 320px, creata con ffmpeg alla prima richiesta e salvata in `characters/<nome>/.thumbs/` (valida finché è più recente del video). Una alla volta (lock), `nice 19`, `-threads 1`, e 503 + `Retry-After` se un episodio è in riproduzione. Rinomina/eliminazione episodio spostano/cancellano l'anteprima
@@ -66,7 +68,7 @@ La classe principale si chiama `CucuPlayer`. Lo stato degli episodi viene carica
 
 **`graphics/`** — schermate mostrate sulla TV da `read_nfc.py`: `idle.png` (appoggia una statuina), `end.png` (fine episodio, togli la statuina), `wait_next.png` (statuina tolta: un altro?), `rest.png` (statuina bloccata dai limiti di tempo), `splash.png`, e la clessidra `hourglass/hourglass_0..9.png` sovrapposta al video. Insieme ai fotogrammi di avvio `plymouth/boot_0N.png` si generano da `graphics/src/tv-screens.html` con `python3 graphics/src/render.py` (Chrome headless sul computer, non sul Pi), con lo stesso linguaggio del sito. Il gufetto dell'animazione di avvio sta in `graphics/src/boot-owl-0N.png`.
 
-**`media_check.py`** — regole su cosa Cucù riesce a riprodurre (solo H.264, fino a 1080p anche in verticale, colori a 8 bit: i limiti del decoder hardware del Pi Zero 2 W; un 4K resta fermo sul primo fotogramma). Usato dall'API (rifiuta il caricamento con un messaggio che spiega cosa fare sull'iPhone; il worker delle anteprime controlla anche i file già presenti) e da `read_nfc.py` (salta i file non riproducibili). L'esito si salva in `characters/<nome>/.thumbs/<file>.check.json`, valido finché il video non cambia. La web UI ferma i video troppo grandi già sul telefono, prima del caricamento, e mostra "Non si riproduce" con il motivo. Separato da questo: i video senza B-frame (iPhone) si riproducono con `demux=avformat`, altrimenti sul Pi vanno a metà dei fotogrammi.
+**`media_check.py`** — tipi di personaggio (`character_kind()`), foto degli album (`photo_files()`, ordine di caricamento) e regole su cosa Cucù riesce a riprodurre (solo H.264, fino a 1080p anche in verticale, colori a 8 bit: i limiti del decoder hardware del Pi Zero 2 W; un 4K resta fermo sul primo fotogramma). Usato dall'API (rifiuta il caricamento con un messaggio che spiega cosa fare sull'iPhone; il worker delle anteprime controlla anche i file già presenti) e da `read_nfc.py` (salta i file non riproducibili). L'esito si salva in `characters/<nome>/.thumbs/<file>.check.json`, valido finché il video non cambia. La web UI ferma i video troppo grandi già sul telefono, prima del caricamento, e mostra "Non si riproduce" con il motivo. Separato da questo: i video senza B-frame (iPhone) si riproducono con `demux=avformat`, altrimenti sul Pi vanno a metà dei fotogrammi.
 
 **`led.py`** — LED di stato (hardware v2), servizio `cucu-led.service` che parte presto nel boot (`DefaultDependencies=no`). Anima un LED su GPIO13 con il PWM hardware (sysfs `/sys/class/pwm`). Legge lo stato da `last_seen_tag.json` (`mode`, `blocked`, `ts`), che `read_nfc.py` riscrive ad ogni tick; se il file non viene aggiornato da 10 s → respiro veloce. Sui device senza PWM esce con 0. Non è nel health check OTA.
 
@@ -111,7 +113,7 @@ Quando si rilascia una nuova versione, vanno aggiornati **entrambi** `VERSION` e
 
 **Venv API (`api/venv/`, non tracciato in git):**
 - Vedi `requirements.txt` per la lista completa
-- Principali: `fastapi`, `uvicorn[standard]`, `pydantic`, `python-dotenv`, `python-multipart`
+- Principali: `fastapi`, `uvicorn[standard]`, `pydantic`, `python-dotenv`, `python-multipart`, `Pillow` (foto degli album; importato solo dove serve, così senza Pillow l'API parte lo stesso)
 
 ---
 
