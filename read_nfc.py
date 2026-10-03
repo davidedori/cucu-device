@@ -16,6 +16,7 @@ except ImportError:
     sys.exit(1)
 
 from nfc_reader import create_reader
+from media_check import cached_check, checked
 
 # --- CONFIG -------------------------------------------------------------
 
@@ -352,6 +353,9 @@ def _select_episode(character: str):
     char_dir = CHARACTERS_DIR / character
     if not char_dir.exists(): return None
     files = [p for p in char_dir.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT]
+    # I video che Cucù non riesce a riprodurre (4K, HEVC, HDR: vedi
+    # media_check.py) non entrano nel giro: bloccherebbero la TV su un fotogramma
+    files = [p for p in files if (cached_check(p) or (None,))[0] is not False]
     if not files: return None
 
     state = _read_episode_state_file().get(character, {})
@@ -388,6 +392,12 @@ def _select_episode(character: str):
     # non si azzera con il giro, quindi distingue i nuovi da quelli già visti
     never_seen = [f for f in remaining if f not in seen]
     chosen_name = random.choice(never_seen or remaining)
+    # Di solito l'esito c'è già (lo prepara l'API); se manca si controlla
+    # adesso. Se il file non va, l'esito resta salvato e si sceglie di nuovo:
+    # al giro dopo il file è escluso, quindi la ricorsione finisce
+    if checked(char_dir / chosen_name)[0] is False:
+        print(f"Salto {chosen_name}: Cucù non riesce a riprodurlo")
+        return _select_episode(character)
     remaining.remove(chosen_name)
     if chosen_name not in seen:
         seen.append(chosen_name)
