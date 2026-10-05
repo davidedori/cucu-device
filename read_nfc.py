@@ -126,6 +126,11 @@ class CucuPlayer:
         loop agganciato all'audio (input-slave) la ripetizione del video
         ricomincerebbe anche l'audio"""
         self._stop_screen()
+        # Prima si libera lo schermo: self.player sta ancora mostrando la
+        # schermata precedente e tiene l'uscita video (DRM). Se self.screen
+        # parte mentre è occupata, VLC ripiega su un'uscita testuale (caca,
+        # finisce nel journal) e la TV resta nera
+        self.player.stop()
         self.has_ended = False
         image = LISTEN_IMAGE if LISTEN_IMAGE.exists() else IDLE_IMAGE
         self.screen = self.instance.media_player_new()
