@@ -98,6 +98,16 @@ def _write_json_atomic(path: Path, data):
         os.fsync(f.fileno())
     os.replace(tmp, path)
 
+def _fsync_path(path: Path):
+    """Forza su SD un file appena scritto (o una cartella, dopo una rinomina).
+    Senza, ext4 tiene i dati in RAM fino a ~30 s: se in quel tempo Cucù resta
+    senza corrente, i file nuovi restano a 0 byte (è successo con le foto)."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
 def load_episode_state():
     if EPISODE_STATE_FILE.exists():
         try:
@@ -1402,6 +1412,8 @@ async def upload_character_episodes(
             with tmp_path.open("wb") as f:
                 while chunk := await upload.read(1024 * 1024):
                     f.write(chunk)
+                f.flush()
+                os.fsync(f.fileno())
             # Prima che diventi un episodio: un video che Cucù non riesce a
             # riprodurre (4K, HEVC, HDR) bloccherebbe la TV su un fotogramma
             ok, reason, fix = check_audio(tmp_path) if kind == "audio" else check_video(tmp_path)
@@ -1410,6 +1422,7 @@ async def upload_character_episodes(
                 tip = how_to(fix, platform_from_user_agent(request.headers.get("user-agent")))
                 raise HTTPException(status_code=400, detail=f"{reason} {tip}".strip())
             tmp_path.rename(dest_path)
+            _fsync_path(char_dir)
             if kind == "video":
                 save_check(dest_path, ok, reason, fix)
         except BaseException:
@@ -1473,7 +1486,9 @@ def _save_photo(src: Path, dest: Path):
             im.thumbnail(PHOTO_MAX)
             tmp = dest.with_name(dest.name + ".part")
             im.save(tmp, "JPEG", quality=86)
+        _fsync_path(tmp)
         os.replace(tmp, dest)
+        _fsync_path(dest.parent)
     except ValueError:
         raise
     except Exception:
@@ -1728,7 +1743,10 @@ async def upload_character_image(name: str, file: UploadFile = File(...)):
     with dest.open("wb") as f:
         while chunk := await file.read(1024 * 1024):
             f.write(chunk)
-            
+        f.flush()
+        os.fsync(f.fileno())
+    _fsync_path(char_dir)
+
     return {"status": "ok", "filename": f"profile{ext}"}
 
 def _restart_service_task():
