@@ -266,6 +266,10 @@
     }
 
     .panel-sub { color: var(--muted); font-size: 15px; margin-bottom: 10px; }
+    /* Avvisi: azzurro per un'informazione da sapere, albicocca quando succede adesso */
+    .note { border-radius: 14px; padding: 12px 14px; font-size: 15px; line-height: 1.4; background: var(--blue); color: var(--blue-ink); }
+    .note.alert { background: var(--apricot); color: var(--apricot-ink); }
+    .note strong { font-weight: 600; }
 
     .rows { margin: 4px -18px 0; }
 
@@ -1212,7 +1216,7 @@
       <div class="view-head">
         <h1 id="t-tempo">Tempo</h1>
       </div>
-      <p class="lead">Scegli quanti minuti e in quali orari si possono guardare i cartoni. Le modifiche valgono dalla fine dell'episodio in corso.</p>
+      <p class="lead">Scegli quanti minuti e in quali orari si possono guardare i cartoni. Quando il tempo finisce, l'episodio in corso arriva alla fine e poi il gufetto va a dormire. Le modifiche valgono dalla fine dell'episodio in corso.</p>
 
       <div class="stack">
         <div class="panel">
@@ -1224,6 +1228,8 @@
             </label>
           </div>
           <div id="tl-today" class="panel-sub" style="margin:6px 0 0"></div>
+          <div id="tl-clock" class="note alert hidden" role="status" style="margin-top:12px"></div>
+          <div id="tl-offline" class="note hidden" style="margin-top:12px"><strong>Funzionano solo con il Wi-Fi.</strong> Se Cucù viene acceso dove non c'è internet (per esempio dai nonni), non sa che ore sono: minuti e orari restano sospesi e i cartoni possono partire sempre, finché non si collega di nuovo.</div>
         </div>
 
         <div class="panel">
@@ -3036,11 +3042,20 @@
     }
 
     let lastUsage = null;
+    // Senza rete, dopo un riavvio, Cucù non sa che ore sono (non ha un orologio a pila)
+    const CLOCK_OFF = 'Minuti e orari sono sospesi: da quando è acceso Cucù non si è collegato a internet e non sa che ore sono. I cartoni possono partire sempre finché non torna il Wi-Fi.';
 
     function drawToday() {
       const el = $('tl-today');
       const d = tl.draft;
       if (!d) return;
+      const clockOff = d.enabled && lastUsage && lastUsage.clock_ok === false;
+      $('tl-offline').classList.toggle('hidden', !d.enabled || clockOff);
+      $('tl-clock').classList.toggle('hidden', !clockOff);
+      $('tl-clock').textContent = clockOff ? CLOCK_OFF : '';
+      // "Oggi" non ha senso se Cucù non sa che giorno è
+      el.classList.toggle('hidden', clockOff);
+      if (clockOff) return;
       if (!d.enabled) { el.textContent = 'Spenti: i cartoni possono partire sempre.'; return; }
       const parts = [`Oggi ${describeDay(d.days[todayKey()])}.`];
       if (lastUsage && lastUsage.enabled) parts.push(`Finora ${Math.round(lastUsage.minutes_used)} minuti.`);
@@ -3289,14 +3304,14 @@
       if (!n.alive) return { state: 'off', title: 'Il lettore non risponde', sub: 'Se non si riprende da solo, prova a riavviarlo da Impostazioni.', big: 'Zzz', small: 'lettore spento' };
       if (n.mode === 'playing') return { state: 'play', title: n.display_name, sub: ep };
       if (n.mode === 'paused') return { state: 'pause', title: `${n.display_name} è in pausa`, sub: ep ? `${ep} · riparte quando torna la sua statuina` : 'Riparte quando torna la sua statuina.' };
-      if (n.mode === 'ended_wait_remove') return n.kind === 'photos'
-        ? { state: 'end', title: 'Album finito', sub: `${n.display_name}: riparte da capo dopo aver tolto e riappoggiato la statuina.`, big: 'Fine', small: 'togli la statuina' }
-        : { state: 'end', title: words(n.kind).ended, sub: `${n.display_name}: il prossimo parte dopo aver tolto e riappoggiato la statuina.`, big: 'Fine', small: 'togli la statuina' };
       if (n.blocked) {
         if (u.remaining_minutes != null && u.remaining_minutes <= 0) return { state: 'rest', title: 'I minuti di oggi sono finiti', sub: 'Domani si ricomincia.', big: 'A domani', small: 'i minuti di oggi sono finiti' };
         const when = n.next_window_start ? `Si riparte alle ${hm(n.next_window_start)}.` : 'Per oggi gli orari sono finiti. Domani si ricomincia.';
         return { state: 'rest', title: 'Il gufetto riposa', sub: when, big: 'Riposo', small: n.next_window_start ? `si riparte alle ${hm(n.next_window_start)}` : 'a domani' };
       }
+      if (n.mode === 'ended_wait_remove') return n.kind === 'photos'
+        ? { state: 'end', title: 'Album finito', sub: `${n.display_name}: riparte da capo dopo aver tolto e riappoggiato la statuina.`, big: 'Fine', small: 'togli la statuina' }
+        : { state: 'end', title: words(n.kind).ended, sub: `${n.display_name}: il prossimo parte dopo aver tolto e riappoggiato la statuina.`, big: 'Fine', small: 'togli la statuina' };
       if (n.tag_present && !n.tag_character) return { state: 'idle', title: 'Statuina sconosciuta', sub: 'Questa statuina non è abbinata a nessun personaggio. Puoi abbinarla dalla scheda di un personaggio.', big: 'Cucù!', small: 'statuina sconosciuta' };
       return { state: 'idle', title: 'Pronto', sub: 'Appoggia una statuina su Cucù per far partire un episodio.', big: 'Cucù!', small: 'appoggia una statuina' };
     }
@@ -3366,7 +3381,9 @@
         facts.push(h('div', { class: 'fact muted small', text: `${n.round.watched_in_round} di ${plural(n.round.total_episodes, words(n.kind).one, words(n.kind).many)} già ${words(n.kind).seen} in questo giro` }));
       }
 
-      if (n.alive && u.enabled) {
+      if (n.alive && u.enabled && u.clock_ok === false) {
+        facts.push(h('div', { class: 'fact note alert', role: 'status', text: CLOCK_OFF }));
+      } else if (n.alive && u.enabled) {
         let used = Math.round(u.minutes_used || 0);
         if (u.daily_limit_minutes != null && u.daily_limit_minutes > 0) {
           used = Math.min(used, u.daily_limit_minutes); // l'ultimo episodio può sforare di poco

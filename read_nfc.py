@@ -16,6 +16,7 @@ except ImportError:
     sys.exit(1)
 
 from nfc_reader import create_reader
+from clock import clock_ok
 from media_check import (cached_check, checked, character_kind, photo_files, PHOTO_SECONDS,
                          episode_files, VIDEO_EXT)
 
@@ -35,10 +36,8 @@ LOOPS_DIR = GRAPHICS_DIR / "loops"
 IDLE_IMAGE = GRAPHICS_DIR / "idle.png"            # appoggia una statuina
 END_IMAGE = GRAPHICS_DIR / "end.png"              # episodio finito: togli la statuina
 WAIT_NEXT_IMAGE = GRAPHICS_DIR / "wait_next.png"  # statuina tolta: un altro? si decide insieme
-REST_IMAGE = GRAPHICS_DIR / "rest.png"            # statuina bloccata dai limiti di tempo
+REST_IMAGE = GRAPHICS_DIR / "rest.png"            # adesso no: il gufetto dorme (limiti di tempo)
 LISTEN_IMAGE = GRAPHICS_DIR / "listen.png"        # audio in corso: "Si ascolta"
-HOURGLASS_DIR = GRAPHICS_DIR / "hourglass"
-HOURGLASS_LEVELS = 10  # 0 = vuoto/limite raggiunto, 9 = pieno
 
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 # Persistiamo il conteggio minuti solo ogni tot secondi di riproduzione continua,
@@ -46,13 +45,6 @@ DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 USAGE_FLUSH_INTERVAL_SEC = 10
 
 # --- VLC PLAYER CLASS ---------------------------------------------------
-
-def _logo_opt(name):
-    """python-vlc ha rinominato i membri di VideoLogoOption tra le versioni
-    (es. 'enable' nella doc corrente vs 'logo_enable' nella 3.0.21203 in uso
-    sul device): proviamo entrambe le convenzioni per non dipendere dalla
-    versione esatta installata via apt."""
-    return getattr(vlc.VideoLogoOption, name, None) or getattr(vlc.VideoLogoOption, f"logo_{name}")
 
 class CucuPlayer:
     def __init__(self):
@@ -66,7 +58,6 @@ class CucuPlayer:
             "--quiet",
             "--mouse-hide-timeout=0",
             "--image-duration=-1",
-            "--sub-source=logo",
         )
         self.player = self.instance.media_player_new()
         # Event manager per intercettare fine video
@@ -74,8 +65,6 @@ class CucuPlayer:
         self.events.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_end)
 
         self.has_ended = False
-        self._hourglass_level = None
-        self._logo_configured = False
         # Secondo lettore, solo per l'audio: mostra il loop "si ascolta" mentre
         # self.player suona il file audio (vedi play_listen)
         self.screen = None
@@ -141,7 +130,6 @@ class CucuPlayer:
         media.add_option(":no-video")
         self.player.set_media(media)
         self.player.play()
-        self._reset_overlay()
 
     def _stop_screen(self):
         if self.screen is None:
@@ -149,13 +137,6 @@ class CucuPlayer:
         self.screen.stop()
         self.screen.release()
         self.screen = None
-        self._reset_overlay()
-
-    def _reset_overlay(self):
-        """La clessidra va sul lettore che mostra il video: cambiando lettore
-        la si riapplica al prossimo tick"""
-        self._hourglass_level = None
-        self._logo_configured = False
 
     def pause(self):
         self.player.set_pause(1)
@@ -185,35 +166,6 @@ class CucuPlayer:
         # Alternativa polling
         return self.player.get_state() == vlc.State.Ended
 
-    def set_hourglass_level(self, level):
-        """Mostra/aggiorna l'overlay 'clessidra' sopra il video corrente
-        (0=vuoto/limite raggiunto .. 9=pieno), o lo nasconde se level è None.
-        Usa il filtro logo di VLC (renderizza dentro VLC stesso: è l'unico modo
-        di sovrapporre qualcosa a un video fullscreen senza un compositor).
-        Best-effort: se l'API logo non è disponibile su questa build di
-        python-vlc, fallisce silenziosamente senza toccare la riproduzione."""
-        if level == self._hourglass_level:
-            return
-        self._hourglass_level = level
-        video = self.screen or self.player
-        try:
-            if level is None:
-                video.video_set_logo_int(_logo_opt("enable"), 0)
-                return
-            path = HOURGLASS_DIR / f"hourglass_{level}.png"
-            if not path.exists():
-                return
-            if not self._logo_configured:
-                video.video_set_logo_int(_logo_opt("position"), 10)  # basso-destra
-                video.video_set_logo_int(_logo_opt("x"), 24)  # margine dal bordo
-                video.video_set_logo_int(_logo_opt("y"), 24)
-                video.video_set_logo_int(_logo_opt("opacity"), 200)
-                self._logo_configured = True
-            video.video_set_logo_string(_logo_opt("file"), str(path))
-            video.video_set_logo_int(_logo_opt("enable"), 1)
-        except Exception as e:
-            print(f"[WARN] Overlay clessidra non disponibile: {e}")
-
 # --- STATO GLOBALE ------------------------------------------------------
 
 player = CucuPlayer()
@@ -228,8 +180,8 @@ album = None
 
 last_uid = None
 had_tag = False
-# Statuina che non è potuta partire per i limiti di tempo: finché resta
-# appoggiata si mostra REST_IMAGE e non si ritenta a ogni tick
+# Statuina che non ha fatto partire niente (limiti di tempo, nessun episodio,
+# sconosciuta): finché resta appoggiata non si ritenta a ogni tick
 start_blocked_uid = None
 
 # PIN genitore dimenticato: la stessa statuina appoggiata PIN_RESET_TAPS volte
@@ -497,20 +449,6 @@ def _commit_episode(character: str, known, remaining, seen):
     episode_state[character] = entry
     save_episode_state()
 
-def get_media_duration_minutes(path: Path):
-    """Ritorna la durata del file in minuti, o None se non determinabile.
-    Usa l'istanza VLC già in uso da CucuPlayer per non introdurre dipendenze
-    aggiuntive (es. ffprobe) oltre a python3-vlc, già presente sul device."""
-    try:
-        media = player.instance.media_new(str(path))
-        media.parse()
-        length_ms = media.get_duration()
-        if length_ms and length_ms > 0:
-            return length_ms / 60000.0
-    except Exception as e:
-        print(f"Impossibile determinare la durata di {path.name}: {e}")
-    return None
-
 def _refresh_daily_usage_if_new_day():
     global daily_usage
     today = datetime.now().strftime("%Y-%m-%d")
@@ -518,18 +456,24 @@ def _refresh_daily_usage_if_new_day():
         daily_usage = {"date": today, "minutes": 0.0}
         save_daily_usage()
 
-def is_viewing_allowed_now(character: str):
-    """Ritorna (allowed, remaining_minutes). remaining_minutes è None quando
-    non c'è un budget minuti da rispettare (nessun limite, o personaggio esente)."""
+def viewing_allowed(character):
+    """Se adesso può partire un episodio di `character` (None: un personaggio
+    qualsiasi non esente). Le regole:
+    - fuori dalle fasce orarie di oggi, o finiti i minuti di oggi → no
+    - un episodio già iniziato finisce sempre (qui non si guarda: la pausa
+      riprende senza chiedere), e non c'è un tetto allo sforamento: basta un
+      minuto rimasto per far partire un episodio lungo
+    - ora non affidabile (clock.py) → nessun limite"""
     if character in time_limits_config.get("exempt_characters", []):
-        return True, None
-
+        return True
     if not time_limits_config.get("enabled", False):
-        return True, None
+        return True
+    if not clock_ok():
+        return True
 
     day_cfg = time_limits_config.get("days", {}).get(DAY_KEYS[datetime.now().weekday()])
     if not day_cfg:
-        return True, None
+        return True
 
     now_time = datetime.now().time()
     windows = day_cfg.get("windows", [])
@@ -545,110 +489,34 @@ def is_viewing_allowed_now(character: str):
             except ValueError:
                 continue  # finestra malformata: ignorata, non blocca
         if not in_any_window:
-            return False, None
+            return False
 
     daily_limit = day_cfg.get("daily_limit_minutes")
     if daily_limit is not None:
         _refresh_daily_usage_if_new_day()
-        remaining = daily_limit - daily_usage.get("minutes", 0.0)
-        if remaining <= 0:
-            return False, 0
-        return True, remaining
+        try:
+            if float(daily_usage.get("minutes", 0.0)) >= float(daily_limit):
+                return False
+        except (TypeError, ValueError):
+            pass  # valore malformato: non blocca
 
-    return True, None
+    return True
 
-def _compute_hourglass_level(character):
-    """Ritorna il livello clessidra (0=vuoto..9=pieno) da mostrare, in base al
-    limite più vicino (minuti residui oggi o tempo residuo nella fascia oraria
-    corrente). Rispecchia esattamente la logica di is_viewing_allowed_now():
-    se oggi ci sono fasce configurate e l'ora corrente non è dentro nessuna,
-    la visione è già bloccata → clessidra vuota (0), indipendentemente dal
-    budget minuti residuo. Ritorna None se non c'è nessun limite da segnalare
-    (esente, limiti spenti, giorno senza restrizioni)."""
-    if character in time_limits_config.get("exempt_characters", []):
-        return None
-    if not time_limits_config.get("enabled", False):
-        return None
-
-    day_cfg = time_limits_config.get("days", {}).get(DAY_KEYS[datetime.now().weekday()])
-    if not day_cfg:
-        return None
-
-    now = datetime.now()
-    windows = day_cfg.get("windows", [])
-    active_window = None
-    if windows:
-        in_any_window = False
-        for w in windows:
-            try:
-                start_t = datetime.strptime(w.get("start", ""), "%H:%M").time()
-                end_t = datetime.strptime(w.get("end", ""), "%H:%M").time()
-            except ValueError:
-                continue
-            if start_t <= now.time() <= end_t:
-                in_any_window = True
-                active_window = (start_t, end_t)
-                break
-        if not in_any_window:
-            return 0  # fuori da tutte le fasce configurate: già bloccato
-
-    candidates = []  # (minuti_residui, budget_totale_minuti)
-
-    daily_limit = day_cfg.get("daily_limit_minutes")
-    if daily_limit is not None:
-        _refresh_daily_usage_if_new_day()
-        candidates.append((daily_limit - daily_usage.get("minutes", 0.0), daily_limit))
-
-    if active_window:
-        start_t, end_t = active_window
-        start_dt = datetime.combine(now.date(), start_t)
-        end_dt = datetime.combine(now.date(), end_t)
-        candidates.append((
-            (end_dt - now).total_seconds() / 60.0,
-            (end_dt - start_dt).total_seconds() / 60.0,
-        ))
-
-    if not candidates:
-        return None
-
-    # Il residuo è sempre quello reale (il minimo tra i limiti attivi), ma la
-    # scala di riferimento è il più piccolo tra i budget totali configurati
-    # (giornaliero e/o fascia), non quello del limite momentaneamente più
-    # vicino: altrimenti il livello "salta" quando il vincolo più stretto
-    # passa dall'uno all'altro, pur restando invariato il residuo reale in
-    # minuti. Nota: remaining_x <= budget_x per ogni singolo limite (non si
-    # può avere più residuo del proprio budget), quindi il minimo dei residui
-    # è sempre <= al minimo dei budget: la frazione non supera mai 1.
-    remaining = min(c[0] for c in candidates)
-    budget = min(c[1] for c in candidates)
-    if budget <= 0:
-        # daily_limit_minutes: 0 configurato (giornata bloccata): mostra vuota,
-        # non nascosta, coerente col resto (fuori fascia, budget esaurito).
-        return 0
-    fraction = max(0.0, min(1.0, remaining / budget))
-    return min(HOURGLASS_LEVELS - 1, int(fraction * HOURGLASS_LEVELS))
-
-def start_album(character, remaining_minutes):
+def start_album(character):
     """Album di foto: tutte, nell'ordine di caricamento, PHOTO_SECONDS l'una.
-    Ritorna "played", "blocked" o "missing" come start_video()."""
+    Ritorna "played" o "missing"."""
     global current_character, mode, current_video_path, album
     char_dir = CHARACTERS_DIR / character
     photos = photo_files(char_dir) if char_dir.is_dir() else []
     if not photos:
         print(f"Nessuna foto per {character}")
         return "missing"
-    duration_min = len(photos) * PHOTO_SECONDS / 60
-    if remaining_minutes is not None and duration_min > remaining_minutes:
-        print(f"Album '{character}' ({duration_min:.1f} min) supera il tempo residuo oggi "
-              f"({remaining_minutes:.1f} min): resto in idle.")
-        return "blocked"
     album = {"files": photos, "index": 0, "shown": 0.0}
     print(f"Album {character}: {len(photos)} foto")
     player.play_media(photos[0])
     current_character = character
     current_video_path = photos[0]
     mode = "playing"
-    player.set_hourglass_level(_compute_hourglass_level(character))
     return "played"
 
 def advance_album(elapsed):
@@ -674,14 +542,13 @@ def advance_album(elapsed):
 def start_video(character):
     """Ritorna "played", "blocked" (limiti di tempo) o "missing" (nessun video)."""
     global current_character, mode, current_video_path, album
-    allowed, remaining_minutes = is_viewing_allowed_now(character)
-    if not allowed:
+    if not viewing_allowed(character):
         print(f"Visione non permessa ora per '{character}' (limiti di tempo attivi).")
         return "blocked"
 
     kind = character_kind(_read_episode_state_file().get(character))
     if kind == "photos":
-        return start_album(character, remaining_minutes)
+        return start_album(character)
     album = None
 
     selection = _select_episode(character)
@@ -689,16 +556,6 @@ def start_video(character):
         print(f"Nessun video trovato per {character}")
         return "missing"
     video, known, remaining, seen = selection
-
-    duration_min = get_media_duration_minutes(video)
-    if remaining_minutes is not None:
-        if duration_min is not None and duration_min > remaining_minutes:
-            print(
-                f"Episodio '{video.name}' ({duration_min:.1f} min) supera il tempo "
-                f"residuo oggi ({remaining_minutes:.1f} min): resto in idle."
-            )
-            return "blocked"
-
     _commit_episode(character, known, remaining, seen)
 
     if kind == "audio":
@@ -710,54 +567,28 @@ def start_video(character):
     current_character = character
     current_video_path = video
     mode = "playing"
-    player.set_hourglass_level(_compute_hourglass_level(character))
     return "played"
 
-def manage_graphics():
-    """Gestisce la grafica in base allo stato, SE non stiamo riproducendo un video."""
-    # Se stiamo riproducendo un video (playing/paused), lascia stare il player
-    if mode in ("playing", "paused"):
-        return
-
-    # Logica per scegliere l'immagine (identica a prima)
-    # idle -> idle.png
-    # wait_remove / wait_return -> wait_next.png
-    
-    target_img = None
-    if mode == "idle":
-        # Se c'è un tag ma siamo in idle (caso strano o avvio), wait_next? 
-        # Il vecchio codice diceva: se idle e has_tag -> wait_next, else idle
-        if had_tag: 
-            target_img = WAIT_NEXT_IMAGE
-        else:
-            target_img = IDLE_IMAGE
-    elif mode in ("ended_wait_remove", "ended_wait_return"):
-        target_img = WAIT_NEXT_IMAGE
-
-    # Ottimizzazione: se l'immagine è già quella giusta, non ricaricarla.
-    # Ma CucuPlayer non sa cosa sta suonando.
-    # Possiamo tenere traccia qui o ricaricare sempre (python-vlc è veloce).
-    # Per evitare flicker, ricarichiamo solo se necessario è meglio.
-    # Tuttavia, player.set_media non causa flicker se è già quella.
-    # Facciamo semplice: ricarichiamo se stato cambia.
-    pass # In realtà con player unico, dobbiamo chiamare play_media quando entriamo nello stato
-
-# Helper per refresh grafica
+# Schermata mostrata (per non ricaricarla a ogni tick)
 current_graphic_path = None
-def refresh_graphic(force_path=None):
+def refresh_graphic(path):
     global current_graphic_path
-    path = force_path
-    if not path:
-        # Calcola path
-        if mode == "idle" and not had_tag:
-            path = IDLE_IMAGE
-        else:
-            path = WAIT_NEXT_IMAGE # Default per idle+tag o ended_*
-    
     if path != current_graphic_path:
         print(f"Cambio grafica: {path.name}")
         player.show_screen(path)
         current_graphic_path = path
+
+def idle_screen(blocked):
+    """Schermata quando non va niente (né in riproduzione né in pausa). Se
+    adesso Cucù non si può usare il gufetto dorme, con o senza statuina:
+    anche a fine episodio, che arriva sempre alla fine prima di questo."""
+    if blocked:
+        return REST_IMAGE
+    if mode == "ended_wait_remove":
+        return END_IMAGE
+    if mode == "ended_wait_return":
+        return WAIT_NEXT_IMAGE
+    return IDLE_IMAGE
 
 # --- LOOP PRINCIPALE ----------------------------------------------------
 
@@ -781,20 +612,15 @@ try:
         now_ts = time.time()
         elapsed = now_ts - last_tick_ts
         last_tick_ts = now_ts
-        if mode == "playing" and current_character not in time_limits_config.get("exempt_characters", []):
+        # Con l'ora non affidabile (clock.py) non si contano: finirebbero sul giorno sbagliato
+        if mode == "playing" and current_character not in time_limits_config.get("exempt_characters", []) \
+                and clock_ok():
             _refresh_daily_usage_if_new_day()
             daily_usage["minutes"] += elapsed / 60.0
             usage_unsaved_seconds += elapsed
             if usage_unsaved_seconds >= USAGE_FLUSH_INTERVAL_SEC:
                 save_daily_usage()
                 usage_unsaved_seconds = 0.0
-
-        # 0b. Overlay clessidra: aggiornato ad ogni tick indipendentemente dallo
-        # stato (resta visibile anche in pausa/idle/fine episodio, non solo
-        # durante la riproduzione). set_hourglass_level() tocca VLC solo quando
-        # il livello cambia davvero (10 stati sull'intero budget = pochissime
-        # chiamate reali, non ad ogni tick).
-        player.set_hourglass_level(_compute_hourglass_level(current_character))
 
         # 1. Controllo fine video (o fine album: le foto non "finiscono" da sole,
         # le fa scorrere advance_album; elapsed limitato contro i salti
@@ -810,8 +636,7 @@ try:
                 if ended:
                     print("Video finito.")
             if ended:
-                mode = "ended_wait_remove"
-                refresh_graphic(END_IMAGE) # "Fine": togli la statuina
+                mode = "ended_wait_remove"  # la schermata la sceglie idle_screen()
                 save_daily_usage()
                 usage_unsaved_seconds = 0.0
 
@@ -829,7 +654,11 @@ try:
         # cosa c'è sulla TV e a che punto è l'episodio. "pin_reset" (finestra per
         # un nuovo PIN aperta) fa lampeggiare il LED.
         try:
-            blocked = not is_viewing_allowed_now(None)[0]
+            blocked = not viewing_allowed(None)
+        except Exception as e:
+            print(f"[WARN] Limiti di tempo illeggibili ({e}): nessun limite.")
+            blocked = False
+        try:
             pos_ms = len_ms = None
             if mode in ("playing", "paused") and album is not None:
                 # avanzamento dell'album intero, non della singola foto
@@ -841,6 +670,7 @@ try:
             with (BASE_DIR / "last_seen_tag.json").open("w") as _f:
                 json.dump({
                     "uid": uid, "ts": time.time(), "mode": mode, "blocked": blocked,
+                    "clock_ok": clock_ok(),
                     "character": current_character,
                     "episode": current_video_path.name if current_video_path else None,
                     "pos_ms": pos_ms, "len_ms": len_ms,
@@ -867,23 +697,12 @@ try:
                 char = tag_map.get(uid)
                 start_blocked_uid = None
                 if char:
-                    # START VIDEO
-                    result = start_video(char)
-                    current_graphic_path = None # reset grafica tracker
-                    if result == "blocked":
-                        start_blocked_uid = uid
-                        refresh_graphic(REST_IMAGE) # il gufetto riposa
+                    if start_video(char) == "played":
+                        current_graphic_path = None  # la TV ora mostra l'episodio
                 else:
                     print(f"Tag sconosciuto: {uid}")
             elif tag_removed:
                 start_blocked_uid = None
-                refresh_graphic(IDLE_IMAGE) # Torna a idle puro se tolto tag sconosciuto
-            elif has_tag:
-                # Tag presente ma nessun video partito: bloccato dai limiti
-                # (gufetto che riposa) oppure sconosciuto/senza video (attesa)
-                target = REST_IMAGE if uid == start_blocked_uid else IDLE_IMAGE
-                if current_graphic_path != target:
-                    refresh_graphic(target)
 
         elif mode == "playing":
             if tag_removed:
@@ -918,7 +737,6 @@ try:
             if tag_removed:
                 print("Tag rimosso post-episodio.")
                 mode = "ended_wait_return"
-                refresh_graphic(WAIT_NEXT_IMAGE) # un altro? si decide insieme
 
         elif mode == "ended_wait_return":
             # Qui accettiamo qualsiasi NUOVO tag.
@@ -928,16 +746,20 @@ try:
                 char = tag_map.get(uid)
                 if char:
                     print(f"Nuovo episodio per {char}")
-                    result = start_video(char)
-                    current_graphic_path = None
-                    if result == "blocked":
+                    if start_video(char) == "played":
+                        current_graphic_path = None
+                    else:
                         start_blocked_uid = uid
-                        refresh_graphic(REST_IMAGE)
                 else:
                     print("Tag sconosciuto post-episodio.")
+                    start_blocked_uid = uid
             elif not has_tag and start_blocked_uid is not None:
                 start_blocked_uid = None
-                refresh_graphic(WAIT_NEXT_IMAGE)
+
+        # Schermata quando non va niente: segue anche i cambi senza statuina
+        # (si apre o si chiude una fascia oraria, finiscono i minuti)
+        if mode not in ("playing", "paused"):
+            refresh_graphic(idle_screen(blocked))
 
         # Aggiorna tracking
         last_uid = uid

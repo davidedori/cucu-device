@@ -28,6 +28,7 @@ from media_check import (checked, cached_check, check_video, save_check, move_ch
                          character_kind, photo_files, PHOTO_EXT, PHOTO_SECONDS, PROFILE_STEM,
                          how_to, platform_from_user_agent, check_audio, episode_files,
                          VIDEO_EXT, AUDIO_EXT)
+from clock import clock_ok
 
 IMAGE_EXT = {".png", ".jpg", ".jpeg"}
 
@@ -1307,6 +1308,8 @@ def get_time_limits_usage():
     return {
         "date": today,
         "enabled": limits.get("enabled", False),
+        # senza ora affidabile (niente rete dopo un riavvio) i limiti sono sospesi: vedi clock.py
+        "clock_ok": clock_ok(),
         "minutes_used": round(minutes_used, 1),
         "daily_limit_minutes": daily_limit,
         "remaining_minutes": round(remaining, 1) if remaining is not None else None,
