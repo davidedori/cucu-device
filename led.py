@@ -8,7 +8,7 @@ Comportamento:
 - avvio, o read_nfc.py fermo/bloccato → respiro veloce
 - episodio in corso, o riposo         → respiro lento
   (Cucù non si può usare per i limiti)
-- pronto (attesa, pausa, fine episodio) → fisso (30%)
+- pronto (attesa, pausa, fine episodio) → fisso (100%)
 - finestra per un nuovo PIN aperta    → doppio lampeggio (vince sugli altri,
   così il genitore vede che il gesto con la statuina ha funzionato)
 
@@ -48,7 +48,7 @@ PWM_PERIOD_NS = 100_000  # 10 kHz: nessuno sfarfallio visibile
 # sul prototipo v2.
 BREATH_MAX = 100.0       # picco del respiro
 BREATH_MIN = 30.0        # minimo del respiro (mai spento)
-STEADY = 30.0            # fisso: pronto, pausa
+STEADY = 100.0           # fisso: pronto, pausa
 SLOW_PERIOD_SEC = 5.0    # respiro lento: episodio in corso, riposo
 FAST_PERIOD_SEC = 1.5    # respiro veloce: avvio, programma principale fermo
 FADE_SEC = 0.6           # dissolvenza tra un effetto e l'altro
