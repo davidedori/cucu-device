@@ -9,8 +9,8 @@ Comportamento:
 - episodio in corso, o riposo         → respiro lento
   (Cucù non si può usare per i limiti)
 - pronto (attesa, pausa, fine episodio) → fisso (100%)
-- statuina sconosciuta (i 4 s della sua → lampeggio rapido
-  schermata)
+- statuina sconosciuta                  → due lampeggi rapidi appena compare,
+                                          poi fisso come "pronto"
 - finestra per un nuovo PIN aperta    → doppio lampeggio (vince sugli altri,
   così il genitore vede che il gesto con la statuina ha funzionato)
 
@@ -83,13 +83,19 @@ def double_blink(t):
     return BREATH_MAX if any(a <= x < b for a, b in BLINK_ON) else 0.0
 
 
-# Lampeggio rapido: 100 ms acceso, 100 ms spento, finché la TV mostra la statuina
-# sconosciuta. Diverso dal doppio lampeggio del PIN, più lento e a coppie
-FLICKER_PERIOD_SEC = 0.2
+# Statuina sconosciuta: due lampeggi rapidi (150 ms spento, 150 ms acceso, due
+# volte) appena compare, poi fisso come "pronto". t = secondi da quando è
+# iniziato l'effetto, non dall'avvio del servizio. Diverso dal doppio lampeggio
+# del PIN, più lento e ripetuto
+FLICKER_STEP_SEC = 0.15
+FLICKER_TIMES = 2
 
 
 def flicker(t):
-    return BREATH_MAX if t % FLICKER_PERIOD_SEC < FLICKER_PERIOD_SEC / 2 else 0.0
+    i = int(t / FLICKER_STEP_SEC)
+    if i < 2 * FLICKER_TIMES and i % 2 == 0:
+        return 0.0
+    return STEADY
 
 
 EFFECTS = {
@@ -205,7 +211,7 @@ def main():
     # file rimasto dal boot precedente sembrerebbe "fresco". Finché non vediamo
     # il primo aggiornamento, read_nfc.py è considerato fermo.
     last_ts, last_change = None, None
-    effect = "fast"
+    effect, effect_start = "fast", 0.0
     fade_from, fade_start = None, 0.0
     output = 0.0
     next_poll = 0.0
@@ -229,10 +235,11 @@ def main():
             wanted = effect_for_state(state, alive)
             if wanted != effect:
                 print(f"LED: {effect} → {wanted}")
-                effect = wanted
-                fade_from, fade_start = output, mono
+                effect, effect_start = wanted, mono
+                # i lampeggi sono brevi: senza dissolvenza, altrimenti si perderebbero
+                fade_from, fade_start = (None, mono) if wanted == "flicker" else (output, mono)
 
-        target = EFFECTS[effect](t)
+        target = EFFECTS[effect](mono - effect_start if effect == "flicker" else t)
         if fade_from is not None:
             a = (mono - fade_start) / FADE_SEC
             if a >= 1:
