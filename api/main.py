@@ -44,7 +44,14 @@ EPISODE_STATE_FILE = BASE_DIR / "episode_state.json"
 TAGS_FILE = BASE_DIR / "tags.json"
 CONFIG_ENV_FILE = BASE_DIR / "config.env"
 VERSION_FILE = BASE_DIR / "VERSION"
-LAST_SEEN_TAG_FILE = BASE_DIR / "last_seen_tag.json"
+# Stato del lettore, riscritto da read_nfc.py a 10 Hz: in RAM (/run/cucu) se c'è,
+# altrimenti accanto al codice (computer di prova, servizio non ancora aggiornato).
+# Si cerca a ogni lettura: /run/cucu nasce quando parte cucu-device.service
+RUN_STATE_FILE = Path("/run/cucu/last_seen_tag.json")
+
+
+def _last_seen_file() -> Path:
+    return RUN_STATE_FILE if RUN_STATE_FILE.exists() else BASE_DIR / "last_seen_tag.json"
 TIME_LIMITS_FILE = BASE_DIR / "time_limits.json"
 TAG_LABELS_FILE = BASE_DIR / "tag_labels.json"
 UI_AUTH_FILE = BASE_DIR / "ui_auth.json"
@@ -262,7 +269,7 @@ def _generate_thumb(char_dir: Path, video: Path) -> bool:
 def _player_playing() -> bool:
     """True solo se un episodio sta andando adesso (in pausa la CPU è libera)."""
     try:
-        with LAST_SEEN_TAG_FILE.open() as f:
+        with _last_seen_file().open() as f:
             data = json.load(f)
     except Exception:
         return False
@@ -689,7 +696,7 @@ def system_now():
     """
     data = {}
     try:
-        with LAST_SEEN_TAG_FILE.open() as f:
+        with _last_seen_file().open() as f:
             data = json.load(f)
     except Exception:
         pass  # file assente o letto a metà scrittura: si considera fermo
@@ -1221,11 +1228,11 @@ def scan_tag():
     Usato dal wizard di associazione nella UI.
     Ritorna None se non c'è nessun tag o se il dato è troppo vecchio (>3s).
     """
-    if not LAST_SEEN_TAG_FILE.exists():
+    if not _last_seen_file().exists():
         return {"uid": None, "known_character": None}
 
     try:
-        with LAST_SEEN_TAG_FILE.open() as f:
+        with _last_seen_file().open() as f:
             data = json.load(f)
     except Exception:
         return {"uid": None, "known_character": None}
@@ -1785,10 +1792,10 @@ def _is_player_busy():
     troppo vecchio (>5s) indica che il servizio non è verosimilmente in
     esecuzione: in quel caso non c'è nulla da interrompere.
     """
-    if not LAST_SEEN_TAG_FILE.exists():
+    if not _last_seen_file().exists():
         return False
     try:
-        with LAST_SEEN_TAG_FILE.open() as f:
+        with _last_seen_file().open() as f:
             data = json.load(f)
     except Exception:
         return False

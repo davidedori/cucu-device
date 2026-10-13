@@ -27,6 +27,14 @@ CONFIG_PATH = BASE_DIR / "tags.json"
 CHARACTERS_DIR = BASE_DIR / "characters"
 GRAPHICS_DIR = BASE_DIR / "graphics"
 TIME_LIMITS_PATH = BASE_DIR / "time_limits.json"
+# Stato per l'API e il LED (last_seen_tag.json), riscritto a ogni tick (10 Hz):
+# in RAM, in /run/cucu (creata da systemd con RuntimeDirectory=), per non
+# consumare la scheda SD (sul disco erano ~2 GB al giorno anche a Cucù fermo).
+# Senza /run/cucu (computer di prova, servizio non ancora aggiornato) resta
+# accanto al codice. Lo cercano allo stesso modo api/main.py e led.py
+RUN_DIR = Path("/run/cucu")
+STATE_IN_RAM = RUN_DIR.is_dir() and os.access(RUN_DIR, os.W_OK)
+STATE_PATH = (RUN_DIR if STATE_IN_RAM else BASE_DIR) / "last_seen_tag.json"
 DAILY_USAGE_PATH = BASE_DIR / "daily_usage.json"
 
 # Schermate sulla TV (sorgente e rigenerazione: graphics/src/). Si mostra il loop
@@ -39,8 +47,9 @@ LISTEN_IMAGE = GRAPHICS_DIR / "listen.png"        # audio in corso: "Si ascolta"
 
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 # Persistiamo il conteggio minuti solo ogni tot secondi di riproduzione continua,
-# per non stressare la SD card scrivendo ad ogni tick del loop (10Hz).
-USAGE_FLUSH_INTERVAL_SEC = 10
+# per non stressare la SD card scrivendo ad ogni tick del loop (10Hz). Si salva
+# anche a ogni pausa e fine episodio: se manca la corrente si perde al massimo un minuto.
+USAGE_FLUSH_INTERVAL_SEC = 60
 
 # --- VLC PLAYER CLASS ---------------------------------------------------
 
@@ -311,6 +320,25 @@ def _write_json_atomic(path: Path, data):
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
+
+def write_state(data):
+    """last_seen_tag.json: in RAM si scrive in modo atomico (chi legge non lo
+    trova mai a metà); sulla SD, 10 volte al secondo, no: costerebbe un fsync
+    a ogni tick, e chi legge già tiene lo stato precedente se lo trova vuoto."""
+    if STATE_IN_RAM:
+        tmp = STATE_PATH.with_name(STATE_PATH.name + ".tmp")
+        tmp.write_text(json.dumps(data))
+        os.replace(tmp, STATE_PATH)
+    else:
+        with STATE_PATH.open("w") as f:
+            json.dump(data, f)
+
+if STATE_IN_RAM:
+    # quello vecchio sulla SD, fermo: l'API e il LED lo leggerebbero come se Cucù fosse spento
+    try:
+        (BASE_DIR / "last_seen_tag.json").unlink()
+    except OSError:
+        pass
 
 def save_episode_state():
     try:
@@ -683,8 +711,7 @@ try:
             elif mode in ("playing", "paused"):
                 pos_ms = player.player.get_time()
                 len_ms = player.player.get_length()
-            with (BASE_DIR / "last_seen_tag.json").open("w") as _f:
-                json.dump({
+            write_state({
                     "uid": uid, "ts": time.time(), "mode": mode, "blocked": blocked,
                     "clock_ok": clock_ok(),
                     "character": current_character,
@@ -692,7 +719,7 @@ try:
                     "pos_ms": pos_ms, "len_ms": len_ms,
                     "album": {"index": album["index"] + 1, "total": len(album["files"])} if album else None,
                     "pin_reset": pin_reset_open(),
-                }, _f)
+                })
         except Exception:
             pass
 

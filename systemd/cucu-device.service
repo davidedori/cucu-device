@@ -21,6 +21,10 @@ Environment=XDG_RUNTIME_DIR=/run/user/__DEPLOY_UID__ TERM=linux
 ExecStartPre=-+/usr/bin/plymouth quit --retain-splash
 ExecStart=/usr/bin/python3 -u /home/davidedorigatti/cucu-device/read_nfc.py
 WorkingDirectory=/home/davidedorigatti/cucu-device
+# /run/cucu (RAM): ci va last_seen_tag.json, riscritto 10 volte al secondo, che
+# sulla SD la consumerebbe. Resta tra un riavvio e l'altro del servizio (Restart=always)
+RuntimeDirectory=cucu
+RuntimeDirectoryPreserve=yes
 StandardOutput=journal
 StandardError=journal
 Restart=always

@@ -30,7 +30,13 @@ import time
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-STATE_FILE = BASE_DIR / "last_seen_tag.json"
+# In RAM (/run/cucu, vedi read_nfc.py) se c'è, altrimenti accanto al codice.
+# Si cerca a ogni lettura: il LED parte prima di read_nfc.py
+RUN_STATE_FILE = Path("/run/cucu/last_seen_tag.json")
+
+
+def state_file():
+    return RUN_STATE_FILE if RUN_STATE_FILE.exists() else BASE_DIR / "last_seen_tag.json"
 
 PWM_CHIP = Path("/sys/class/pwm/pwmchip0")
 PWM_CHANNEL = 1          # GPIO13 = PWM1
@@ -98,7 +104,7 @@ def read_state():
     ValueError se è illeggibile (read_nfc.py lo sta riscrivendo proprio ora:
     il chiamante tiene lo stato precedente)."""
     try:
-        with STATE_FILE.open() as f:
+        with state_file().open() as f:
             return json.load(f)
     except FileNotFoundError:
         return None
