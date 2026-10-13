@@ -1,20 +1,21 @@
-// Cucù boot splash: lo stesso gufetto animato delle schermate TV, a 10 fps.
-// I fotogrammi si generano con  node graphics/src/render_loops.mjs boot  (graphics/src/tv-loops.html#boot).
+// Cucù boot splash: il gufetto al centro e sotto la barra verde che si riempie mentre Cucù si
+// accende. I fotogrammi si generano con  node graphics/src/render_loops.mjs boot
+// (graphics/src/tv-loops.html#boot).
 //
-// Per stare leggeri (i file finiscono nell'initramfs e in RAM durante l'avvio) ogni fotogramma
-// è in due pezzi, che qui si sovrappongono:
-//   boot_bg_0..2.png   fondo a tutto schermo con sole e nuvole; 3 ritagli del passo uno, uno ogni 0,4 s
-//   boot_owl_N.png     solo il gufetto, su fondo trasparente, nel riquadro OWL_*
-// Fotogrammi 0..INTRO-1: entrata con saluto (una volta sola); poi INTRO..OWL_FRAMES-1 in loop.
+// Per stare leggeri (i file finiscono nell'initramfs e in RAM durante l'avvio) l'immagine è
+// in pezzi, che qui si sovrappongono:
+//   boot_bg.png          fondo a tutto schermo con il binario grigio della barra
+//   boot_owl_N.png       solo il gufetto, su fondo trasparente, nel riquadro OWL_*; loop a 10 fps
+//   boot_fill_K.png      la parte verde della barra lunga K/FILL_STEPS, nel riquadro BAR_*
+// La barra segue il "progress" di Plymouth: è una stima fatta sugli avvii precedenti, quindi
+// verso la fine può fermarsi o saltare un po'. Non torna mai indietro.
 // Le costanti devono combaciare con BOOT in render_loops.mjs.
 
 FPS = 10;
-OWL_FRAMES = 72;
-INTRO = 24;
-LOOP = OWL_FRAMES - INTRO;
-BG_VARIANTS = 3;
-BOIL = 4;                       // fotogrammi per variante del fondo
-OWL_X = 800; OWL_Y = 330; OWL_W = 330; OWL_H = 420;
+OWL_FRAMES = 48;
+OWL_X = 840; OWL_Y = 395; OWL_W = 240; OWL_H = 280;
+FILL_STEPS = 40;
+BAR_X = 640; BAR_Y = 695; BAR_W = 640; BAR_H = 80;
 
 screen_width = Window.GetWidth();
 screen_height = Window.GetHeight();
@@ -26,21 +27,27 @@ if (screen_width == 0 || screen_height == 0) {
 sx = screen_width / 1920;
 sy = screen_height / 1080;
 
-for (i = 0; i < BG_VARIANTS; i++)
-    bg_image[i] = Image("boot_bg_" + i + ".png").Scale(screen_width, screen_height);
+bg_sprite = Sprite(Image("boot_bg.png").Scale(screen_width, screen_height));
+bg_sprite.SetZ(-100);
+
 for (i = 0; i < OWL_FRAMES; i++)
     owl_image[i] = Image("boot_owl_" + i + ".png").Scale(OWL_W * sx, OWL_H * sy);
-
-bg_sprite = Sprite(bg_image[0]);
-bg_sprite.SetZ(-100);
 owl_sprite = Sprite(owl_image[0]);
 owl_sprite.SetX(Math.Int(OWL_X * sx));
 owl_sprite.SetY(Math.Int(OWL_Y * sy));
 owl_sprite.SetZ(-90);
 
-// l'animazione parte quando Plymouth compare, non dall'inizio del boot: così l'entrata si vede
+for (k = 1; k <= FILL_STEPS; k++)
+    fill_image[k] = Image("boot_fill_" + k + ".png").Scale(BAR_W * sx, BAR_H * sy);
+fill_sprite = Sprite(fill_image[1]);
+fill_sprite.SetX(Math.Int(BAR_X * sx));
+fill_sprite.SetY(Math.Int(BAR_Y * sy));
+fill_sprite.SetZ(-95);
+fill_sprite.SetOpacity(0);          // finché il progresso è zero la barra è vuota
+
 global.t0 = -1;
 global.last = -1;
+global.step = 0;
 
 fun on_boot_progress(duration, progress) {
     if (global.t0 < 0) global.t0 = duration;
@@ -49,17 +56,15 @@ fun on_boot_progress(duration, progress) {
     if (f != global.last) {
         global.last = f;
         owl = f;
-        if (owl >= INTRO) {
-            owl = owl - INTRO;
-            while (owl >= LOOP) owl = owl - LOOP;
-            owl = owl + INTRO;
-        }
-        // il loop dura un multiplo di BG_VARIANTS × BOIL: le varianti del fondo restano in fila
-        bg = Math.Int(f / BOIL);
-        while (bg >= BG_VARIANTS) bg = bg - BG_VARIANTS;
-
+        while (owl >= OWL_FRAMES) owl = owl - OWL_FRAMES;
         owl_sprite.SetImage(owl_image[owl]);
-        bg_sprite.SetImage(bg_image[bg]);
+    }
+    k = Math.Int(progress * FILL_STEPS);
+    if (k > FILL_STEPS) k = FILL_STEPS;
+    if (k > global.step) {
+        global.step = k;
+        fill_sprite.SetImage(fill_image[k]);
+        fill_sprite.SetOpacity(1);
     }
 }
 
