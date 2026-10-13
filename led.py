@@ -9,8 +9,8 @@ Comportamento:
 - episodio in corso, o riposo         → respiro lento
   (Cucù non si può usare per i limiti)
 - pronto (attesa, pausa, fine episodio) → fisso (100%)
-- statuina sconosciuta                  → due lampeggi rapidi appena compare,
-                                          poi fisso come "pronto"
+- statuina sconosciuta (finché resta    → due lampeggi rapidi appena compare e
+  appoggiata)                             poi ogni 10 s, in mezzo fisso come "pronto"
 - finestra per un nuovo PIN aperta    → doppio lampeggio (vince sugli altri,
   così il genitore vede che il gesto con la statuina ha funzionato)
 
@@ -84,15 +84,17 @@ def double_blink(t):
 
 
 # Statuina sconosciuta: due lampeggi rapidi (150 ms spento, 150 ms acceso, due
-# volte) appena compare, poi fisso come "pronto". t = secondi da quando è
-# iniziato l'effetto, non dall'avvio del servizio. Diverso dal doppio lampeggio
-# del PIN, più lento e ripetuto
+# volte) appena compare e poi ogni FLICKER_REPEAT_SEC, in mezzo fisso come
+# "pronto": ricorda al genitore che c'è da sistemare, senza diventare un
+# richiamo continuo per il bambino. t = secondi da quando è iniziato l'effetto,
+# non dall'avvio del servizio. Diverso dal doppio lampeggio del PIN, continuo
 FLICKER_STEP_SEC = 0.15
 FLICKER_TIMES = 2
+FLICKER_REPEAT_SEC = 10.0
 
 
 def flicker(t):
-    i = int(t / FLICKER_STEP_SEC)
+    i = int(t % FLICKER_REPEAT_SEC / FLICKER_STEP_SEC)
     if i < 2 * FLICKER_TIMES and i % 2 == 0:
         return 0.0
     return STEADY

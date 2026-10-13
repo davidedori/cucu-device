@@ -51,8 +51,7 @@ LOOPS_DIR = GRAPHICS_DIR / "loops"
 IDLE_IMAGE = GRAPHICS_DIR / "idle.png"            # pronto: attesa, fine episodio, un altro?
 REST_IMAGE = GRAPHICS_DIR / "rest.png"            # adesso no: il gufetto dorme (limiti di tempo)
 LISTEN_IMAGE = GRAPHICS_DIR / "listen.png"        # audio in corso: "Si ascolta"
-UNKNOWN_IMAGE = GRAPHICS_DIR / "unknown.png"      # statuina sconosciuta, per qualche secondo
-UNKNOWN_SCREEN_SEC = 4.0
+UNKNOWN_IMAGE = GRAPHICS_DIR / "unknown.png"      # statuina sconosciuta, finché resta appoggiata
 SETUP_IMAGE = GRAPHICS_DIR / "setup.png"          # configurazione dall'app: Cucù non parte
 
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -632,15 +631,15 @@ def refresh_graphic(path):
         player.show_screen(path)
         current_graphic_path = path
 
-# Fino a quando mostrare la statuina sconosciuta (orologio monotono). La
-# statuina può restare appoggiata: dopo UNKNOWN_SCREEN_SEC si torna a "pronto"
-unknown_until = 0.0
+# Statuina sconosciuta appoggiata adesso (None: nessuna). La schermata resta
+# finché non viene tolta: la TV dice sempre cosa c'è sopra Cucù
+unknown_uid = None
 
-def show_unknown():
+def show_unknown(uid):
     """Statuina non abbinata, o personaggio senza episodi riproducibili: il
     bambino vede che Cucù l'ha letta, il genitore che c'è da sistemare."""
-    global unknown_until
-    unknown_until = time.monotonic() + UNKNOWN_SCREEN_SEC
+    global unknown_uid
+    unknown_uid = uid
 
 def lock_active():
     """Vero se l'app sta configurando Cucù (vedi LOCK_PATH)."""
@@ -656,10 +655,10 @@ def idle_screen(blocked, locked=False):
     serve solo riconoscere quando può appoggiarne una). Se adesso Cucù non si
     può usare il gufetto dorme, con o senza statuina: anche a fine episodio,
     che arriva sempre alla fine prima di questo. La statuina sconosciuta
-    vince per i suoi pochi secondi: dice qualcosa anche quando Cucù dorme."""
+    vince finché è appoggiata: dice qualcosa anche quando Cucù dorme."""
     if locked:
         return SETUP_IMAGE
-    if time.monotonic() < unknown_until:
+    if unknown_uid is not None:
         return UNKNOWN_IMAGE
     return REST_IMAGE if blocked else IDLE_IMAGE
 
@@ -721,6 +720,8 @@ try:
         reload_time_limits_if_changed()
         uid = reader.read_uid()
         has_tag = uid is not None
+        if unknown_uid is not None and uid != unknown_uid:
+            unknown_uid = None  # tolta (o sostituita): via il punto di domanda
 
         # Scrivi l'ultimo tag visto per il wizard di associazione della UI, e il
         # mode corrente: l'API lo legge per capire se il player è "occupato"
@@ -736,6 +737,8 @@ try:
             print(f"[WARN] Limiti di tempo illeggibili ({e}): nessun limite.")
             blocked = False
         locked = lock_active()
+        if locked:
+            unknown_uid = None  # il genitore la sta abbinando: niente punto di domanda, nemmeno dopo
         try:
             pos_ms = len_ms = None
             if mode in ("playing", "paused") and album is not None:
@@ -753,7 +756,7 @@ try:
                     "pos_ms": pos_ms, "len_ms": len_ms,
                     "album": {"index": album["index"] + 1, "total": len(album["files"])} if album else None,
                     "pin_reset": pin_reset_open(),
-                    "unknown": time.monotonic() < unknown_until,  # statuina sconosciuta: il LED lampeggia
+                    "unknown": unknown_uid is not None,  # statuina sconosciuta: il LED lampeggia ogni tanto
                     "locked": locked,  # configurazione dall'app
                 })
         except Exception:
@@ -784,10 +787,10 @@ try:
                     if result == "played":
                         current_graphic_path = None  # la TV ora mostra l'episodio
                     elif result == "missing":
-                        show_unknown()
+                        show_unknown(uid)
                 else:
                     print(f"Tag sconosciuto: {uid}")
-                    show_unknown()
+                    show_unknown(uid)
             elif tag_removed:
                 start_blocked_uid = None
 
@@ -841,11 +844,11 @@ try:
                     else:
                         start_blocked_uid = uid
                         if result == "missing":
-                            show_unknown()
+                            show_unknown(uid)
                 else:
                     print("Tag sconosciuto post-episodio.")
                     start_blocked_uid = uid
-                    show_unknown()
+                    show_unknown(uid)
             elif not has_tag and start_blocked_uid is not None:
                 start_blocked_uid = None
 
