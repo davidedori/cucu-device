@@ -600,7 +600,7 @@ refresh_graphic(IDLE_IMAGE) # Avvio con idle
 # grigio nel frattempo.
 reader = create_reader()
 
-last_tick_ts = time.time()
+last_tick_ts = time.monotonic()
 usage_unsaved_seconds = 0.0
 
 try:
@@ -609,7 +609,10 @@ try:
         # esenti e stato "paused"), basato sul tempo reale trascorso dal tick
         # precedente e non su un fisso 0.1s, per restare corretti anche se
         # un'iterazione impiega più del previsto (es. lettura NFC lenta).
-        now_ts = time.time()
+        # Orologio monotono: quando la rete corregge l'ora (il Pi non ha RTC)
+        # time.time() salta anche di giorni, e il salto finiva tutto nei minuti
+        # di visione (visto dal vivo: 3182 minuti in un giorno)
+        now_ts = time.monotonic()
         elapsed = now_ts - last_tick_ts
         last_tick_ts = now_ts
         # Con l'ora non affidabile (clock.py) non si contano: finirebbero sul giorno sbagliato
