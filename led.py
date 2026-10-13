@@ -9,6 +9,8 @@ Comportamento:
 - episodio in corso, o riposo         → respiro lento
   (Cucù non si può usare per i limiti)
 - pronto (attesa, pausa, fine episodio) → fisso (100%)
+- statuina sconosciuta (i 4 s della sua → lampeggio rapido
+  schermata)
 - finestra per un nuovo PIN aperta    → doppio lampeggio (vince sugli altri,
   così il genitore vede che il gesto con la statuina ha funzionato)
 
@@ -81,11 +83,21 @@ def double_blink(t):
     return BREATH_MAX if any(a <= x < b for a, b in BLINK_ON) else 0.0
 
 
+# Lampeggio rapido: 100 ms acceso, 100 ms spento, finché la TV mostra la statuina
+# sconosciuta. Diverso dal doppio lampeggio del PIN, più lento e a coppie
+FLICKER_PERIOD_SEC = 0.2
+
+
+def flicker(t):
+    return BREATH_MAX if t % FLICKER_PERIOD_SEC < FLICKER_PERIOD_SEC / 2 else 0.0
+
+
 EFFECTS = {
     "fast": lambda t: breath(t, FAST_PERIOD_SEC),
     "slow": lambda t: breath(t, SLOW_PERIOD_SEC),
     "steady": lambda t: STEADY,
     "blink": double_blink,
+    "flicker": flicker,
 }
 
 
@@ -94,6 +106,8 @@ def effect_for_state(state, alive):
         return "fast"
     if state.get("pin_reset"):
         return "blink"
+    if state.get("unknown"):
+        return "flicker"
     if state.get("mode") == "playing" or state.get("blocked"):
         return "slow"
     return "steady"

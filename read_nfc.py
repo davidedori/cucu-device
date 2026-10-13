@@ -44,6 +44,8 @@ LOOPS_DIR = GRAPHICS_DIR / "loops"
 IDLE_IMAGE = GRAPHICS_DIR / "idle.png"            # pronto: attesa, fine episodio, un altro?
 REST_IMAGE = GRAPHICS_DIR / "rest.png"            # adesso no: il gufetto dorme (limiti di tempo)
 LISTEN_IMAGE = GRAPHICS_DIR / "listen.png"        # audio in corso: "Si ascolta"
+UNKNOWN_IMAGE = GRAPHICS_DIR / "unknown.png"      # statuina sconosciuta, per qualche secondo
+UNKNOWN_SCREEN_SEC = 4.0
 
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 # Persistiamo il conteggio minuti solo ogni tot secondi di riproduzione continua,
@@ -622,12 +624,25 @@ def refresh_graphic(path):
         player.show_screen(path)
         current_graphic_path = path
 
+# Fino a quando mostrare la statuina sconosciuta (orologio monotono). La
+# statuina può restare appoggiata: dopo UNKNOWN_SCREEN_SEC si torna a "pronto"
+unknown_until = 0.0
+
+def show_unknown():
+    """Statuina non abbinata, o personaggio senza episodi riproducibili: il
+    bambino vede che Cucù l'ha letta, il genitore che c'è da sistemare."""
+    global unknown_until
+    unknown_until = time.monotonic() + UNKNOWN_SCREEN_SEC
+
 def idle_screen(blocked):
     """Schermata quando non va niente (né in riproduzione né in pausa): una
     sola, "pronto", per attesa, fine episodio e statuina tolta (al bambino
     serve solo riconoscere quando può appoggiarne una). Se adesso Cucù non si
     può usare il gufetto dorme, con o senza statuina: anche a fine episodio,
-    che arriva sempre alla fine prima di questo."""
+    che arriva sempre alla fine prima di questo. La statuina sconosciuta
+    vince per i suoi pochi secondi: dice qualcosa anche quando Cucù dorme."""
+    if time.monotonic() < unknown_until:
+        return UNKNOWN_IMAGE
     return REST_IMAGE if blocked else IDLE_IMAGE
 
 # --- LOOP PRINCIPALE ----------------------------------------------------
@@ -719,6 +734,7 @@ try:
                     "pos_ms": pos_ms, "len_ms": len_ms,
                     "album": {"index": album["index"] + 1, "total": len(album["files"])} if album else None,
                     "pin_reset": pin_reset_open(),
+                    "unknown": time.monotonic() < unknown_until,  # statuina sconosciuta: il LED lampeggia
                 })
         except Exception:
             pass
@@ -740,10 +756,14 @@ try:
                 char = tag_map.get(uid)
                 start_blocked_uid = None
                 if char:
-                    if start_video(char) == "played":
+                    result = start_video(char)
+                    if result == "played":
                         current_graphic_path = None  # la TV ora mostra l'episodio
+                    elif result == "missing":
+                        show_unknown()
                 else:
                     print(f"Tag sconosciuto: {uid}")
+                    show_unknown()
             elif tag_removed:
                 start_blocked_uid = None
 
@@ -789,13 +809,17 @@ try:
                 char = tag_map.get(uid)
                 if char:
                     print(f"Nuovo episodio per {char}")
-                    if start_video(char) == "played":
+                    result = start_video(char)
+                    if result == "played":
                         current_graphic_path = None
                     else:
                         start_blocked_uid = uid
+                        if result == "missing":
+                            show_unknown()
                 else:
                     print("Tag sconosciuto post-episodio.")
                     start_blocked_uid = uid
+                    show_unknown()
             elif not has_tag and start_blocked_uid is not None:
                 start_blocked_uid = None
 
