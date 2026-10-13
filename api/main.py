@@ -52,6 +52,33 @@ RUN_STATE_FILE = Path("/run/cucu/last_seen_tag.json")
 
 def _last_seen_file() -> Path:
     return RUN_STATE_FILE if RUN_STATE_FILE.exists() else BASE_DIR / "last_seen_tag.json"
+
+
+# Blocco durante la configurazione: finché vale, read_nfc.py non fa partire
+# niente e la TV mostra "Configurazione". Scadenza breve, rinnovata finché il
+# genitore sta configurando (per l'abbinamento: ogni lettura di /system/scan-tag,
+# ogni 0,6 s): se il telefono smette, scade da solo. Accanto allo stato, in RAM
+LOCK_SEC = 5
+
+
+def _lock_file() -> Path:
+    # stessa scelta di read_nfc.py: /run/cucu se c'è, anche prima che ci sia lo stato
+    run_dir = RUN_STATE_FILE.parent
+    return (run_dir if run_dir.is_dir() else BASE_DIR) / "lock.json"
+
+
+def _hold_lock(reason: str):
+    try:
+        _write_json_atomic(_lock_file(), {"until": time.time() + LOCK_SEC, "reason": reason})
+    except OSError:
+        pass  # senza blocco Cucù funziona come prima
+
+
+def _release_lock():
+    try:
+        _lock_file().unlink()
+    except OSError:
+        pass
 TIME_LIMITS_FILE = BASE_DIR / "time_limits.json"
 TAG_LABELS_FILE = BASE_DIR / "tag_labels.json"
 UI_AUTH_FILE = BASE_DIR / "ui_auth.json"
@@ -1156,6 +1183,7 @@ def add_character_tag(name: str, payload: TagCreate):
     # associa questo UID al personaggio
     tags_map[uid_norm] = name
     save_tags(tags_map)
+    _release_lock()  # abbinata: la TV torna subito a "pronto"
 
     # ritorniamo la lista aggiornata dei tag di questo personaggio
     tag_uids = [
@@ -1227,7 +1255,10 @@ def scan_tag():
     Legge l'ultimo tag visto dal lettore NFC (scritto da read_nfc.py).
     Usato dal wizard di associazione nella UI.
     Ritorna None se non c'è nessun tag o se il dato è troppo vecchio (>3s).
+    Finché il wizard legge, Cucù resta bloccato in "Configurazione": una
+    statuina già abbinata a un altro personaggio non fa partire il suo episodio.
     """
+    _hold_lock("pairing")
     if not _last_seen_file().exists():
         return {"uid": None, "known_character": None}
 

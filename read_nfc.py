@@ -35,6 +35,13 @@ TIME_LIMITS_PATH = BASE_DIR / "time_limits.json"
 RUN_DIR = Path("/run/cucu")
 STATE_IN_RAM = RUN_DIR.is_dir() and os.access(RUN_DIR, os.W_OK)
 STATE_PATH = (RUN_DIR if STATE_IN_RAM else BASE_DIR) / "last_seen_tag.json"
+# Blocco durante la configurazione dall'app (per ora: abbinamento di una statuina).
+# Lo scrive l'API con una scadenza di pochi secondi e lo rinnova finché il
+# genitore sta configurando: se il telefono si blocca o perde la rete il blocco
+# scade da solo. Accanto allo stato, quindi in RAM. Una scadenza oltre
+# LOCK_MAX_SEC da ora (orologio spostato) non vale
+LOCK_PATH = STATE_PATH.with_name("lock.json")
+LOCK_MAX_SEC = 30
 DAILY_USAGE_PATH = BASE_DIR / "daily_usage.json"
 
 # Schermate sulla TV (sorgente e rigenerazione: graphics/src/). Si mostra il loop
@@ -46,6 +53,7 @@ REST_IMAGE = GRAPHICS_DIR / "rest.png"            # adesso no: il gufetto dorme 
 LISTEN_IMAGE = GRAPHICS_DIR / "listen.png"        # audio in corso: "Si ascolta"
 UNKNOWN_IMAGE = GRAPHICS_DIR / "unknown.png"      # statuina sconosciuta, per qualche secondo
 UNKNOWN_SCREEN_SEC = 4.0
+SETUP_IMAGE = GRAPHICS_DIR / "setup.png"          # configurazione dall'app: Cucù non parte
 
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 # Persistiamo il conteggio minuti solo ogni tot secondi di riproduzione continua,
@@ -634,13 +642,23 @@ def show_unknown():
     global unknown_until
     unknown_until = time.monotonic() + UNKNOWN_SCREEN_SEC
 
-def idle_screen(blocked):
+def lock_active():
+    """Vero se l'app sta configurando Cucù (vedi LOCK_PATH)."""
+    try:
+        until = float(json.loads(LOCK_PATH.read_text()).get("until", 0))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+    return 0 < until - time.time() <= LOCK_MAX_SEC
+
+def idle_screen(blocked, locked=False):
     """Schermata quando non va niente (né in riproduzione né in pausa): una
     sola, "pronto", per attesa, fine episodio e statuina tolta (al bambino
     serve solo riconoscere quando può appoggiarne una). Se adesso Cucù non si
     può usare il gufetto dorme, con o senza statuina: anche a fine episodio,
     che arriva sempre alla fine prima di questo. La statuina sconosciuta
     vince per i suoi pochi secondi: dice qualcosa anche quando Cucù dorme."""
+    if locked:
+        return SETUP_IMAGE
     if time.monotonic() < unknown_until:
         return UNKNOWN_IMAGE
     return REST_IMAGE if blocked else IDLE_IMAGE
@@ -717,6 +735,7 @@ try:
         except Exception as e:
             print(f"[WARN] Limiti di tempo illeggibili ({e}): nessun limite.")
             blocked = False
+        locked = lock_active()
         try:
             pos_ms = len_ms = None
             if mode in ("playing", "paused") and album is not None:
@@ -735,6 +754,7 @@ try:
                     "album": {"index": album["index"] + 1, "total": len(album["files"])} if album else None,
                     "pin_reset": pin_reset_open(),
                     "unknown": time.monotonic() < unknown_until,  # statuina sconosciuta: il LED lampeggia
+                    "locked": locked,  # configurazione dall'app
                 })
         except Exception:
             pass
@@ -752,7 +772,11 @@ try:
 
         # 3. Logica stati
         if mode == "idle":
-            if tag_just_added:
+            if tag_just_added and locked:
+                # l'app sta configurando (es. abbina questa statuina): non parte
+                # niente, e finita la configurazione va tolta e rimessa
+                start_blocked_uid = uid
+            elif tag_just_added:
                 char = tag_map.get(uid)
                 start_blocked_uid = None
                 if char:
@@ -805,7 +829,9 @@ try:
             # Qui accettiamo qualsiasi NUOVO tag.
             # Usiamo has_tag per essere sicuri di prendere anche uno swap immediato
             # (una statuina già rifiutata per i limiti non si ritenta a ogni tick)
-            if has_tag and uid != start_blocked_uid:
+            if has_tag and uid != start_blocked_uid and locked:
+                start_blocked_uid = uid  # come in idle: durante il blocco non parte niente
+            elif has_tag and uid != start_blocked_uid:
                 char = tag_map.get(uid)
                 if char:
                     print(f"Nuovo episodio per {char}")
@@ -826,7 +852,7 @@ try:
         # Schermata quando non va niente: segue anche i cambi senza statuina
         # (si apre o si chiude una fascia oraria, finiscono i minuti)
         if mode not in ("playing", "paused"):
-            refresh_graphic(idle_screen(blocked))
+            refresh_graphic(idle_screen(blocked, locked))
 
         # Aggiorna tracking
         last_uid = uid
