@@ -78,9 +78,10 @@ cucu-device/
 │   ├── main.py                 # Server FastAPI (porta 80)
 │   └── index.html              # Frontend web (SPA single-file)
 ├── graphics/
-│   ├── idle.png                # Schermata riposo (nessun tag)
-│   ├── splash.png              # Splash screen al boot
-│   └── wait_next.png           # Schermata "rimetti la statuetta"
+│   ├── idle.png                # Schermata "pronto" (ripiego se manca loops/idle.mp4)
+│   ├── rest.png                # Schermata riposo: il gufetto dorme (limiti di tempo)
+│   ├── loops/                  # Schermate animate (idle, rest, listen)
+│   └── splash.png              # Splash screen al boot
 ├── characters/
 │   └── <nome>/
 │       ├── profile.png         # Immagine personaggio (usata dall'UI)
@@ -91,8 +92,7 @@ cucu-device/
     ├── cucu-device-api.service # Servizio API web
     ├── cucu-led.service        # LED di stato
     ├── splashscreen.service    # Splash screen al boot
-    ├── cucu-device-updater.service
-    └── cucu-device-updater.timer
+    └── cucu-device-updater.service # OTA, avviato dalla web UI
 ```
 
 ---
@@ -205,14 +205,11 @@ sudo systemctl restart cucu-device-api.service
 
 ## Gestione OTA
 
-Gli aggiornamenti automatici vengono controllati ogni notte alle 3:00.
+Gli aggiornamenti sono solo manuali: la web UI segnala quando ce n'è uno nuovo e il genitore lo installa da Impostazioni ("Aggiorna ora"). Niente aggiornamento automatico notturno: di notte Cucù è quasi sempre spento.
 
 ```bash
-# Forza un aggiornamento manuale immediato
+# Aggiornamento a mano, come "Aggiorna ora"
 sudo bash ~/cucu-device/updater.sh
-
-# Controlla lo stato del timer
-systemctl status cucu-device-updater.timer
 
 # Leggi il log aggiornamenti
 tail -f ~/cucu-device/logs/updater.log
@@ -254,7 +251,7 @@ Configura le reti Wi-Fi dall'interfaccia web (`/api/wifi`).
 | `cucu-led.service` | boot (presto) | LED di stato (hardware v2) |
 | `cucu-device-api.service` | boot | FastAPI su porta 80 |
 | `splashscreen.service` | sysinit | Splash PNG su framebuffer |
-| `cucu-device-updater.timer` | boot | Trigger OTA ogni notte alle 3:00 |
+| `cucu-device-updater.service` | dalla web UI | Aggiornamento OTA ("Aggiorna ora") |
 
 ```bash
 sudo systemctl status cucu-device.service

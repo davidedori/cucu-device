@@ -33,9 +33,7 @@ DAILY_USAGE_PATH = BASE_DIR / "daily_usage.json"
 # animato graphics/loops/<nome>.mp4 con lo stesso nome della PNG; la PNG resta
 # come ripiego se il video manca
 LOOPS_DIR = GRAPHICS_DIR / "loops"
-IDLE_IMAGE = GRAPHICS_DIR / "idle.png"            # appoggia una statuina
-END_IMAGE = GRAPHICS_DIR / "end.png"              # episodio finito: togli la statuina
-WAIT_NEXT_IMAGE = GRAPHICS_DIR / "wait_next.png"  # statuina tolta: un altro? si decide insieme
+IDLE_IMAGE = GRAPHICS_DIR / "idle.png"            # pronto: attesa, fine episodio, un altro?
 REST_IMAGE = GRAPHICS_DIR / "rest.png"            # adesso no: il gufetto dorme (limiti di tempo)
 LISTEN_IMAGE = GRAPHICS_DIR / "listen.png"        # audio in corso: "Si ascolta"
 
@@ -597,16 +595,12 @@ def refresh_graphic(path):
         current_graphic_path = path
 
 def idle_screen(blocked):
-    """Schermata quando non va niente (né in riproduzione né in pausa). Se
-    adesso Cucù non si può usare il gufetto dorme, con o senza statuina:
-    anche a fine episodio, che arriva sempre alla fine prima di questo."""
-    if blocked:
-        return REST_IMAGE
-    if mode == "ended_wait_remove":
-        return END_IMAGE
-    if mode == "ended_wait_return":
-        return WAIT_NEXT_IMAGE
-    return IDLE_IMAGE
+    """Schermata quando non va niente (né in riproduzione né in pausa): una
+    sola, "pronto", per attesa, fine episodio e statuina tolta (al bambino
+    serve solo riconoscere quando può appoggiarne una). Se adesso Cucù non si
+    può usare il gufetto dorme, con o senza statuina: anche a fine episodio,
+    che arriva sempre alla fine prima di questo."""
+    return REST_IMAGE if blocked else IDLE_IMAGE
 
 # --- LOOP PRINCIPALE ----------------------------------------------------
 
