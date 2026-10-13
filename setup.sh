@@ -264,7 +264,7 @@ ${DEPLOY_USER} ALL=(ALL) NOPASSWD: /bin/systemctl restart cucu-device.service
 ${DEPLOY_USER} ALL=(ALL) NOPASSWD: /bin/systemctl stop cucu-device.service
 ${DEPLOY_USER} ALL=(ALL) NOPASSWD: /bin/systemctl start cucu-device.service
 
-# Aggiornamento OTA manuale dalla web UI (stesso oneshot del timer notturno)
+# Aggiornamento OTA dalla web UI ("Aggiorna ora")
 ${DEPLOY_USER} ALL=(ALL) NOPASSWD: /bin/systemctl start cucu-device-updater.service
 
 # Gestione Wi-Fi tramite nmcli (usato dall'API web)
@@ -304,7 +304,6 @@ SERVICES=(
     cucu-device-api.service
     cucu-led.service
     cucu-device-updater.service
-    cucu-device-updater.timer
 )
 
 DEPLOY_UID="$(id -u "$DEPLOY_USER")"
@@ -323,8 +322,8 @@ done
 systemctl daemon-reload
 ok "daemon-reload eseguito"
 
-# Abilita i servizi applicativi e il timer OTA
-# Il .service dell'updater NON viene abilitato direttamente (lo lancia il timer)
+# Abilita i servizi applicativi. Il .service dell'updater NON viene abilitato:
+# lo avvia la web UI quando il genitore sceglie "Aggiorna ora"
 for svc in cucu-device.service cucu-device-api.service cucu-led.service; do
     systemctl enable "$svc"
     ok "Abilitato all'avvio: $svc"
@@ -336,8 +335,13 @@ if systemctl is-enabled splashscreen.service &>/dev/null; then
     rm -f /etc/systemd/system/splashscreen.service
     ok "splashscreen.service rimosso (sostituito da Plymouth)"
 fi
-systemctl enable cucu-device-updater.timer
-ok "Timer OTA abilitato: cucu-device-updater.timer (ogni notte alle 3:00)"
+# Niente più aggiornamento automatico notturno: via il timer delle installazioni precedenti
+if [ -f /etc/systemd/system/cucu-device-updater.timer ]; then
+    systemctl disable --now cucu-device-updater.timer || true
+    rm -f /etc/systemd/system/cucu-device-updater.timer
+    systemctl daemon-reload
+    ok "Timer OTA rimosso: gli aggiornamenti si avviano dalla web UI"
+fi
 
 # =============================================================================
 # STEP 9 — CONFIGURAZIONE OTA
@@ -551,7 +555,7 @@ echo ""
 printf "  %-14s %s\n" "Hotspot:"   "${NEW_HOSTNAME}_AP (password: cucusetup)"
 echo ""
 echo -e "  ${BOLD}Prossimi passi:${NC}"
-echo "   1. Configura l'aggiornamento automatico (OTA):"
+echo "   1. Configura gli aggiornamenti (si avviano dalla web UI):"
 echo "      nano ${PROJECT_DIR}/config.env"
 echo "      → imposta REPO_URL=https://github.com/davidedori/cucu-device"
 echo ""

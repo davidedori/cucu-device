@@ -266,14 +266,32 @@ def reload_tags_if_changed():
 
 # Limiti di tempo/fascia oraria (genitore). Fallback SEMPRE permissivo: un file
 # assente o corrotto non deve mai bloccare l'avvio del servizio né la visione.
-try:
-    with TIME_LIMITS_PATH.open() as f:
-        time_limits_config = json.load(f)
-except FileNotFoundError:
-    time_limits_config = {"enabled": False}
-except json.JSONDecodeError as e:
-    print(f"[ERROR] {TIME_LIMITS_PATH} corrotto ({e}), limiti disattivati.")
-    time_limits_config = {"enabled": False}
+# La web UI li cambia mentre il servizio gira: si ricaricano quando cambia il
+# file (una stat() per tick, come tags.json), senza riavviare il servizio
+time_limits_config = {"enabled": False}
+time_limits_mtime = None
+
+def reload_time_limits_if_changed():
+    global time_limits_config, time_limits_mtime
+    try:
+        mtime = TIME_LIMITS_PATH.stat().st_mtime_ns
+    except OSError:
+        if time_limits_mtime is not None:
+            time_limits_config, time_limits_mtime = {"enabled": False}, None
+            print("time_limits.json rimosso: limiti disattivati.")
+        return
+    if mtime == time_limits_mtime:
+        return
+    time_limits_mtime = mtime
+    try:
+        with TIME_LIMITS_PATH.open() as f:
+            time_limits_config = json.load(f)
+        print("time_limits.json caricato.")
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"[ERROR] {TIME_LIMITS_PATH} illeggibile ({e}), limiti disattivati.")
+        time_limits_config = {"enabled": False}
+
+reload_time_limits_if_changed()
 
 # Minuti di riproduzione effettivi consumati nella giornata corrente.
 try:
@@ -645,6 +663,7 @@ try:
 
         # 2. Lettura NFC
         reload_tags_if_changed()
+        reload_time_limits_if_changed()
         uid = reader.read_uid()
         has_tag = uid is not None
 

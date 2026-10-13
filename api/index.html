@@ -269,6 +269,7 @@
     /* Avvisi: azzurro per un'informazione da sapere, albicocca quando succede adesso */
     .note { border-radius: 14px; padding: 12px 14px; font-size: 15px; line-height: 1.4; background: var(--blue); color: var(--blue-ink); }
     .note.alert { background: var(--apricot); color: var(--apricot-ink); }
+    a.update-banner { display: block; margin-bottom: 16px; text-decoration: none; }
     .note strong { font-weight: 600; }
 
     .rows { margin: 4px -18px 0; }
@@ -1167,6 +1168,9 @@
   </nav>
 
   <main>
+    <!-- C'è un aggiornamento: lo installa il genitore quando vuole (niente aggiornamenti automatici) -->
+    <a class="note update-banner hidden" id="update-banner" href="#/impostazioni"><strong>C'è un aggiornamento di Cucù.</strong> Lo installi quando vuoi, da Impostazioni.</a>
+
     <!-- Adesso: cosa succede sulla TV -->
     <section id="view-adesso" class="view hidden" aria-labelledby="t-adesso">
       <h1 id="t-adesso" class="sr-only">Adesso</h1>
@@ -1216,7 +1220,7 @@
       <div class="view-head">
         <h1 id="t-tempo">Tempo</h1>
       </div>
-      <p class="lead">Scegli quanti minuti e in quali orari si possono guardare i cartoni. Quando il tempo finisce, l'episodio in corso arriva alla fine e poi il gufetto va a dormire. Le modifiche valgono dalla fine dell'episodio in corso.</p>
+      <p class="lead">Scegli quanti minuti e in quali orari si possono guardare i cartoni. Quando il tempo finisce, l'episodio in corso arriva alla fine e poi il gufetto va a dormire. Le modifiche valgono subito.</p>
 
       <div class="stack">
         <div class="panel">
@@ -1270,7 +1274,7 @@
 
         <div class="panel">
           <h2>Aggiornamenti</h2>
-          <div class="panel-sub" style="margin-top:6px" id="update-text">Cucù si aggiorna da solo di notte. Puoi anche controllare adesso.</div>
+          <div class="panel-sub" style="margin-top:6px" id="update-text">Gli aggiornamenti li installi tu, quando vuoi: Cucù ti avvisa quando ce n'è uno nuovo.</div>
           <div class="stack">
             <button class="btn btn-block" id="update-check">Controlla aggiornamenti</button>
             <button class="btn btn-primary btn-block hidden" id="update-apply">Aggiorna ora</button>
@@ -1752,6 +1756,7 @@
         return;
       }
       lastSection = r.section;
+      drawUpdateBanner();
 
       stopTagScan();
       stopNowPolling();
@@ -2668,9 +2673,8 @@
     async function toggleExempt(checkbox) {
       const checked = checkbox.checked;
       try {
-        const res = await api(`/characters/${enc(current.name)}/time-limit-exempt`, { method: 'PUT', body: { exempt: checked } });
-        if (res.restart === 'immediate') toast(checked ? 'Ora può partire a qualsiasi ora' : 'Ora segue minuti e orari');
-        else toast('Salvato: vale dalla fine dell\'episodio in corso');
+        await api(`/characters/${enc(current.name)}/time-limit-exempt`, { method: 'PUT', body: { exempt: checked } });
+        toast(checked ? 'Ora può partire a qualsiasi ora' : 'Ora segue minuti e orari');
       } catch (e) {
         checkbox.checked = !checked;
         toast(e.message);
@@ -3178,11 +3182,10 @@
       const btn = $('tl-save');
       btn.disabled = true;
       try {
-        const res = await api('/system/time-limits', { method: 'POST', body: tl.draft });
+        await api('/system/time-limits', { method: 'POST', body: tl.draft });
         tl.saved = clone(tl.draft);
         updateSaveBar();
-        if (res.restart === 'immediate') showReconnect('Applico le modifiche', 'Il lettore si riavvia: ci vuole qualche secondo.');
-        else toast('Salvato: vale dalla fine dell\'episodio in corso');
+        toast('Salvato');
       } catch (e) {
         toast(e.message);
       } finally {
@@ -3571,6 +3574,40 @@
     });
 
     let updatesChecked = false;
+    // Ultima versione vista sul repository (null: nessuna informazione)
+    let latestVersion = null;
+    const UPDATE_CHECK_EVERY = 3 * 3600 * 1000;  // il controllo automatico, al massimo ogni 3 ore
+
+    const versionParts = v => String(v || '').split('.').map(n => parseInt(n, 10) || 0);
+    function versionGt(a, b) {
+      const x = versionParts(a), y = versionParts(b);
+      for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+      return false;
+    }
+
+    function rememberLatest(v) {
+      latestVersion = v;
+      try { localStorage.setItem('cucu-update', JSON.stringify({ at: Date.now(), latest: v })); } catch (_) { /* solo una comodità */ }
+    }
+
+    function drawUpdateBanner() {
+      const show = !!latestVersion && !!info && versionGt(latestVersion, info.version) && parseRoute().section !== 'impostazioni';
+      $('update-banner').classList.toggle('hidden', !show);
+    }
+
+    // All'apertura dell'app: se c'è una versione nuova lo si dice in cima alla pagina.
+    // In silenzio se Cucù non è collegato a internet
+    async function autoCheckUpdates() {
+      let cached = null;
+      try { cached = JSON.parse(localStorage.getItem('cucu-update') || 'null'); } catch (_) { /* niente cache */ }
+      if (cached && Date.now() - cached.at < UPDATE_CHECK_EVERY) {
+        latestVersion = cached.latest;
+      } else {
+        try { rememberLatest((await api('/system/update-check')).latest_version); } catch (_) { return; }
+      }
+      if (!info) { try { info = await api('/system/info'); } catch (_) { return; } }
+      drawUpdateBanner();
+    }
 
     async function checkUpdates() {
       updatesChecked = true;
@@ -3581,6 +3618,8 @@
       apply.classList.add('hidden');
       try {
         const d = await api('/system/update-check');
+        rememberLatest(d.latest_version);
+        drawUpdateBanner();
         if (d.update_available) {
           $('update-text').textContent = `C'è una nuova versione: ${d.latest_version} (ora ${d.current_version}).`;
           apply.textContent = `Aggiorna alla ${d.latest_version}`;
@@ -3601,15 +3640,18 @@
     $('update-check').addEventListener('click', checkUpdates);
 
     $('update-apply').addEventListener('click', async () => {
+      // Mai interrompere un cartone senza chiederlo: se ce n'è uno in corso lo si dice
+      let busy = false;
+      try { const n = await api('/system/now'); busy = n.alive && (n.mode === 'playing' || n.mode === 'paused'); } catch (_) { /* si chiede comunque conferma */ }
       const ok = await confirmSheet({
-        title: 'Aggiornare adesso?',
-        text: 'Cucù scarica la nuova versione e si riavvia. Se un cartone è in corso si ferma.',
-        ok: 'Aggiorna',
+        title: busy ? 'C\'è un cartone in corso' : 'Aggiornare adesso?',
+        text: (busy ? 'Aggiornando si interrompe. ' : '') + 'Cucù scarica la nuova versione e si riavvia: ci vuole qualche minuto. Non spegnerlo finché non ha finito.',
+        ok: busy ? 'Interrompi e aggiorna' : 'Aggiorna',
       });
       if (!ok) return;
       try {
-        await api('/system/update', { method: 'POST' });
-        showReconnect('Aggiornamento in corso', 'Può volerci qualche minuto. La pagina si ricarica da sola.');
+        await api('/system/update', { method: 'POST', body: { force: busy } });
+        showReconnect('Aggiornamento in corso', 'Può volerci qualche minuto: non spegnere Cucù. La pagina si ricarica da sola.');
       } catch (e) { toast(e.message); }
     });
 
@@ -3994,6 +4036,7 @@
         $('homescreen-guide').addEventListener('click', showHomeScreenGuide);
       }
       maybeOfferOnStart();
+      autoCheckUpdates();
     }
 
     (async () => {

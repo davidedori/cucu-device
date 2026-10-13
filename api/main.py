@@ -1081,11 +1081,10 @@ def get_character(name: str, request: Request):
     }
 
 @app.put("/characters/{name}/time-limit-exempt")
-def set_character_time_limit_exempt(name: str, payload: TimeLimitExempt, background_tasks: BackgroundTasks):
+def set_character_time_limit_exempt(name: str, payload: TimeLimitExempt):
     """
     Esclude (o reinclude) questo personaggio dai limiti di tempo globali.
-    Riavvia cucu-device.service per applicare subito, differendo il riavvio
-    se il player sta riproducendo/in pausa un video in questo momento.
+    read_nfc.py ricarica time_limits.json da solo quando cambia: vale subito.
     """
     char_dir = CHARACTERS_DIR / name
     if not char_dir.exists() or not char_dir.is_dir():
@@ -1098,10 +1097,7 @@ def set_character_time_limit_exempt(name: str, payload: TimeLimitExempt, backgro
     elif not payload.exempt and name in exempt_list:
         exempt_list.remove(name)
     save_time_limits(limits)
-
-    restart = _schedule_restart(background_tasks)
-
-    return {"character": name, "time_limit_exempt": payload.exempt, "restart": restart}
+    return {"character": name, "time_limit_exempt": payload.exempt}
 
 @app.get("/characters/{name}/tags")
 def get_character_tags(name: str):
@@ -1261,11 +1257,11 @@ def get_time_limits():
     }
 
 @app.post("/system/time-limits")
-def set_time_limits(payload: TimeLimitsConfig, background_tasks: BackgroundTasks):
+def set_time_limits(payload: TimeLimitsConfig):
     """
-    Salva la configurazione dei limiti di tempo e riavvia cucu-device.service
-    per applicarla — subito se il player è libero, altrimenti al termine
-    della visione in corso (non interrompiamo mai un episodio già avviato).
+    Salva la configurazione dei limiti di tempo. read_nfc.py la ricarica da solo
+    quando il file cambia: vale subito, senza riavviare il servizio. Un episodio
+    già iniziato finisce comunque (i limiti decidono solo se uno può partire).
     """
     _validate_time_limits(payload)
 
@@ -1275,10 +1271,7 @@ def set_time_limits(payload: TimeLimitsConfig, background_tasks: BackgroundTasks
         "exempt_characters": payload.exempt_characters,
     }
     save_time_limits(data)
-
-    restart = _schedule_restart(background_tasks)
-
-    return {"status": "ok", "restart": restart}
+    return {"status": "ok"}
 
 @app.get("/system/time-limits/usage")
 def get_time_limits_usage():
@@ -1804,36 +1797,6 @@ def _is_player_busy():
         return False
     return data.get("mode") in ("playing", "paused")
 
-def _restart_service_when_safe_task(max_wait_seconds=1800, poll_interval=5):
-    """
-    Come _restart_service_task, ma aspetta che il player non sia occupato
-    (playing/paused) prima di riavviare, per non interrompere un episodio in
-    corso. Se resta occupato oltre max_wait_seconds rinuncia: la config è già
-    salvata su disco e verrà applicata al prossimo riavvio naturale del
-    servizio (OTA, riavvio manuale, reboot), quindi non è mai persa.
-    """
-    log_file = BASE_DIR / "restart.log"
-    waited = 0
-    while _is_player_busy() and waited < max_wait_seconds:
-        time.sleep(poll_interval)
-        waited += poll_interval
-    if _is_player_busy():
-        try:
-            with log_file.open("a") as f:
-                f.write(f"[{time.ctime()}] Riavvio per limiti di tempo rinunciato dopo {waited}s: player ancora occupato.\n")
-        except Exception:
-            pass
-        return
-    _restart_service_task()
-
-def _schedule_restart(background_tasks: BackgroundTasks) -> str:
-    """Accoda il riavvio del player, subito o differito, e ritorna quale dei due."""
-    if _is_player_busy():
-        background_tasks.add_task(_restart_service_when_safe_task)
-        return "deferred"
-    background_tasks.add_task(_restart_service_task)
-    return "immediate"
-
 @app.delete("/characters/{name}")
 def delete_character(name: str):
     """
@@ -1974,14 +1937,27 @@ def _update_service_task():
             f.write(f"[{time.ctime()}] EXCEPTION avvio updater: {e}\n")
 
 
+# Richiesta di aggiornamento per updater.sh: sotto systemd parte solo se c'è
+# ed è recente (gli aggiornamenti sono solo manuali, niente timer)
+UPDATE_REQUEST_FILE = BASE_DIR / "update_request.json"
+UPDATE_REQUEST_SEC = 600  # stessa costante in updater.sh
+
+
+class UpdateStart(BaseModel):
+    force: bool = False  # aggiornare anche se c'è un episodio in corso
+
+
 @app.post("/system/update")
-def start_update(background_tasks: BackgroundTasks):
+def start_update(background_tasks: BackgroundTasks, body: UpdateStart = UpdateStart()):
     """
-    Avvia subito un aggiornamento OTA lanciando cucu-device-updater.service,
-    lo stesso oneshot usato dal timer notturno: gira come root e gestisce già
-    fetch/reset, backup di tags.json, restart servizi e rollback automatico
-    se l'health check fallisce.
+    Avvia un aggiornamento OTA lanciando cucu-device-updater.service (oneshot
+    come root: fetch/reset, backup dei file utente, restart servizi e rollback
+    automatico se l'health check fallisce). Lo decide solo il genitore: con un
+    episodio in corso risponde 409, e la web UI chiede conferma (force).
     """
+    if _is_player_busy() and not body.force:
+        raise HTTPException(status_code=409, detail="C'è un episodio in corso")
+    _write_json_atomic(UPDATE_REQUEST_FILE, {"until": int(time.time()) + UPDATE_REQUEST_SEC})
     background_tasks.add_task(_update_service_task)
     return {"status": "ok", "message": "Aggiornamento avviato..."}
 

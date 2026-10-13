@@ -2,9 +2,16 @@
 # =============================================================================
 # updater.sh — cucu-device OTA updater
 #
-# Eseguire come root (lanciato da cucu-device-updater.service via systemd timer).
+# Eseguire come root. Gli aggiornamenti sono solo manuali: li avvia il genitore
+# dalla web UI ("Aggiorna ora": l'API scrive update_request.json e avvia
+# cucu-device-updater.service), oppure a mano con  sudo bash updater.sh
+# Niente più timer notturno: di notte Cucù è quasi sempre spento, e con
+# Persistent=true l'aggiornamento partiva all'accensione, mentre il bambino
+# voleva guardare un cartone.
 #
 # Flusso:
+#   0. Toglie il vecchio timer notturno se c'è; sotto systemd procede solo se
+#      la web UI ha chiesto l'aggiornamento da poco (update_request.json)
 #   1. Legge config.env (REPO_URL, UPDATE_CHANNEL, AUTO_UPDATE)
 #   2. Scarica version.json dal repo remoto
 #   3. Confronta con VERSION locale (semver)
@@ -58,6 +65,35 @@ log "=================================================="
 if [ "$EUID" -ne 0 ]; then
     fail "Updater richiede privilegi root. Eseguire tramite systemd o con sudo."
     exit 1
+fi
+
+# ---- SOLO AGGIORNAMENTI MANUALI ---------------------------------------------
+# Dispositivi installati prima di questa versione: il timer notturno è ancora
+# abilitato. Si toglie qui, all'inizio, perché questo pezzo gira sempre con la
+# versione nuova dello script (le funzioni più sotto, durante l'aggiornamento
+# che porta questa modifica, girano ancora con quella vecchia)
+TIMER_UNIT="/etc/systemd/system/cucu-device-updater.timer"
+if [ -f "$TIMER_UNIT" ]; then
+    systemctl disable --now cucu-device-updater.timer 2>>"$LOG_FILE" || true
+    rm -f "$TIMER_UNIT"
+    systemctl daemon-reload
+    ok "Timer notturno rimosso: gli aggiornamenti si avviano dalla web UI"
+fi
+
+# Sotto systemd (INVOCATION_ID) l'aggiornamento parte solo se la web UI l'ha
+# chiesto da poco: un vecchio timer rimasto, o qualunque altro avvio del
+# servizio, non aggiorna di nascosto. A mano (sudo bash updater.sh) va sempre.
+# Scadenza oltre UPDATE_REQUEST_SEC da ora (orologio tornato indietro) = non valida
+REQUEST_FILE="$PROJECT_DIR/update_request.json"
+UPDATE_REQUEST_SEC=600
+if [ -n "${INVOCATION_ID:-}" ]; then
+    REQ_UNTIL="$(grep -o '"until"[[:space:]]*:[[:space:]]*[0-9]*' "$REQUEST_FILE" 2>/dev/null | grep -o '[0-9]*$' || true)"
+    rm -f "$REQUEST_FILE"
+    NOW_S="$(date +%s)"
+    if [ -z "$REQ_UNTIL" ] || [ "$REQ_UNTIL" -le "$NOW_S" ] || [ "$((REQ_UNTIL - NOW_S))" -gt "$UPDATE_REQUEST_SEC" ]; then
+        log "Nessuna richiesta dalla web UI: aggiornamento non avviato (solo manuali)"
+        exit 0
+    fi
 fi
 
 # ---- CARICA CONFIGURAZIONE --------------------------------------------------
@@ -207,7 +243,7 @@ rollback() {
 _apply_service_files() {
     local changed=0
     for svc in cucu-device.service cucu-device-api.service splashscreen.service \
-               cucu-led.service cucu-device-updater.service cucu-device-updater.timer; do
+               cucu-led.service cucu-device-updater.service; do
         if [ -f "$PROJECT_DIR/systemd/$svc" ]; then
             local _uid
             _uid="$(id -u "$DEPLOY_USER")"
