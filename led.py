@@ -6,9 +6,9 @@ anima il LED a 50Hz con il PWM hardware, indipendentemente dal loop NFC.
 
 Comportamento:
 - avvio, o read_nfc.py fermo/bloccato → respiro veloce
-- idle, pausa, fine episodio          → respiro lento
-- video in corso, o visione bloccata  → fisso (30%)
-  dai limiti di tempo
+- episodio in corso                   → respiro lento
+- pronto (attesa, pausa, fine          → fisso (30%)
+  episodio), o riposo per i limiti
 - finestra per un nuovo PIN aperta    → doppio lampeggio (vince sugli altri,
   così il genitore vede che il gesto con la statuina ha funzionato)
 
@@ -48,8 +48,8 @@ PWM_PERIOD_NS = 100_000  # 10 kHz: nessuno sfarfallio visibile
 # sul prototipo v2.
 BREATH_MAX = 100.0       # picco del respiro
 BREATH_MIN = 30.0        # minimo del respiro (mai spento)
-STEADY = 30.0            # fisso durante la riproduzione / visione bloccata
-SLOW_PERIOD_SEC = 5.0    # respiro lento: idle, pausa
+STEADY = 30.0            # fisso: pronto, pausa, riposo
+SLOW_PERIOD_SEC = 5.0    # respiro lento: episodio in corso
 FAST_PERIOD_SEC = 1.5    # respiro veloce: avvio, programma principale fermo
 FADE_SEC = 0.6           # dissolvenza tra un effetto e l'altro
 
@@ -94,9 +94,9 @@ def effect_for_state(state, alive):
         return "fast"
     if state.get("pin_reset"):
         return "blink"
-    if state.get("mode") == "playing" or state.get("blocked"):
-        return "steady"
-    return "slow"
+    if state.get("mode") == "playing":
+        return "slow"
+    return "steady"
 
 
 def read_state():
