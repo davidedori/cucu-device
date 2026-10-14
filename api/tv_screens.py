@@ -191,6 +191,6 @@ def render_help(run_dir: Path, graphics_dir: Path, host: str, ap_ssid: str = Non
              "notes": [[("oppure vai su ", False), (host, True)]]},
         ]
         qr = f"http://{host}/"
-    pill = [("Puoi scegliere un ", False), ("nuovo PIN", True), (" entro 10 minuti", False)] if pin_open else None
+    pill = [("Puoi scegliere un ", False), ("nuovo PIN", True), (" finché lasci qui la statuina", False)] if pin_open else None
     render("Eccomi!", items, qr, run_dir / "help_overlay.png", graphics_dir / "first.png",
            run_dir / "help_screen.png", pill=pill, pill_colors=PIN)

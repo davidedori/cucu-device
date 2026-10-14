@@ -483,10 +483,10 @@ def api_root():
 # Facoltativo: finché non viene impostato la UI resta aperta come prima.
 # Non è sicurezza contro un attaccante (la pagina viaggia in HTTP sulla rete di
 # casa): serve a evitare che bambini o ospiti cambino le impostazioni.
-# PIN dimenticato: la stessa statuina appoggiata 5 volte di fila apre per 10
-# minuti una finestra (pin_reset.json, scritto da read_nfc.py) in cui
-# /auth/reset accetta un PIN nuovo. In alternativa si cancella ui_auth.json
-# via SSH (vedi CHEATSHEET.md).
+# PIN dimenticato: la stessa statuina appoggiata 5 volte di fila apre una finestra
+# (pin_reset.json, scritto e rinnovato da read_nfc.py finché la statuina resta
+# appoggiata) in cui /auth/reset accetta un PIN nuovo. In alternativa si cancella
+# ui_auth.json via SSH (vedi CHEATSHEET.md).
 
 SESSION_COOKIE = "cucu_session"
 SESSION_DAYS = 90
@@ -496,8 +496,9 @@ _PIN_RE = re.compile(r"^\d{4,8}$")
 # Percorsi sempre aperti: la pagina, i suoi asset e il login stesso
 _PUBLIC_PATHS = {"/", "/api", "/manifest.webmanifest", "/auth/status", "/auth/login", "/auth/setup", "/auth/logout", "/auth/reset"}
 
-PIN_RESET_FILE = BASE_DIR / "pin_reset.json"
-PIN_RESET_SEC = 600  # stessa costante in read_nfc.py
+# In RAM accanto allo stato, come lo scrive read_nfc.py (rinnovato ogni pochi secondi)
+PIN_RESET_FILE = RUN_STATE_FILE.parent / "pin_reset.json"
+PIN_RESET_SEC = 20  # stessa costante in read_nfc.py
 
 def pin_reset_open() -> bool:
     """Finestra per un nuovo PIN aperta dal gesto con la statuina. Una scadenza
@@ -609,8 +610,9 @@ HOTSPOT_DEFAULT_PASSWORD = "cucusetup"   # come in setup_hotspot.sh
 
 
 # - "Eccomi!" dopo il gesto d'emergenza (stessa statuina 5 volte): read_nfc.py scrive
-#   help_request.json (con la scadenza), qui lo si vede entro un secondo e si disegna
-#   come raggiungere Cucù adesso; help.json dice a read_nfc.py che è pronta
+#   help_request.json, qui lo si vede entro un secondo e si disegna come raggiungere
+#   Cucù adesso; help.json dice a read_nfc.py che è pronta. Resta finché la statuina
+#   è appoggiata: lo decide read_nfc.py, che poi cancella i due file
 HELP_REQUEST_FILE = RUN_STATE_FILE.parent / "help_request.json"
 HELP_FILE = RUN_STATE_FILE.parent / "help.json"
 
@@ -632,7 +634,7 @@ def _active_wifi():
     return None, False
 
 
-def _render_help(until: float):
+def _render_help():
     run_dir = RUN_STATE_FILE.parent
     host = f"{socket.gethostname()}.local"
     ssid, on_hotspot = _active_wifi()
@@ -644,7 +646,7 @@ def _render_help(until: float):
     else:
         tv_screens.render_help(run_dir, GRAPHICS_DIR, host, ssid=ssid,
                                pin_open=load_ui_auth() is not None and pin_reset_open())
-    _write_json_atomic(HELP_FILE, {"until": until})
+    _write_json_atomic(HELP_FILE, {"at": time.time()})
 
 
 def _help_worker():
@@ -657,9 +659,7 @@ def _help_worker():
             if stamp == last:
                 continue
             last = stamp
-            until = float(json.loads(HELP_REQUEST_FILE.read_text()).get("until", 0))
-            if until > time.time():
-                _render_help(until)
+            _render_help()
         except FileNotFoundError:
             continue
         except Exception as e:
@@ -832,7 +832,7 @@ def auth_reset(payload: PinPayload):
     if load_ui_auth() is None:
         raise HTTPException(status_code=400, detail="Nessun PIN impostato.")
     if not pin_reset_open():
-        raise HTTPException(status_code=403, detail="Il tempo per il nuovo PIN è scaduto: ripeti il gesto con la statuina.")
+        raise HTTPException(status_code=403, detail="La statuina è stata tolta da Cucù: ripeti il gesto e lasciala appoggiata.")
     _validate_new_pin(payload.pin)
     _save_pin(payload.pin)
     # Una finestra serve per un solo PIN nuovo

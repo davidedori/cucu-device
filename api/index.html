@@ -3900,8 +3900,8 @@
       setTimeout(() => input.focus(), 100);
     }
 
-    // PIN dimenticato: il gesto con la statuina (read_nfc.py) apre per 10 minuti
-    // una finestra in cui /auth/reset accetta un PIN nuovo. Qui si aspetta che
+    // PIN dimenticato: il gesto con la statuina (read_nfc.py) apre, finché la statuina
+    // resta appoggiata, una finestra in cui /auth/reset accetta un PIN nuovo. Qui si aspetta che
     // /auth/status la segnali, poi si chiede il PIN nuovo
     let resetPoll = null;
 
@@ -3913,7 +3913,7 @@
     function renderLockForgot() {
       stopResetPoll();
       lockView('Un PIN nuovo',
-        'Appoggia su Cucù la stessa statuina 5 volte di fila, togliendola ogni volta. Quando la luce fa un doppio lampeggio, qui potrai scegliere un PIN nuovo.',
+        'Appoggia su Cucù la stessa statuina 5 volte di fila, togliendola ogni volta, e la quinta volta lasciala lì. Quando la luce fa un doppio lampeggio, qui potrai scegliere un PIN nuovo.',
         h('div', { class: 'muted small', role: 'status', style: 'margin-top:12px', text: 'Aspetto Cucù…' }),
         h('button', { class: 'btn btn-quiet', style: 'margin-top:8px', text: 'Torna indietro', onclick: () => { stopResetPoll(); renderLockPin(); } }));
       const check = async () => {
@@ -3951,7 +3951,7 @@
           btn.disabled = false;
         }
       });
-      lockView('Ci siamo!', 'Cucù ti ha riconosciuto. Scegli il nuovo PIN entro 10 minuti.', form);
+      lockView('Ci siamo!', 'Cucù ti ha riconosciuto. Scegli il nuovo PIN, con la statuina ancora su Cucù.', form);
       setTimeout(() => pin.focus(), 100);
     }
 

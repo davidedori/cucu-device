@@ -57,7 +57,8 @@ UPDATE_STATUS_SEC = 600
 #   lo toglie appena il telefono apre Cucù dal suo indirizzo .local
 # - first, "Colleghiamoci!": finché Cucù non ha nessuna rete salvata (QR del Wi-Fi
 #   dell'hotspot). Senza scadenza: lo ricalcola l'API
-# - help, "Eccomi!": dopo il gesto d'emergenza (vedi HELP_SEC), sullo stesso loop di first
+# - help, "Eccomi!": dopo il gesto d'emergenza, finché la statuina resta appoggiata
+#   (vedi PIN_RESET_TAPS), sullo stesso loop di first
 # Stesse costanti in api/main.py
 DONE_SEC = 600
 TEXT_SCREENS = {"done": "done", "first": "first", "help": "first"}   # nome -> loop
@@ -269,28 +270,33 @@ had_tag = False
 start_blocked_uid = None
 
 # Gesto d'emergenza: la stessa statuina appoggiata PIN_RESET_TAPS volte entro
-# PIN_RESET_TAPS_SEC. Sulla TV compare "Eccomi!", come raggiungere Cucù adesso
-# (l'API la disegna da help_request.json: QR del Wi-Fi dell'hotspot, o nome della
-# rete e indirizzo), finché la statuina resta appoggiata o per HELP_SEC. Se c'è il
-# PIN apre anche una finestra di PIN_RESET_SEC in cui la web UI accetta un PIN nuovo
-# senza quello vecchio. Il gesto da solo non cambia nulla (se lo fa un bambino per
-# gioco non succede niente): serve anche il telefono. La scadenza sta in
-# pin_reset.json; l'API lo cancella quando il PIN è stato reimpostato. Stesse
-# costanti in api/main.py.
+# PIN_RESET_TAPS_SEC. Finché la statuina resta appoggiata, e solo finché resta:
+# - sulla TV "Eccomi!", come raggiungere Cucù adesso (l'API la disegna da
+#   help_request.json: QR del Wi-Fi dell'hotspot, o nome della rete e indirizzo)
+# - se c'è il PIN, una finestra in cui la web UI accetta un PIN nuovo senza quello
+#   vecchio: pin_reset.json, che qui si rinnova ogni PIN_RESET_BEAT secondi con una
+#   scadenza breve (PIN_RESET_SEC: se il lettore si ferma la finestra si chiude da
+#   sola) e si cancella appena la statuina viene tolta. L'API lo cancella quando il
+#   PIN è stato reimpostato (e qui non si rinnova più).
+# Il gesto da solo non cambia nulla (se lo fa un bambino per gioco non succede
+# niente): serve anche il telefono. In RAM, come lo stato: non consuma la SD.
+# Stesse costanti in api/main.py.
 UI_AUTH_FILE = BASE_DIR / "ui_auth.json"
-PIN_RESET_FILE = BASE_DIR / "pin_reset.json"
+PIN_RESET_FILE = RUN_DIR / "pin_reset.json"
 PIN_RESET_TAPS = 5
 PIN_RESET_TAPS_SEC = 15.0
-PIN_RESET_SEC = 600
+PIN_RESET_SEC = 20
+PIN_RESET_BEAT = 5.0
 pin_reset_uid = None
 pin_reset_taps = []  # istanti (monotoni) degli ultimi appoggi di pin_reset_uid
-HELP_SEC = 300
+pin_window_uid = None  # statuina che tiene aperta la finestra del PIN
+pin_window_beat = 0.0
 HELP_REQUEST_FILE = RUN_DIR / "help_request.json"
 help_uid = None      # statuina del gesto, finché resta appoggiata ("Eccomi!" sulla TV)
 
 def track_pin_reset_gesture(uid):
     """Da chiamare a ogni statuina appoggiata (anche sconosciuta)."""
-    global pin_reset_uid, pin_reset_taps, help_uid
+    global pin_reset_uid, pin_reset_taps, help_uid, pin_window_uid, pin_window_beat
     now = time.monotonic()
     if uid != pin_reset_uid:
         pin_reset_uid, pin_reset_taps = uid, []
@@ -302,15 +308,38 @@ def track_pin_reset_gesture(uid):
     if UI_AUTH_FILE.exists():
         try:
             _write_json_atomic(PIN_RESET_FILE, {"until": time.time() + PIN_RESET_SEC})
-            print(f"Finestra per un nuovo PIN aperta per {PIN_RESET_SEC // 60} minuti.")
+            pin_window_uid, pin_window_beat = uid, now
+            print("Finestra per un nuovo PIN aperta, finché la statuina resta appoggiata.")
         except OSError as e:
             print(f"[WARN] Impossibile aprire la finestra per il nuovo PIN: {e}")
     help_uid = uid
     try:
-        _write_json_atomic(HELP_REQUEST_FILE, {"until": time.time() + HELP_SEC})
+        _write_json_atomic(HELP_REQUEST_FILE, {"at": time.time()})
         print("Gesto d'emergenza: 'Eccomi!' sulla TV.")
     except OSError as e:
         print(f"[WARN] Impossibile chiedere 'Eccomi!': {e}")
+
+def keep_pin_window(uid):
+    """A ogni tick: la finestra del PIN resta aperta finché c'è la statuina del gesto."""
+    global pin_window_uid, pin_window_beat
+    if pin_window_uid is None:
+        return
+    if uid != pin_window_uid:
+        pin_window_uid = None
+        PIN_RESET_FILE.unlink(missing_ok=True)
+        print("Statuina tolta: finestra per il nuovo PIN chiusa.")
+        return
+    now = time.monotonic()
+    if now - pin_window_beat < PIN_RESET_BEAT:
+        return
+    pin_window_beat = now
+    if not PIN_RESET_FILE.exists():
+        pin_window_uid = None  # l'ha chiusa l'API: PIN nuovo salvato
+        return
+    try:
+        _write_json_atomic(PIN_RESET_FILE, {"until": time.time() + PIN_RESET_SEC})
+    except OSError:
+        pass
 
 def end_help():
     """Statuina del gesto tolta: via "Eccomi!"."""
@@ -324,7 +353,7 @@ def end_help():
 
 def pin_reset_open():
     """Vero se la finestra è aperta. Una scadenza oltre PIN_RESET_SEC da ora
-    (orologio tornato indietro, il Pi non ha RTC) non vale."""
+    (orologio spostato, il Pi non ha RTC) non vale."""
     try:
         with PIN_RESET_FILE.open() as f:
             until = float(json.load(f).get("until", 0))
@@ -777,7 +806,7 @@ def idle_screen(blocked, locked=False, updating=None):
     L'aggiornamento vince su tutto: il genitore deve vedere di non spegnere."""
     if updating:
         return update_image(updating)
-    if help_uid is not None and text_screen_active("help", HELP_SEC):
+    if help_uid is not None and text_screen_active("help"):
         return text_screen("help")
     if locked:
         return SETUP_IMAGE
@@ -792,6 +821,10 @@ def idle_screen(blocked, locked=False, updating=None):
 # --- LOOP PRINCIPALE ----------------------------------------------------
 
 print("cucu-device player avviato.")
+# Finestra del PIN e "Eccomi!" valgono solo finché c'è la statuina del gesto: dopo un
+# riavvio non si sa, quindi si chiudono (si rifà il gesto)
+end_help()
+PIN_RESET_FILE.unlink(missing_ok=True)
 load_episode_state()
 # Avvio con "pronto", o con l'aggiornamento se è stato lui a riavviare il servizio
 refresh_graphic(idle_screen(False, updating=update_step()))
@@ -867,6 +900,7 @@ try:
         updating = update_step()
         if help_uid is not None and uid != help_uid:
             end_help()  # tolta la statuina del gesto
+        keep_pin_window(uid)
         if (updating or help_uid is not None) and mode in ("playing", "paused"):
             # il genitore ha scelto "Interrompi e aggiorna" (fra poco l'aggiornamento
             # riavvia il servizio, intanto la TV dice di non spegnere) o ha fatto il
