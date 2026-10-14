@@ -1,5 +1,5 @@
 {
-  "version": "0.9.1",
+  "version": "0.9.2",
   "min_version": "0.1.0",
-  "changelog": "Updates are manual only: no more nightly timer, the web app shows when a new version is available and the parent installs it. New animated owl TV screens: ready, rest, listening, unknown figurine (stays while the figurine is on), setup while pairing a figurine, and a new boot screen with a progress bar. While an update runs the TV shows the owl with gears, a bar that follows the update steps and a note not to switch Cucù off; nothing starts meanwhile. Time limits reload as soon as they are saved. Thinner progress bar."
+  "changelog": "First setup without typing: on Cucù's own network (hotspot) the Wi-Fi page opens by itself (captive portal), the TV shows 'Colleghiamoci!' with a QR to join it while Cucù has no saved network, and 'Fatto!' with a QR to open the app after connecting. A wrong Wi-Fi password brings the hotspot back. The hotspot password is now random for each Cucù (no more 'cucusetup'): it is on the TV and in Settings > Wi-Fi > Cucù's network, with a QR. The same figurine five times shows 'Eccomi!' on the TV (how to reach Cucù) and, with a PIN, lets you choose a new one while the figurine stays; the app shows a banner too. A figurine left on the reader at power-on no longer starts an episode. The app waits for updates to finish before reloading. Empty thumbnails are regenerated. Thinner progress bar on boot and update screens."
 }
