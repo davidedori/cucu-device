@@ -1,9 +1,10 @@
 """Schermata "Fatto!" sulla TV, dopo che Cucù si è collegato a una rete dall'app.
 
-Il loop animato (graphics/loops/done.mp4: gufetto e cartoncino bianco) è già pronto;
+Lo sfondo (graphics/done.png: gufetto e cartoncino bianco) esce da render_loops.mjs;
 quello che cambia da dispositivo a dispositivo (nome della rete, indirizzo, QR) si
-disegna qui, sul Pi, in un PNG trasparente a tutto schermo che read_nfc.py posa sul
-loop con il filtro logo di VLC. Testo e misure come nel concept
+disegna qui, sul Pi, sopra lo sfondo: read_nfc.py mostra la PNG intera. Ferma, senza
+animazione: il filtro logo di VLC per posare testo e QR su un loop animato sul
+dispositivo non funziona (provato il 14/10). Testo e misure come nel concept
 (graphics/src/concept/concept-schermate.html, #done), con i font della web UI.
 
 Pillow e qrcode si importano solo qui dentro: senza, l'API parte lo stesso e la
@@ -56,9 +57,8 @@ def _qr(url):
     return qr.get_matrix()
 
 
-def render(ssid: str, host: str, overlay_path: Path, base_png: Path = None, full_path: Path = None):
-    """Disegna testo e QR in overlay_path (RGBA 1920×1080). Con base_png (la PNG di ripiego
-    del loop) scrive anche la schermata intera in full_path, per quando il video manca."""
+def render(ssid: str, host: str, base_png: Path, out_path: Path):
+    """Disegna testo e QR sopra base_png e scrive la schermata intera in out_path."""
     from PIL import Image, ImageDraw
 
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -117,13 +117,8 @@ def render(ssid: str, host: str, overlay_path: Path, base_png: Path = None, full
             if on:
                 d.rectangle((x0 + c * cell, y0 + r * cell, x0 + (c + 1) * cell - 1, y0 + (r + 1) * cell - 1), fill=INK)
 
-    tmp = overlay_path.with_name(overlay_path.name + ".tmp.png")
-    img.save(tmp)
-    tmp.replace(overlay_path)
-
-    if base_png is not None and full_path is not None and base_png.exists():
-        with Image.open(base_png) as base:
-            full = Image.alpha_composite(base.convert("RGBA"), img).convert("RGB")
-        tmp = full_path.with_name(full_path.name + ".tmp.png")
-        full.save(tmp)
-        tmp.replace(full_path)
+    with Image.open(base_png) as base:
+        full = Image.alpha_composite(base.convert("RGBA"), img).convert("RGB")
+    tmp = out_path.with_name(out_path.name + ".tmp.png")
+    full.save(tmp)
+    tmp.replace(out_path)
