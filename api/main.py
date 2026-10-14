@@ -615,7 +615,10 @@ class CaptivePortal:
                 DONE_FILE.unlink(missing_ok=True)
         if scope["type"] == "http" and (scope.get("server") or ("",))[0] == HOTSPOT_IP:
             host = dict(scope.get("headers") or []).get(b"host", b"").decode("latin-1")
-            if host.rsplit(":", 1)[0] != HOTSPOT_IP:
+            # i nostri nomi restano: l'app sulla Home (cucu-xxxx.local) usata sull'hotspot,
+            # per esempio dai nonni, trova Cucù con mDNS e deve funzionare come sempre
+            ours = {HOTSPOT_IP, socket.gethostname().lower(), f"{socket.gethostname()}.local".lower()}
+            if host.rsplit(":", 1)[0].lower() not in ours:
                 response = RedirectResponse(CAPTIVE_URL, status_code=302,
                                             headers={"Cache-Control": "no-store"})
                 await response(scope, receive, send)
