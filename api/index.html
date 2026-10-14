@@ -831,6 +831,14 @@
       background: rgba(0, 0, 0, .45); color: #fff;
     }
     .scr-sound[hidden] { display: none; }
+    .scr-full { right: auto; left: 14px; }
+    /* le foto degli album intere, come sulla TV (bande nere), non ritagliate */
+    .screen[data-fit="contain"] .scr-media img { object-fit: contain; }
+    /* a tutto schermo (Android, computer): la TV disegnata riempie lo schermo */
+    .screen:fullscreen { background: #000; }
+    .screen:fullscreen::before { border-radius: 0; }
+    .screen:fullscreen .scr-media { inset: 0; border-radius: 0; }
+    .screen:fullscreen .scr-media img, .screen:fullscreen .scr-media video { object-fit: contain; }
     .scr-sound svg { width: 22px; height: 22px; }
     .screen[data-media="1"] .scr-media { opacity: 1; }
     .screen[data-state="pause"] .scr-media img { filter: grayscale(.4) brightness(.55); }
@@ -1212,6 +1220,7 @@
           <div class="screen" id="screen" data-state="idle" role="img" aria-label="La TV">
             <div class="scr-media"><img id="scr-img" alt=""><video id="scr-video" muted loop playsinline disablepictureinpicture hidden></video><img class="scr-overlay" id="scr-overlay" alt="" hidden><video id="scr-live" muted playsinline disablepictureinpicture preload="metadata" hidden></video><audio id="scr-live-audio" muted preload="metadata"></audio></div>
             <button class="scr-sound" id="scr-sound" type="button" hidden></button>
+            <button class="scr-sound scr-full" id="scr-full" type="button" aria-label="Guarda a tutto schermo" title="Tutto schermo" hidden></button>
             <div class="scr" id="scr-content"></div>
           </div>
           <div class="tv-foot"></div>
@@ -1417,6 +1426,7 @@
       stop: '<rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/>',
       next: '<path d="M5.5 6.2v11.6a1 1 0 0 0 1.5.8l8.6-5.8a1 1 0 0 0 0-1.6L7 5.4a1 1 0 0 0-1.5.8Z" fill="currentColor"/><rect x="16.5" y="5.5" width="3" height="13" rx="1.4" fill="currentColor"/>',
       volume: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+      expand: '<path d="M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
       mute: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z" fill="currentColor"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
       eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" fill="currentColor" opacity=".3"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/>',
     };
@@ -3412,9 +3422,12 @@
       // L'episodio dal vivo, allineato alla TV: il video sullo schermo disegnato, o l'audio
       // (con il gufetto che ascolta). Se il browser non lo fa partire, l'anteprima ferma
       const live = syncLive(n);
-      const thumb = !live && withEpisode && n.kind !== 'audio' && n.episode_thumb_v
-        ? `/characters/${enc(n.character)}/episodes/${enc(n.episode)}/thumb?v=${n.episode_thumb_v}`
+      // le foto degli album intere, come sulla TV (il file vero, non l'anteprima piccola)
+      const photo = withEpisode && n.kind === 'photos' && n.episode;
+      const thumb = !live && withEpisode && n.kind !== 'audio' && (photo || n.episode_thumb_v)
+        ? `/characters/${enc(n.character)}/episodes/${enc(n.episode)}/${photo ? 'file' : `thumb?v=${n.episode_thumb_v}`}`
         : null;
+      screen.dataset.fit = photo ? 'contain' : '';
       // La schermata vera della TV (pronto, riposo, ascolto, aggiornamento, "Fatto!"...),
       // quando non c'è l'episodio
       const tv = !live && !thumb && n.screen ? n.screen
@@ -3475,6 +3488,7 @@
       }
       $('scr-live').hidden = true;
       $('scr-sound').hidden = true;
+      $('scr-full').hidden = true;
     }
 
     function syncLive(n) {
@@ -3504,12 +3518,22 @@
         if (lastNow) renderAdesso(lastNow);
       });
       el.hidden = false;
+      $('scr-full').hidden = audio;   // tutto schermo solo per il video
+      if (!audio) $('scr-full').replaceChildren(icon('expand'));
       const sound = $('scr-sound');
       sound.hidden = false;
       sound.setAttribute('aria-label', liveSound ? "Togli l'audio dal telefono" : "Senti l'audio anche sul telefono");
       sound.replaceChildren(icon(liveSound ? 'volume' : 'mute'));
       return audio ? 'audio' : 'video';
     }
+
+    // Tutto schermo: su iPhone una pagina può mandarci solo un video (con il riproduttore di
+    // iOS), altrove va a tutto schermo l'intera TV disegnata
+    $('scr-full').addEventListener('click', () => {
+      const video = $('scr-live'), screen = $('screen');
+      if (screen.requestFullscreen && document.fullscreenEnabled) screen.requestFullscreen().catch(() => {});
+      else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+    });
 
     $('scr-sound').addEventListener('click', () => {
       liveSound = !liveSound;
