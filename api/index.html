@@ -857,6 +857,18 @@
     .tv-full.quiet { cursor: none; }
     /* modalità bambino: nessun comando (l'audio è acceso), per uscire serve il PIN */
     .tv-full.locked .tv-full-bar { display: none; }   /* audio sempre acceso: nessun comando */
+    /* audio bloccato dal telefono finché non si tocca lo schermo: un invito grande, per chi non legge */
+    .tv-tap-sound {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2;
+      display: grid; justify-items: center; gap: 10px; pointer-events: none;
+      color: #fff; font-size: 18px; font-weight: 600; text-shadow: 0 1px 3px rgba(0, 0, 0, .6);
+    }
+    .tv-tap-sound[hidden] { display: none; }
+    .tv-tap-sound span { width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center;
+      background: rgba(233, 78, 27, .85); animation: tap-pulse 1.2s steps(6, jump-end) infinite alternate; }
+    .tv-tap-sound svg { width: 52px; height: 52px; }
+    @keyframes tap-pulse { from { transform: scale(1); } to { transform: scale(1.12); } }
+    @media (prefers-reduced-motion: reduce) { .tv-tap-sound span { animation: none; } }
     .tv-pin {
       position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 3;
       width: min(320px, calc(100% - 32px)); padding: 22px; border-radius: 20px;
@@ -1221,6 +1233,7 @@
   <!-- Episodio o foto a tutto schermo, con i comandi di Cucù (il video vero ci viene spostato) -->
   <div class="tv-full" id="tv-full" role="dialog" aria-modal="true" aria-label="Cucù a tutto schermo" hidden>
     <button class="scr-sound tv-full-close" id="tv-full-close" type="button" aria-label="Chiudi"></button>
+    <div class="tv-tap-sound" id="tv-tap-sound" hidden><span></span>Tocca per sentire</div>
     <div class="tv-full-bar">
       <div class="tv-full-buttons">
         <button class="scr-sound" id="tv-full-prev" type="button" aria-label="Foto precedente"></button>
@@ -3668,7 +3681,7 @@
       else if (el.paused) el.play().catch(() => {
         // con l'audio senza un tocco (app ricaricata in modalità bambino) iPhone non parte:
         // si riprova muto, e al primo tocco sullo schermo l'audio si accende
-        if (!el.muted) { soundBlocked = true; el.muted = true; el.play().catch(fail); return; }
+        if (!el.muted) { soundBlocked = true; el.muted = true; el.play().catch(fail); updateTvFull(); return; }
         fail();
       });
       el.hidden = false;
@@ -3707,6 +3720,7 @@
     // lascia suonare anche per gli episodi dopo (che partono senza tocco)
     function unlockSound() {
       soundBlocked = false;
+      $('tv-tap-sound').hidden = true;
       for (const el of [$('scr-live'), $('scr-live-audio')]) {
         el.muted = false;
         const p = el.play();
@@ -3769,6 +3783,10 @@
       sound.setAttribute('aria-label', liveSound ? "Togli l'audio dal telefono" : "Senti l'audio anche sul telefono");
       sound.replaceChildren(icon(liveSound ? 'volume' : 'mute'));
       $('tv-full-volume').hidden = n.volume == null;
+      // l'audio aspetta un tocco (app ricaricata in modalità bambino): lo si dice in grande
+      const tap = $('tv-tap-sound');
+      tap.hidden = !(soundBlocked && liveSound && episode && n.mode === 'playing');
+      if (!tap.hidden && !tap.firstChild.firstChild) tap.firstChild.replaceChildren(icon('mute'));
       if (n.volume != null && Date.now() - volumeTouched > 4000) $('tv-full-vol').value = n.volume;
     }
 
@@ -4839,8 +4857,9 @@
       checkPinReset();
       setInterval(checkPinReset, 3000);
       document.addEventListener('visibilitychange', checkPinReset);
-      // nel primo collegamento solo il Wi-Fi: niente proposte né aggiornamenti
-      if (parseRoute().section === 'wifi' || parseRoute().section === 'nowifi') return;
+      // nel primo collegamento solo il Wi-Fi, e in modalità bambino niente: proposte e
+      // aggiornamenti non servono (e resterebbero nascosti sotto il tutto schermo)
+      if (relock || parseRoute().section === 'wifi' || parseRoute().section === 'nowifi') return;
       maybeOfferOnStart();
       autoCheckUpdates();
     }
