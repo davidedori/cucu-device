@@ -3532,8 +3532,8 @@
     function afterSwitchText(ssid) {
       // Nel mini-browser del captive portal (il caso normale) questo è l'ultimo testo che si legge con calma:
       // quando l'hotspot sparisce, iOS lo chiude
-      if (onHotspot) return `Cucù passa a "${ssid}" e la sua rete sparisce. Poi, con il telefono di nuovo su "${ssid}", apri ${deviceHost()}.`;
-      return `Il telefono perderà il collegamento con Cucù per qualche secondo. Poi collegalo anche tu a "${ssid}" e apri ${deviceHost()}.`;
+      if (onHotspot) return `Cucù passa a "${ssid}" e la sua rete sparisce. Poi, con il telefono di nuovo su "${ssid}", inquadra il codice che compare sulla TV (oppure apri ${deviceHost()}).`;
+      return `Il telefono perderà il collegamento con Cucù per qualche secondo. Poi collegalo anche tu a "${ssid}" e inquadra il codice che compare sulla TV (oppure apri ${deviceHost()}).`;
     }
 
     function afterSwitch(ssid) {
@@ -3553,8 +3553,9 @@
         h('div', { class: 'peek' }, owl()),
         h('h2', { text: 'Quasi fatto' }),
         h('p', {}, 'Cucù si sta collegando a ', h('strong', { text: ssid }),
-          '. Con il telefono di nuovo su quella rete, apri ', h('strong', { text: deviceHost() }), '.'),
-        h('p', { class: 'muted', style: 'margin-top:18px', text: `Se non trovi Cucù, la password forse non era giusta: ricollegati a ${ap} e riprova.` })
+          '. Con il telefono di nuovo su quella rete, inquadra il codice che compare sulla TV.'),
+        h('p', { class: 'muted', style: 'margin-top:18px' }, 'Oppure apri ', h('strong', { text: deviceHost() }), '.'),
+        h('p', { class: 'muted', style: 'margin-top:8px', text: `Se sulla TV non compare niente, la password forse non era giusta: ricollegati a ${ap} e riprova.` })
       ));
       // In più, senza prometterlo nel testo: se la pagina resta aperta (Safari, Android) e il
       // telefono torna sulla rete di casa, si apre da sola su cucu-xxxx.local: appena un'immagine di là si carica, Cucù c'è.

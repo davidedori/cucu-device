@@ -567,6 +567,38 @@ class PinGuard:
 
 app.add_middleware(PinGuard)
 
+# "Fatto!" sulla TV dopo un cambio di rete dall'app: nome della rete, indirizzo e QR
+# (api/done_screen.py) su done_overlay.png, posato da read_nfc.py sul loop done.mp4.
+# done.json dice fino a quando: la schermata sparisce prima, appena il telefono apre
+# Cucù dal suo indirizzo .local (cioè l'ha trovato), oppure alla scadenza. In RAM,
+# accanto allo stato di read_nfc.py. Stesse costanti in read_nfc.py
+DONE_SEC = 600
+_done_pending = (RUN_STATE_FILE.parent / "done.json").exists()
+
+
+def _show_done(ssid: str):
+    global _done_pending
+    run_dir = RUN_STATE_FILE.parent
+    if not run_dir.is_dir():
+        return
+    host = f"{socket.gethostname()}.local"
+    try:
+        import done_screen
+        done_screen.render(ssid, host, run_dir / "done_overlay.png",
+                           BASE_DIR / "graphics" / "done.png", run_dir / "done.png")
+    except Exception as e:  # senza Pillow o qrcode la schermata non c'è, niente di grave
+        print(f"[WiFi] Schermata 'Fatto!' non disponibile: {e}")
+        return
+    _write_json_atomic(run_dir / "done.json", {"until": time.time() + DONE_SEC, "ssid": ssid})
+    _done_pending = True
+
+
+def _clear_done():
+    global _done_pending
+    _done_pending = False
+    (RUN_STATE_FILE.parent / "done.json").unlink(missing_ok=True)
+
+
 # Captive portal: sull'hotspot ogni nome risponde 10.42.0.1 (networkmanager/
 # cucu-captive.conf), quindi il controllo di connessione dei telefoni appena
 # collegati (captive.apple.com, connectivitycheck.gstatic.com, ...) arriva qui.
@@ -582,6 +614,11 @@ class CaptivePortal:
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and _done_pending:
+            # il telefono ha aperto Cucù dal suo indirizzo: "Fatto!" ha finito il suo lavoro
+            host = dict(scope.get("headers") or []).get(b"host", b"").decode("latin-1")
+            if host.rsplit(":", 1)[0].lower() == f"{socket.gethostname()}.local".lower():
+                _clear_done()
         if scope["type"] == "http" and (scope.get("server") or ("",))[0] == HOTSPOT_IP:
             host = dict(scope.get("headers") or []).get(b"host", b"").decode("latin-1")
             if host.rsplit(":", 1)[0] != HOTSPOT_IP:
@@ -2225,6 +2262,7 @@ def _connect_wifi_task(ssid: str, password: str):
             check=True, capture_output=True, timeout=30
         )
         print(f"[WiFi] Connessione a '{ssid}' completata con successo.")
+        _show_done(ssid)
         
     except Exception as e:
         print(f"[WiFi] Errore connessione a '{ssid}': {e}")
@@ -2265,6 +2303,7 @@ def switch_wifi(ssid: str, background_tasks: BackgroundTasks):
                 check=True, capture_output=True, timeout=30
             )
             print(f"[WiFi] Connesso a '{target_ssid}' completato.")
+            _show_done(target_ssid)
         except Exception as e:
             print(f"[WiFi] Errore switch a '{target_ssid}': {e}")
 
