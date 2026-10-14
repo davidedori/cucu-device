@@ -573,11 +573,10 @@ app.add_middleware(PinGuard)
 # Cucù dal suo indirizzo .local (cioè l'ha trovato), oppure alla scadenza. In RAM,
 # accanto allo stato di read_nfc.py. Stesse costanti in read_nfc.py
 DONE_SEC = 600
-_done_pending = (RUN_STATE_FILE.parent / "done.json").exists()
+DONE_FILE = RUN_STATE_FILE.parent / "done.json"
 
 
 def _show_done(ssid: str):
-    global _done_pending
     run_dir = RUN_STATE_FILE.parent
     if not run_dir.is_dir():
         return
@@ -589,14 +588,7 @@ def _show_done(ssid: str):
     except Exception as e:  # senza Pillow o qrcode la schermata non c'è, niente di grave
         print(f"[WiFi] Schermata 'Fatto!' non disponibile: {e}")
         return
-    _write_json_atomic(run_dir / "done.json", {"until": time.time() + DONE_SEC, "ssid": ssid})
-    _done_pending = True
-
-
-def _clear_done():
-    global _done_pending
-    _done_pending = False
-    (RUN_STATE_FILE.parent / "done.json").unlink(missing_ok=True)
+    _write_json_atomic(DONE_FILE, {"until": time.time() + DONE_SEC, "ssid": ssid})
 
 
 # Captive portal: sull'hotspot ogni nome risponde 10.42.0.1 (networkmanager/
@@ -614,11 +606,12 @@ class CaptivePortal:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and _done_pending:
+        if scope["type"] == "http":
             # il telefono ha aperto Cucù dal suo indirizzo: "Fatto!" ha finito il suo lavoro
+            # (si guarda il file, in RAM: c'è anche se a scriverlo non è stata quest'API)
             host = dict(scope.get("headers") or []).get(b"host", b"").decode("latin-1")
-            if host.rsplit(":", 1)[0].lower() == f"{socket.gethostname()}.local".lower():
-                _clear_done()
+            if host.rsplit(":", 1)[0].lower() == f"{socket.gethostname()}.local".lower() and DONE_FILE.exists():
+                DONE_FILE.unlink(missing_ok=True)
         if scope["type"] == "http" and (scope.get("server") or ("",))[0] == HOTSPOT_IP:
             host = dict(scope.get("headers") or []).get(b"host", b"").decode("latin-1")
             if host.rsplit(":", 1)[0] != HOTSPOT_IP:
