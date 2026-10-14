@@ -567,8 +567,9 @@ class PinGuard:
 
 app.add_middleware(PinGuard)
 
-# "Fatto!" sulla TV dopo un cambio di rete dall'app: la schermata intera con nome
-# della rete, indirizzo e QR (api/done_screen.py) in done_screen.png, mostrata da read_nfc.py.
+# "Fatto!" sulla TV dopo un cambio di rete dall'app: nome della rete, indirizzo e QR
+# (api/done_screen.py) in done_overlay.png, che read_nfc.py posa sul loop done.mp4,
+# più la schermata intera e ferma done_screen.png come ripiego.
 # done.json dice fino a quando: la schermata sparisce prima, appena il telefono apre
 # Cucù dal suo indirizzo .local (cioè l'ha trovato), oppure alla scadenza. In RAM,
 # accanto allo stato di read_nfc.py. Stesse costanti in read_nfc.py
@@ -583,7 +584,8 @@ def _show_done(ssid: str):
     host = f"{socket.gethostname()}.local"
     try:
         import done_screen
-        done_screen.render(ssid, host, BASE_DIR / "graphics" / "done.png", run_dir / "done_screen.png")
+        done_screen.render(ssid, host, run_dir / "done_overlay.png",
+                           BASE_DIR / "graphics" / "done.png", run_dir / "done_screen.png")
     except Exception as e:  # senza Pillow o qrcode la schermata non c'è, niente di grave
         print(f"[WiFi] Schermata 'Fatto!' non disponibile: {e}")
         return

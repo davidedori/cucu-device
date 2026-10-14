@@ -49,14 +49,16 @@ LOCK_MAX_SEC = 30
 UPDATE_STATUS_PATH = RUN_DIR / "update_status.json"
 UPDATE_STEPS = 4
 UPDATE_STATUS_SEC = 600
-# "Fatto!" dopo un cambio di rete dall'app: l'API scrive done.json (scadenza) e
-# done_screen.png, la schermata intera con rete, indirizzo e QR (disegnati sul Pi
-# perché cambiano da dispositivo a dispositivo). Una PNG ferma: il filtro logo di
-# VLC per posarli su un loop animato qui non funziona (provato il 14/10). Senza un
-# loop con lo stesso nome, show_screen() mostra la PNG. L'API toglie done.json
-# appena il telefono apre Cucù dal suo indirizzo .local. Stesse costanti in api/main.py
+# "Fatto!" dopo un cambio di rete dall'app: l'API scrive done.json (scadenza),
+# done_overlay.png (rete, indirizzo e QR, disegnati sul Pi perché cambiano da
+# dispositivo a dispositivo: si posano sul loop done.mp4 con il filtro logo di VLC)
+# e done_screen.png, la schermata intera e ferma, se il loop manca. L'API toglie
+# done.json appena il telefono apre Cucù dal suo indirizzo .local. Stesse costanti
+# in api/main.py
 DONE_PATH = RUN_DIR / "done.json"
-DONE_IMAGE = RUN_DIR / "done_screen.png"
+DONE_OVERLAY = RUN_DIR / "done_overlay.png"
+DONE_FULL = RUN_DIR / "done_screen.png"
+DONE_IMAGE = GRAPHICS_DIR / "done.png"   # sfondo senza testo: il loop done.mp4
 DONE_SEC = 600
 DAILY_USAGE_PATH = BASE_DIR / "daily_usage.json"
 
@@ -80,6 +82,11 @@ USAGE_FLUSH_INTERVAL_SEC = 60
 
 # --- VLC PLAYER CLASS ---------------------------------------------------
 
+def _logo_opt(name):
+    """python-vlc ha rinominato i membri di VideoLogoOption tra le versioni
+    ('enable' nella doc corrente, 'logo_enable' nella 3.0.21203 sul dispositivo)."""
+    return getattr(vlc.VideoLogoOption, name, None) or getattr(vlc.VideoLogoOption, f"logo_{name}")
+
 class CucuPlayer:
     def __init__(self):
         # Parametri per full screen, no overlay, niente titolo
@@ -92,6 +99,8 @@ class CucuPlayer:
             "--quiet",
             "--mouse-hide-timeout=0",
             "--image-duration=-1",
+            # filtro logo: un'immagine sopra il video ("Fatto!", vedi want_overlay)
+            "--sub-source=logo",
         )
         self.player = self.instance.media_player_new()
         # Event manager per intercettare fine video
@@ -99,6 +108,9 @@ class CucuPlayer:
         self.events.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_end)
 
         self.has_ended = False
+        # Immagine da posare sul video con il filtro logo (want_overlay) e se è già posata
+        self._overlay = None
+        self._overlay_on = False
         # Secondo lettore, solo per l'audio: mostra il loop "si ascolta" mentre
         # self.player suona il file audio (vedi play_listen)
         self.screen = None
@@ -109,6 +121,7 @@ class CucuPlayer:
     def play_media(self, path: Path):
         """Riproduce un video o mostra un'immagine."""
         self._stop_screen()
+        self._clear_overlay()
         self.has_ended = False
         media = self.instance.media_new(str(path))
         if path.suffix.lower() in VIDEO_EXT:
@@ -133,9 +146,43 @@ class CucuPlayer:
             return media
         return self.instance.media_new(str(image))
 
+    def want_overlay(self, path: Path):
+        """Immagine sopra il video corrente (a tutto schermo, trasparente) con il filtro
+        logo di VLC, come la vecchia clessidra. La posa apply_overlay(), dal ciclo
+        principale, quando VLC ha già l'uscita video: impostata subito dopo play()
+        non si vedeva."""
+        self._overlay = path
+        self._overlay_on = False
+
+    def apply_overlay(self):
+        if self._overlay is None or self._overlay_on or not self.player.has_vout():
+            return
+        self._overlay_on = True
+        try:
+            self.player.video_set_logo_string(_logo_opt("file"), str(self._overlay))
+            self.player.video_set_logo_int(_logo_opt("position"), 5)  # in alto a sinistra
+            self.player.video_set_logo_int(_logo_opt("x"), 0)
+            self.player.video_set_logo_int(_logo_opt("y"), 0)
+            self.player.video_set_logo_int(_logo_opt("opacity"), 255)
+            self.player.video_set_logo_int(_logo_opt("enable"), 1)
+            print(f"Overlay: {self._overlay.name}, enable={self.player.video_get_logo_int(_logo_opt('enable'))}")
+        except Exception as e:
+            print(f"[WARN] Overlay non disponibile: {e}")
+
+    def _clear_overlay(self):
+        was_on = self._overlay_on
+        self._overlay = None
+        self._overlay_on = False
+        if was_on:
+            try:
+                self.player.video_set_logo_int(_logo_opt("enable"), 0)
+            except Exception:
+                pass
+
     def show_screen(self, image: Path):
         """Schermata a tutto schermo (attesa, fine, un altro?, riposo)."""
         self._stop_screen()
+        self._clear_overlay()
         self.has_ended = False
         self.player.set_media(self._screen_media(image))
         self.player.play()
@@ -149,6 +196,7 @@ class CucuPlayer:
         loop agganciato all'audio (input-slave) la ripetizione del video
         ricomincerebbe anche l'audio"""
         self._stop_screen()
+        self._clear_overlay()
         # Prima si libera lo schermo: self.player sta ancora mostrando la
         # schermata precedente e tiene l'uscita video (DRM). Se self.screen
         # parte mentre è occupata, VLC ripiega su un'uscita testuale (caca,
@@ -646,7 +694,12 @@ def refresh_graphic(path):
     global current_graphic_path
     if path != current_graphic_path:
         print(f"Cambio grafica: {path.name}")
-        player.show_screen(path)
+        if path == DONE_IMAGE and not (LOOPS_DIR / "done.mp4").exists():
+            player.show_screen(DONE_FULL)       # la schermata intera, ferma
+        else:
+            player.show_screen(path)
+            if path == DONE_IMAGE:
+                player.want_overlay(DONE_OVERLAY)
         current_graphic_path = path
 
 # Statuina sconosciuta appoggiata adesso (None: nessuna). La schermata resta
@@ -684,7 +737,7 @@ def done_active():
         until = float(json.loads(DONE_PATH.read_text()).get("until", 0))
     except (OSError, ValueError, TypeError, AttributeError):
         return False
-    return 0 < until - time.time() <= DONE_SEC and DONE_IMAGE.exists()
+    return 0 < until - time.time() <= DONE_SEC and DONE_OVERLAY.exists() and DONE_FULL.exists()
 
 def idle_screen(blocked, locked=False, updating=None):
     """Schermata quando non va niente (né in riproduzione né in pausa): una
@@ -915,6 +968,7 @@ try:
         # (si apre o si chiude una fascia oraria, finiscono i minuti)
         if mode not in ("playing", "paused"):
             refresh_graphic(idle_screen(blocked, locked, updating))
+        player.apply_overlay()  # "Fatto!": testo e QR appena VLC ha l'uscita video
 
         # Aggiorna tracking
         last_uid = uid
