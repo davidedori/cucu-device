@@ -329,13 +329,17 @@ def keep_pin_window(uid):
         PIN_RESET_FILE.unlink(missing_ok=True)
         print("Statuina tolta: finestra per il nuovo PIN chiusa.")
         return
+    if not PIN_RESET_FILE.exists():
+        # l'ha chiusa l'API: PIN nuovo salvato. Anche "Eccomi!" ha finito il suo lavoro
+        # (e il suo "puoi scegliere un nuovo PIN" non varrebbe più)
+        pin_window_uid = None
+        end_help()
+        print("PIN nuovo salvato: finestra chiusa, via 'Eccomi!'.")
+        return
     now = time.monotonic()
     if now - pin_window_beat < PIN_RESET_BEAT:
         return
     pin_window_beat = now
-    if not PIN_RESET_FILE.exists():
-        pin_window_uid = None  # l'ha chiusa l'API: PIN nuovo salvato
-        return
     try:
         _write_json_atomic(PIN_RESET_FILE, {"until": time.time() + PIN_RESET_SEC})
     except OSError:
