@@ -975,6 +975,37 @@ def tv_run(name: str):
     return _tv_file(RUN_STATE_FILE.parent, name, ".png", cache=False)
 
 
+# --- Controlli di riproduzione ------------------------------------------------
+# L'app chiede, read_nfc.py esegue (è l'unico a comandare VLC): control.json in RAM,
+# con un id (ogni richiesta si esegue una volta) e una scadenza breve. Stesse
+# costanti in read_nfc.py
+CONTROL_FILE = RUN_STATE_FILE.parent / "control.json"
+CONTROL_SEC = 10
+
+
+class Playback(BaseModel):
+    action: str             # pause, resume, stop, next, volume
+    value: Optional[int] = None   # per volume: 0..100
+
+
+@app.post("/system/playback")
+def playback(body: Playback):
+    if body.action not in ("pause", "resume", "stop", "next", "volume"):
+        raise HTTPException(status_code=400, detail="Comando sconosciuto.")
+    if body.action == "volume" and (body.value is None or not 0 <= body.value <= 100):
+        raise HTTPException(status_code=400, detail="Il volume va da 0 a 100.")
+    try:
+        with _last_seen_file().open() as f:
+            alive = time.time() - json.load(f).get("ts", 0) <= 10
+    except Exception:
+        alive = False
+    if not alive or not CONTROL_FILE.parent.is_dir():
+        raise HTTPException(status_code=409, detail="Il lettore non risponde.")
+    _write_json_atomic(CONTROL_FILE, {"id": secrets.token_hex(6), "action": body.action,
+                                      "value": body.value, "until": time.time() + CONTROL_SEC})
+    return {"status": "ok"}
+
+
 @app.get("/system/now")
 def system_now():
     """
@@ -1048,6 +1079,8 @@ def system_now():
         # la schermata sulla TV (vedi _tv_screen); durante un audio, "ascolto"
         "screen": _tv_screen("listen" if kind == "audio" and mode in ("playing", "paused")
                              else data.get("screen") if alive else None),
+        "paused_by_app": bool(data.get("paused_by_app")) if alive else False,
+        "volume": data.get("volume") if alive else None,
     }
 
 @app.get("/characters")

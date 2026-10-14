@@ -64,3 +64,4 @@ characters/*
 
 # Raspberry Pi specifici
 *.pyc
+volume.json

@@ -49,6 +49,47 @@ LOCK_MAX_SEC = 30
 UPDATE_STATUS_PATH = RUN_DIR / "update_status.json"
 UPDATE_STEPS = 4
 UPDATE_STATUS_SEC = 600
+# Controlli di riproduzione dall'app (pausa, ripresa, stop, successivo, volume): l'API
+# scrive la richiesta in control.json (in RAM, con un id e una scadenza breve), qui la
+# si esegue una volta sola e si cancella. Comanda VLC solo questo processo.
+# - pausa dall'app con la statuina appoggiata: si riprende dall'app, o togliendo e
+#   rimettendo la statuina (non subito perché è ancora lì: paused_by_app)
+# - stop: la TV torna su "pronto", la statuina rimasta va tolta e rimessa; l'episodio
+#   resta visto nel giro (lo è da quando è partito)
+# - successivo: il prossimo episodio del giro, con i limiti di tempo come sempre
+# - volume (0..100): salvato in volume.json, accanto al codice, e riapplicato
+CONTROL_PATH = RUN_DIR / "control.json"
+CONTROL_MAX_SEC = 30
+VOLUME_PATH = BASE_DIR / "volume.json"
+paused_by_app = False
+last_control_id = None
+
+def _load_volume():
+    try:
+        return max(0, min(100, int(json.loads(VOLUME_PATH.read_text()).get("volume", 100))))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return 100
+
+volume = _load_volume()
+
+def read_control():
+    """Richiesta dall'app ancora da eseguire, o None (vedi CONTROL_PATH)."""
+    global last_control_id
+    try:
+        data = json.loads(CONTROL_PATH.read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("id") == last_control_id:
+        return None
+    last_control_id = data.get("id")
+    CONTROL_PATH.unlink(missing_ok=True)
+    try:
+        if not 0 < float(data.get("until", 0)) - time.time() <= CONTROL_MAX_SEC:
+            return None  # vecchia (o con l'orologio spostato): non la si esegue
+    except (TypeError, ValueError):
+        return None
+    return data
+
 # Schermate con testo e QR, che l'API disegna sul Pi (api/tv_screens.py) perché
 # cambiano da dispositivo a dispositivo. Per ognuna: <nome>.json (c'è da mostrarla),
 # <nome>_overlay.png (testo e QR, posati sul loop <nome>.mp4 con il filtro logo di
@@ -215,6 +256,15 @@ class CucuPlayer:
         media.add_option(":no-video")
         self.player.set_media(media)
         self.player.play()
+
+    def keep_volume(self, vol):
+        """Volume dell'audio (0..100). Riapplicato dal ciclo principale: a ogni file nuovo
+        VLC può ripartire dal suo, e prima che l'audio sia pronto non lo accetta."""
+        try:
+            if self.player.audio_get_volume() not in (-1, vol):
+                self.player.audio_set_volume(vol)
+        except Exception:
+            pass
 
     def _stop_screen(self):
         if self.screen is None:
@@ -924,6 +974,7 @@ try:
             print("Episodio interrotto (aggiornamento o gesto d'emergenza).")
             player.stop()
             mode = "idle"
+            paused_by_app = False
             album = None
             current_character = current_video_path = None
             current_graphic_path = None
@@ -960,6 +1011,8 @@ try:
                     # "update_2", "help_screen"...), per mostrarla uguale nella pagina "Adesso"
                     "screen": current_graphic_path.stem if current_graphic_path and mode not in ("playing", "paused") else None,
                     "updating": updating,  # passo dell'aggiornamento in corso, o None
+                    "paused_by_app": paused_by_app,
+                    "volume": volume,
                 })
         except Exception:
             pass
@@ -981,6 +1034,50 @@ try:
             track_pin_reset_gesture(uid)
             if help_uid is not None:
                 locked = True  # il gesto è scattato adesso: questa statuina non fa partire niente
+
+        # 2b. Controlli dall'app (vedi CONTROL_PATH)
+        control = read_control()
+        if control:
+            action = control.get("action")
+            print(f"Dall'app: {action}")
+            if action == "volume":
+                try:
+                    volume = max(0, min(100, int(control.get("value"))))
+                    _write_json_atomic(VOLUME_PATH, {"volume": volume})
+                except (TypeError, ValueError, OSError) as e:
+                    print(f"[WARN] Volume non impostato: {e}")
+            elif action == "pause" and mode == "playing":
+                player.pause()
+                mode = "paused"
+                paused_by_app = True
+                save_daily_usage()
+                usage_unsaved_seconds = 0.0
+            elif action == "resume" and mode == "paused" and not locked:
+                player.resume()
+                mode = "playing"
+                paused_by_app = False
+            elif action in ("stop", "next") and mode in ("playing", "paused"):
+                char = current_character
+                player.stop()
+                mode = "idle"
+                album = None
+                current_character = current_video_path = None
+                current_graphic_path = None
+                paused_by_app = False
+                save_daily_usage()
+                usage_unsaved_seconds = 0.0
+                result = start_video(char) if action == "next" and char and not locked else None
+                if result == "played":
+                    current_graphic_path = None
+                    if not has_tag:
+                        # senza statuina sopra parte in pausa, come se l'avessero appena tolta
+                        player.pause()
+                        mode = "paused"
+                else:
+                    # stop (o successivo non riuscito: limiti di tempo, nessun episodio):
+                    # la statuina rimasta va tolta e rimessa
+                    start_blocked_uid = uid
+        player.keep_volume(volume)
 
         # 3. Logica stati
         if mode == "idle":
@@ -1008,6 +1105,7 @@ try:
                 print("Pausa.")
                 player.pause()
                 mode = "paused"
+                paused_by_app = False  # pausa della statuina: riparte rimettendola
                 save_daily_usage()
                 usage_unsaved_seconds = 0.0
             elif tag_just_added:
@@ -1019,12 +1117,15 @@ try:
         elif mode == "paused":
             # In pausa controlliamo lo STATO (has_tag) invece dell'evento, 
             # così gestiamo anche il caso "Fast Swap" dove l'evento added è stato consumato dal removed precedente
-            if has_tag:
+            # (pausa dall'app con la statuina ancora sopra: riparte solo togliendola e
+            # rimettendola, o dall'app)
+            if has_tag and (not paused_by_app or tag_just_added):
                 char = tag_map.get(uid)
                 if char == current_character:
                     print("Riprendo.")
                     player.resume()
                     mode = "playing"
+                    paused_by_app = False
                 else:
                     # Se il tag è diverso, restiamo in pausa (Constraint Enforced)
                     # Non facciamo nulla, ignoriamo il nuovo tag
