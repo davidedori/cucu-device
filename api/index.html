@@ -3530,7 +3530,7 @@
 
     // Detto PRIMA di cambiare rete: dopo, sull'hotspot, la pagina non c'è più
     function afterSwitchText(ssid) {
-      if (onHotspot) return `Cucù lascia la sua rete e passa a "${ssid}". Poi collega anche il telefono a "${ssid}" e apri ${deviceHost()}.`;
+      if (onHotspot) return `Cucù lascia la sua rete e passa a "${ssid}". Di solito il telefono ci torna da solo e la pagina si riapre su ${deviceHost()}.`;
       return `Il telefono perderà il collegamento con Cucù per qualche secondo. Poi collegalo anche tu a "${ssid}" e apri ${deviceHost()}.`;
     }
 
@@ -3539,7 +3539,7 @@
       else showReconnect('Cambio rete', afterSwitchText(ssid));
     }
 
-    // Ultimo passo dall'hotspot: la pagina resta com'è (senza rete), con quello che c'è da fare
+    // Dopo il cambio di rete dall'hotspot: si aspetta che la pagina si riapra da sola, e se non succede si dice cosa fare
     function showJoinHome(ssid) {
       closeSheet();
       clearInterval(reconnectTimer);
@@ -3549,10 +3549,12 @@
         h('div', { class: 'deco b pop', style: 'animation-delay:.1s' }),
         h('div', { class: 'deco c pop', style: 'animation-delay:.2s' }),
         h('div', { class: 'peek' }, owl()),
-        h('h2', { text: 'Ultimo passo' }),
-        h('p', {}, '1. Collega il telefono a ', h('strong', { text: ssid }), '.'),
-        h('p', {}, '2. Apri ', h('strong', { text: deviceHost() }), ' nel browser.'),
-        h('p', { class: 'muted', style: 'margin-top:14px', text: `Se fra un minuto non trovi Cucù, forse la password non era giusta: ricollega il telefono a ${ap} e riprova.` })
+        h('h2', { text: 'Quasi fatto' }),
+        h('p', {}, 'Cucù si sta collegando a ', h('strong', { text: ssid }),
+          '. Aspetta qualche secondo: quando anche il telefono torna su quella rete, questa pagina si apre da sola.'),
+        h('p', { class: 'muted', style: 'margin-top:18px' }, 'Se non si apre: collega il telefono a ', h('strong', { text: ssid }),
+          ' e apri ', h('strong', { text: deviceHost() }), '.'),
+        h('p', { class: 'muted', style: 'margin-top:8px', text: `Se non trovi Cucù nemmeno così, la password forse non era giusta: ricollegati a ${ap} e riprova.` })
       ));
       // Se la pagina resta aperta (Safari, Android) e il telefono torna sulla rete di casa,
       // si apre da sola su cucu-xxxx.local: appena un'immagine di là si carica, Cucù c'è.
