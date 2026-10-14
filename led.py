@@ -6,9 +6,10 @@ anima il LED a 50Hz con il PWM hardware, indipendentemente dal loop NFC.
 
 Comportamento:
 - avvio, o read_nfc.py fermo/bloccato → respiro veloce
-- blocco: configurazione dall'app,     → respiro veloce
-  aggiornamento, "Eccomi!" (le
-  statuine non fanno partire niente)
+- blocco: aggiornamento, "Eccomi!"     → respiro veloce
+  (le statuine non fanno partire niente)
+- abbinamento di una statuina dall'app → doppio lampeggio, come per il PIN: Cucù
+  aspetta che il genitore appoggi una statuina
 - episodio in corso, o riposo         → respiro lento
   (Cucù non si può usare per i limiti)
 - pronto (attesa, pausa, fine episodio) → fisso (100%)
@@ -115,10 +116,11 @@ EFFECTS = {
 def effect_for_state(state, alive):
     if state is None or not alive:
         return "fast"
-    if state.get("pin_reset"):
+    # doppio lampeggio: Cucù aspetta un gesto (nuovo PIN, statuina da abbinare)
+    if state.get("pin_reset") or state.get("lock_reason") == "pairing":
         return "blink"
     if state.get("locked") or state.get("updating"):
-        return "fast"  # blocco: configurazione, aggiornamento, "Eccomi!"
+        return "fast"  # blocco: aggiornamento, "Eccomi!", altre configurazioni dall'app
     if state.get("unknown"):
         return "flicker"
     if state.get("mode") == "playing" or state.get("blocked"):

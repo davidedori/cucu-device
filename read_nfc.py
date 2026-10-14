@@ -770,13 +770,18 @@ def show_unknown(uid):
     global unknown_uid
     unknown_uid = uid
 
+def lock_reason():
+    """Perché l'app sta configurando Cucù (es. "pairing"), o None (vedi LOCK_PATH)."""
+    try:
+        data = json.loads(LOCK_PATH.read_text())
+        until = float(data.get("until", 0))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+    return (data.get("reason") or "app") if 0 < until - time.time() <= LOCK_MAX_SEC else None
+
 def lock_active():
     """Vero se l'app sta configurando Cucù (vedi LOCK_PATH)."""
-    try:
-        until = float(json.loads(LOCK_PATH.read_text()).get("until", 0))
-    except (OSError, ValueError, TypeError, AttributeError):
-        return False
-    return 0 < until - time.time() <= LOCK_MAX_SEC
+    return lock_reason() is not None
 
 def update_step():
     """Passo dell'aggiornamento in corso (1..UPDATE_STEPS), o None (vedi UPDATE_STATUS_PATH)."""
@@ -947,7 +952,10 @@ try:
                     "album": {"index": album["index"] + 1, "total": len(album["files"])} if album else None,
                     "pin_reset": pin_reset_open(),
                     "unknown": unknown_uid is not None,  # statuina sconosciuta: il LED lampeggia ogni tanto
-                    "locked": locked,  # configurazione dall'app (o aggiornamento)
+                    "locked": locked,  # configurazione dall'app (o aggiornamento, o "Eccomi!")
+                    # perché la configurazione: con "pairing" (abbinamento di una statuina) il LED
+                    # fa il doppio lampeggio, come per il PIN: Cucù aspetta una statuina
+                    "lock_reason": lock_reason(),
                     "updating": updating,  # passo dell'aggiornamento in corso, o None
                 })
         except Exception:
