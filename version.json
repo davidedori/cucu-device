@@ -1,5 +1,5 @@
 {
-  "version": "0.9.0",
+  "version": "0.9.1",
   "min_version": "0.1.0",
-  "changelog": "New TV screens in the Cucù style (warm grey, pastel hand-made shapes, grain, website illustrations): 'Put a figurine' while waiting, a new 'The end / take the figurine off' screen when an episode ends, 'Another one? Let's decide together' after it is removed, and a sleeping owl when time limits block viewing (previously all showed the waiting screen). New hourglass overlay and boot splash on the new background; the old TinyWorlds splash is gone. A figurine blocked by time limits after an episode is no longer retried ten times a second. Web app: the device render is centred on the Now page."
+  "changelog": "Updates are manual only: no more nightly timer, the web app shows when a new version is available and the parent installs it. New animated owl TV screens: ready, rest, listening, unknown figurine (stays while the figurine is on), setup while pairing a figurine, and a new boot screen with a progress bar. While an update runs the TV shows the owl with gears, a bar that follows the update steps and a note not to switch Cucù off; nothing starts meanwhile. Time limits reload as soon as they are saved. Thinner progress bar."
 }
