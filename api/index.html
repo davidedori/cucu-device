@@ -1937,7 +1937,18 @@
         const pill = $('device-pill');
         pill.textContent = [info.hostname, info.version && 'v' + info.version].filter(Boolean).join(' · ');
         pill.hidden = false;
+        showHomeScreenPanel();   // senza Wi-Fi per scelta, anche dall'hotspot
       } catch (_) { /* API vecchia o non raggiungibile: la testata resta senza */ }
+    }
+
+    // Sulla Home l'app resta legata all'indirizzo da cui la si installa: dall'hotspot
+    // (10.42.0.1) no, perché sulla rete di casa non c'è; se però Cucù è senza Wi-Fi per
+    // scelta, 10.42.0.1 è il suo indirizzo per sempre
+    const homeScreenHere = () => !onHotspot || !!(info && info.no_wifi);
+
+    function showHomeScreenPanel() {
+      if (isStandalone() || !phonePlatform() || !homeScreenHere()) return;
+      $('homescreen').classList.remove('hidden');
     }
 
     function renderInfo() {
@@ -4094,8 +4105,21 @@
       if (!ok) return;
       try {
         await api('/system/no-wifi', { method: 'POST', body: { enabled: true } });
-        location.hash = '#/adesso';   // l'app, qui sull'indirizzo di Cucù (10.42.0.1)
-      } catch (e) { toast(e.message); }
+        if (info) info.no_wifi = true;
+      } catch (e) { toast(e.message); return; }
+      // Probabilmente siamo nel mini-browser del captive portal, scomodo (non tiene il PIN,
+      // caricare video è difficile): si dice dove usare Cucù da qui in poi
+      const go = () => { $('reconnect-root').replaceChildren(); location.hash = '#/adesso'; showHomeScreenPanel(); };
+      $('reconnect-root').replaceChildren(h('div', { class: 'reconnect', role: 'alertdialog', 'aria-live': 'assertive' },
+        h('div', { class: 'deco a pop' }),
+        h('div', { class: 'deco b pop', style: 'animation-delay:.1s' }),
+        h('div', { class: 'deco c pop', style: 'animation-delay:.2s' }),
+        h('div', { class: 'peek' }, owl()),
+        h('h2', { text: 'Cucù è pronto' }),
+        h('p', {}, 'Per usarlo da questo telefono apri ', h('strong', { text: '10.42.0.1' }),
+          ' in Safari e aggiungilo alla schermata Home: senza Wi-Fi il suo indirizzo è sempre questo.'),
+        h('p', { class: 'muted', style: 'margin-top:12px', text: "Se chiudi questa finestra, scegli di restare collegato a Cucù senza internet." }),
+        h('button', { class: 'btn btn-primary', style: 'margin-top:18px', text: 'Continua qui', onclick: go })));
     }
 
     $('wifi-refresh').addEventListener('click', () => renderWifi());
@@ -4677,7 +4701,7 @@
     // Una volta per telefono, solo nel browser di un iPhone o di un Android
     function shouldOfferHomeScreen() {
       // dall'hotspot l'app resterebbe legata a 10.42.0.1, che sulla rete di casa non c'è
-      if (isStandalone() || !phonePlatform() || onHotspot) return false;
+      if (isStandalone() || !phonePlatform() || !homeScreenHere()) return false;
       try { return localStorage.getItem('cucu-home-offered') !== '1'; } catch (_) { return false; }
     }
 
@@ -4730,10 +4754,8 @@
       if (relock) openTvFull();
       // Il riquadro serve solo nel browser di un telefono: già dalla Home o
       // su un computer resta nascosto
-      if (!isStandalone() && phonePlatform() && !onHotspot) {
-        $('homescreen').classList.remove('hidden');
-        $('homescreen-guide').addEventListener('click', showHomeScreenGuide);
-      }
+      $('homescreen-guide').addEventListener('click', showHomeScreenGuide);
+      showHomeScreenPanel();
       checkPinReset();
       setInterval(checkPinReset, 3000);
       document.addEventListener('visibilitychange', checkPinReset);
