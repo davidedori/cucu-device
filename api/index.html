@@ -201,6 +201,7 @@
 
     /* Primo collegamento (#/wifi, anche nel mini-browser del captive portal): solo il Wi-Fi */
     body.setup-mode .nav, body.setup-mode #update-banner, body.setup-mode #pin-banner { display: none !important; }
+    body.setup-mode .brand { pointer-events: none; }   /* da qui non si entra nell'app */
 
     /* ---------- Navigazione ---------- */
     .nav {
@@ -1374,6 +1375,21 @@
       </div>
     </section>
 
+    <!-- Cucù senza Wi-Fi per scelta: dove usarlo (non nel mini-browser del captive portal) -->
+    <section id="view-nowifi" class="view hidden" aria-labelledby="t-nowifi">
+      <div class="view-head">
+        <h1 id="t-nowifi">Cucù è pronto</h1>
+      </div>
+      <div class="stack">
+        <div class="panel">
+          <p style="margin:0">Cucù funziona senza Wi-Fi. Per usarlo da questo telefono apri <strong>10.42.0.1</strong> in Safari e aggiungilo alla schermata Home: senza Wi-Fi il suo indirizzo è sempre questo.</p>
+          <p class="muted" id="nowifi-captive" style="margin:12px 0 0">Questa finestra si è aperta da sola e qui l'app non funziona bene. Chiudendola, scegli di restare collegato a Cucù senza internet.</p>
+          <p class="muted" style="margin:12px 0 0">Se perdi l'indirizzo: appoggia la stessa statuina 5 volte di fila e lasciala lì, e sulla TV compare come raggiungere Cucù.</p>
+          <a class="btn btn-primary btn-block" id="nowifi-open" href="#/adesso" style="margin-top:16px">Apri Cucù</a>
+        </div>
+      </div>
+    </section>
+
     <!-- Impostazioni -->
     <section id="view-impostazioni" class="view hidden" aria-labelledby="t-impostazioni">
       <div class="view-head">
@@ -1854,7 +1870,7 @@
 
     function parseRoute() {
       const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
-      const section = ['adesso', 'personaggi', 'tempo', 'impostazioni', 'wifi'].includes(parts[0]) ? parts[0] : 'adesso';
+      const section = ['adesso', 'personaggi', 'tempo', 'impostazioni', 'wifi', 'nowifi'].includes(parts[0]) ? parts[0] : 'adesso';
       return { section, name: section === 'personaggi' ? parts[1] || null : null };
     }
 
@@ -1887,7 +1903,7 @@
         return;
       }
       lastSection = r.section;
-      document.body.classList.toggle('setup-mode', r.section === 'wifi');
+      document.body.classList.toggle('setup-mode', r.section === 'wifi' || r.section === 'nowifi');
       drawUpdateBanner();
 
       stopTagScan();
@@ -1917,6 +1933,11 @@
       } else if (r.section === 'wifi') {
         showView('wifi');
         renderWifi('wifi-setup');
+      } else if (r.section === 'nowifi') {
+        showView('nowifi');
+        // l'app solo fuori dal mini-browser del captive portal (non ricorda il PIN, niente caricamenti)
+        $('nowifi-open').hidden = inCaptiveBrowser();
+        $('nowifi-captive').hidden = !inCaptiveBrowser();
       } else {
         showView('impostazioni');
         renderWifi();
@@ -3739,7 +3760,7 @@
         pin.focus();
       } else if (step === 'forgot') {
         form.replaceChildren(h('h2', { text: 'Un PIN nuovo' }),
-          h('p', { text: 'Appoggia su Cucù la stessa statuina 5 volte di fila, togliendola ogni volta, e la quinta volta lasciala lì. Quando la luce fa un doppio lampeggio, qui potrai scegliere un PIN nuovo.' }),
+          h('p', { text: 'Appoggia su Cucù la stessa statuina 5 volte di fila, togliendola ogni volta, e la quinta volta lasciala lì. Quando sulla TV compare «Eccomi!» (e la luce fa un doppio lampeggio), qui potrai scegliere un PIN nuovo.' }),
           h('div', { class: 'muted small', role: 'status', text: 'Aspetto Cucù…' }),
           h('div', { class: 'actions' }, cancel));
         const check = async () => {
@@ -4107,19 +4128,17 @@
         await api('/system/no-wifi', { method: 'POST', body: { enabled: true } });
         if (info) info.no_wifi = true;
       } catch (e) { toast(e.message); return; }
-      // Probabilmente siamo nel mini-browser del captive portal, scomodo (non tiene il PIN,
-      // caricare video è difficile): si dice dove usare Cucù da qui in poi
-      const go = () => { $('reconnect-root').replaceChildren(); location.hash = '#/adesso'; showHomeScreenPanel(); };
-      $('reconnect-root').replaceChildren(h('div', { class: 'reconnect', role: 'alertdialog', 'aria-live': 'assertive' },
-        h('div', { class: 'deco a pop' }),
-        h('div', { class: 'deco b pop', style: 'animation-delay:.1s' }),
-        h('div', { class: 'deco c pop', style: 'animation-delay:.2s' }),
-        h('div', { class: 'peek' }, owl()),
-        h('h2', { text: 'Cucù è pronto' }),
-        h('p', {}, 'Per usarlo da questo telefono apri ', h('strong', { text: '10.42.0.1' }),
-          ' in Safari e aggiungilo alla schermata Home: senza Wi-Fi il suo indirizzo è sempre questo.'),
-        h('p', { class: 'muted', style: 'margin-top:12px', text: "Se chiudi questa finestra, scegli di restare collegato a Cucù senza internet." }),
-        h('button', { class: 'btn btn-primary', style: 'margin-top:18px', text: 'Continua qui', onclick: go })));
+      location.hash = '#/nowifi';   // dove usare Cucù da qui in poi (non nel captive portal)
+      showHomeScreenPanel();
+    }
+
+    // Mini-browser del captive portal: su iPhone non si presenta come Safari, su Android
+    // è una WebView ("wv"). Lì l'app non va aperta: non ricorda il PIN, niente caricamenti
+    function inCaptiveBrowser() {
+      if (isStandalone()) return false;   // l'app dalla Home non dice "Safari" nemmeno lei
+      const ua = navigator.userAgent;
+      if (/iPhone|iPad|iPod/.test(ua)) return !/Safari\//.test(ua);
+      return /; wv\)/.test(ua);
     }
 
     $('wifi-refresh').addEventListener('click', () => renderWifi());
@@ -4219,7 +4238,7 @@
       if (!ok) return;
       try {
         await api(`/system/wifi/${enc(ssid)}`, { method: 'DELETE' });
-        if (isCurrent) showReconnect('Cambio rete', 'Collega il telefono alla rete di Cucù (il suo nome finisce con _AP) e apri 10.42.0.1.');
+        if (isCurrent) showReconnect('Cambio rete', 'Cucù si scollega da questa rete. Se non ne ha altre salvate accende la sua: guarda la TV e inquadra il codice che compare, si collega il telefono e si apre la pagina del Wi-Fi.');
         else renderWifi();
       } catch (e) { toast(e.message); }
     }
@@ -4480,7 +4499,7 @@
     function renderLockForgot() {
       stopResetPoll();
       lockView('Un PIN nuovo',
-        'Appoggia su Cucù la stessa statuina 5 volte di fila, togliendola ogni volta, e la quinta volta lasciala lì. Quando la luce fa un doppio lampeggio, qui potrai scegliere un PIN nuovo.',
+        'Appoggia su Cucù la stessa statuina 5 volte di fila, togliendola ogni volta, e la quinta volta lasciala lì. Quando sulla TV compare «Eccomi!» (e la luce fa un doppio lampeggio), qui potrai scegliere un PIN nuovo.',
         h('div', { class: 'muted small', role: 'status', style: 'margin-top:12px', text: 'Aspetto Cucù…' }),
         h('button', { class: 'btn btn-quiet', style: 'margin-top:8px', text: 'Torna indietro', onclick: () => { stopResetPoll(); renderLockPin(); } }));
       const check = async () => {
@@ -4760,7 +4779,7 @@
       setInterval(checkPinReset, 3000);
       document.addEventListener('visibilitychange', checkPinReset);
       // nel primo collegamento solo il Wi-Fi: niente proposte né aggiornamenti
-      if (parseRoute().section === 'wifi') return;
+      if (parseRoute().section === 'wifi' || parseRoute().section === 'nowifi') return;
       maybeOfferOnStart();
       autoCheckUpdates();
     }
