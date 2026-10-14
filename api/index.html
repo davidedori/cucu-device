@@ -865,6 +865,8 @@
     .tv-pin h2 { margin: 0; font-family: var(--serif); font-size: 22px; }
     .tv-pin .actions { display: flex; gap: 10px; }
     .tv-pin .actions .btn { flex: 1; }
+    .tv-pin p { margin: 0; color: var(--muted); }
+    .tv-pin .btn-quiet { justify-self: center; }
     .lock-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
     .lock-row .lock-text { flex: 1; min-width: 0; }
     .lock-row .lock-text small { display: block; color: var(--muted); font-size: 14px; }
@@ -1228,15 +1230,8 @@
       </div>
       <label class="ctl-volume" id="tv-full-volume"><input type="range" min="0" max="100" step="5" aria-label="Volume di Cucù" id="tv-full-vol"></label>
     </div>
-    <form class="tv-pin" id="tv-pin" hidden>
-      <h2>Per uscire, il PIN</h2>
-      <input class="field pin" id="tv-pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="current-password" placeholder="••••" aria-label="PIN">
-      <div class="form-error" id="tv-pin-error" role="alert"></div>
-      <div class="actions">
-        <button class="btn" type="button" id="tv-pin-cancel">Annulla</button>
-        <button class="btn btn-primary" type="submit">Esci</button>
-      </div>
-    </form>
+    <!-- per uscire dalla modalità bambino: il PIN, o (dimenticato) il gesto con la statuina e un PIN nuovo -->
+    <form class="tv-pin" id="tv-pin" hidden></form>
   </div>
 
   <nav class="nav" aria-label="Sezioni">
@@ -3694,27 +3689,81 @@
       if (n.volume != null && Date.now() - volumeTouched > 4000) $('tv-full-vol').value = n.volume;
     }
 
+    // Uscita dalla modalità bambino: il PIN; se è dimenticato, il gesto con la statuina (lo
+    // stesso della schermata di blocco) apre la finestra per sceglierne uno nuovo, e salvato
+    // quello si esce. Senza gesto fisico e PIN nuovo un bambino non esce per caso
+    let tvPinPoll = null;
+
+    function exitChildMode() {
+      clearTimeout(tvPinPoll);
+      store.set(TV_LOCK_PREF, null);    // la modalità bambino si spegne (l'interruttore dice com'è davvero)
+      $('tv-lock-pref').checked = false;
+      closeTvFull(true);
+      if (liveSound) toggleSound();     // fuori dalla modalità bambino l'audio torna muto
+    }
+
+    function renderTvPin(step) {
+      clearTimeout(tvPinPoll);
+      const form = $('tv-pin');
+      const error = h('div', { class: 'form-error', role: 'alert' });
+      const cancel = h('button', { class: 'btn', type: 'button', text: 'Annulla', onclick: () => { clearTimeout(tvPinPoll); form.hidden = true; } });
+      form.hidden = false;
+      form.onsubmit = null;
+
+      if (step === 'pin') {
+        const pin = pinField('tv-pin-input', 'current-password');
+        form.replaceChildren(h('h2', { text: 'Per uscire, il PIN' }), pin, error,
+          h('div', { class: 'actions' }, cancel, h('button', { class: 'btn btn-primary', type: 'submit', text: 'Esci' })),
+          h('button', { class: 'btn btn-quiet', type: 'button', text: 'Ho dimenticato il PIN', onclick: () => renderTvPin('forgot') }));
+        form.onsubmit = async (e) => {
+          e.preventDefault();
+          try {
+            await postAuth('/auth/login', { pin: pin.value });   // dopo 5 errori si aspetta
+            exitChildMode();
+          } catch (err) {
+            error.textContent = err.message;
+            pin.value = '';
+          }
+        };
+        pin.focus();
+      } else if (step === 'forgot') {
+        form.replaceChildren(h('h2', { text: 'Un PIN nuovo' }),
+          h('p', { text: 'Appoggia su Cucù la stessa statuina 5 volte di fila, togliendola ogni volta, e la quinta volta lasciala lì. Quando la luce fa un doppio lampeggio, qui potrai scegliere un PIN nuovo.' }),
+          h('div', { class: 'muted small', role: 'status', text: 'Aspetto Cucù…' }),
+          h('div', { class: 'actions' }, cancel));
+        const check = async () => {
+          try {
+            const res = await fetch('/auth/status', { cache: 'no-store' });
+            if (res.ok && (await res.json()).reset_open) { renderTvPin('reset'); return; }
+          } catch (_) { /* rete assente: si riprova */ }
+          tvPinPoll = setTimeout(check, 2000);
+        };
+        check();
+      } else {   // reset: la finestra è aperta, PIN nuovo e si esce
+        const pin = pinField('tv-reset-pin', 'new-password');
+        const repeat = pinField('tv-reset-repeat', 'new-password');
+        form.replaceChildren(h('h2', { text: 'Scegli il PIN nuovo' }),
+          h('p', { text: 'Con la statuina ancora su Cucù.' }), pin, repeat, error,
+          h('div', { class: 'actions' }, cancel, h('button', { class: 'btn btn-primary', type: 'submit', text: 'Salva ed esci' })));
+        form.onsubmit = async (e) => {
+          e.preventDefault();
+          error.textContent = '';
+          if (!/^\d{4,8}$/.test(pin.value)) { error.textContent = 'Il PIN deve avere da 4 a 8 cifre.'; return; }
+          if (pin.value !== repeat.value) { error.textContent = 'I due PIN non sono uguali.'; return; }
+          try {
+            await postAuth('/auth/reset', { pin: pin.value });
+            authState = { pin_set: true, authenticated: true };
+            toast('PIN cambiato: sugli altri telefoni andrà inserito di nuovo');
+            exitChildMode();
+          } catch (err) { error.textContent = err.message; }
+        };
+        pin.focus();
+      }
+    }
+
     $('tv-full-close').addEventListener('click', () => {
       if (!tvLocked) { closeTvFull(); return; }
-      $('tv-pin').hidden = false;
-      $('tv-pin-error').textContent = '';
-      $('tv-pin-input').value = '';
-      $('tv-pin-input').focus();
-    });
-    $('tv-pin-cancel').addEventListener('click', () => { $('tv-pin').hidden = true; });
-    $('tv-pin').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      try {
-        await postAuth('/auth/login', { pin: $('tv-pin-input').value });   // dopo 5 errori si aspetta
-        // uscita con il PIN: la modalità bambino si spegne (l'interruttore dice com'è davvero)
-        store.set(TV_LOCK_PREF, null);
-        $('tv-lock-pref').checked = false;
-        closeTvFull(true);
-        if (liveSound) toggleSound();   // fuori dalla modalità bambino l'audio torna muto
-      } catch (err) {
-        $('tv-pin-error').textContent = err.message;
-        $('tv-pin-input').value = '';
-      }
+      renderTvPin('pin');
     });
     $('tv-full-toggle').addEventListener('click', (e) => playback(e.currentTarget.dataset.action));
     $('tv-full-stop').addEventListener('click', () => playback('stop'));
