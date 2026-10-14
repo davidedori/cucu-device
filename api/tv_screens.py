@@ -3,13 +3,15 @@ a dispositivo (nome della rete, password dell'hotspot, indirizzo).
 
 - "Colleghiamoci!" (first): Cucù non ha ancora una rete; QR del Wi-Fi dell'hotspot
 - "Fatto!" (done): Cucù si è appena collegato a una rete dall'app; QR dell'indirizzo
+- "Eccomi!" (help): gesto d'emergenza (stessa statuina 5 volte); come raggiungere Cucù
+  adesso: sull'hotspot il QR del suo Wi-Fi, su una rete il QR dell'indirizzo
 
 Il loop animato (graphics/loops/<nome>.mp4: gufetto e cartoncino bianco) esce da
 render_loops.mjs; testo e QR si disegnano qui in una PNG trasparente a tutto schermo
 (<nome>_overlay.png) che read_nfc.py posa sul loop con il filtro logo di VLC. In più la
 schermata intera, ferma (<nome>_screen.png, sopra graphics/<nome>.png), per quando il
 loop manca. Testo e misure come nei concept (graphics/src/concept/concept-schermate.html,
-#first e #done), con i font della web UI.
+#first, #done, #help-home, #help-hotspot), con i font della web UI.
 
 Pillow e qrcode si importano solo qui dentro: senza, l'API parte lo stesso e queste
 schermate semplicemente non ci sono.
@@ -24,8 +26,8 @@ QR_SIZE = 280
 
 INK = (61, 61, 58, 255)
 MUTED = (110, 110, 105, 255)
-INFO_BG = (216, 230, 243, 255)
-INFO_INK = (61, 102, 144, 255)
+INFO = ((216, 230, 243, 255), (61, 102, 144, 255))   # riquadro azzurro: un consiglio
+PIN = ((249, 216, 202, 255), (176, 71, 42, 255))     # riquadro pesca: il nuovo PIN
 
 TEXT_X, TEXT_W = 190, 600   # blocco di testo a sinistra, centrato in verticale
 INDENT = 44                 # numeri dell'elenco a sinistra, testo rientrato
@@ -70,10 +72,11 @@ def wifi_qr_data(ssid: str, password: str) -> str:
     return f"WIFI:T:WPA;S:{esc(ssid)};P:{esc(password)};;"
 
 
-def render(title, items, qr_data, overlay_path: Path, base_png: Path, full_path: Path, pill=None):
+def render(title, items, qr_data, overlay_path: Path, base_png: Path, full_path: Path, pill=None, pill_colors=INFO):
     """Disegna la schermata. items: punti numerati, ciascuno {"lines": [...], "notes": [...]},
     dove ogni riga è una lista di pezzi (testo, grassetto): "lines" a 32 px, "notes" a 24 px
-    in grigio. pill: un riquadro azzurro in fondo (facoltativo).
+    in grigio. pill: un riquadro in fondo (facoltativo), pezzi (testo, grassetto) o testo,
+    con i colori pill_colors (fondo, testo).
     Scrive overlay_path (RGBA trasparente, da posare sul loop) e full_path (sopra base_png)."""
     from PIL import Image, ImageDraw
 
@@ -81,7 +84,9 @@ def render(title, items, qr_data, overlay_path: Path, base_png: Path, full_path:
     d = ImageDraw.Draw(img)
     h1 = _font(SERIF, 62, 500)
     num_f = _font(SANS, 32, 400)
-    pill_f = _font(SANS, 28, 400)
+    pill_f, pill_b = _font(SANS, 28, 400), _font(SANS, 28, 600)
+    if isinstance(pill, str):
+        pill = [(pill, False)]
     width = TEXT_W - INDENT
 
     # righe da disegnare: (x, pezzi [(testo, font, colore)], altezza, linea di base, numero)
@@ -112,9 +117,14 @@ def render(title, items, qr_data, overlay_path: Path, base_png: Path, full_path:
         y += lh
     if pill:
         y += 22
-        pw = pill_f.getlength(pill) + 36
-        d.rounded_rectangle((TEXT_X, y, TEXT_X + pw, y + pill_h), radius=14, fill=INFO_BG)
-        d.text((TEXT_X + 18, y + pill_h / 2), pill, font=pill_f, fill=INFO_INK, anchor="lm")
+        bg, ink = pill_colors
+        pw = sum((pill_b if b else pill_f).getlength(t) for t, b in pill) + 36
+        d.rounded_rectangle((TEXT_X, y, TEXT_X + pw, y + pill_h), radius=14, fill=bg)
+        x = TEXT_X + 18
+        for t, b in pill:
+            font = pill_b if b else pill_f
+            d.text((x, y + pill_h / 2), t, font=font, fill=ink, anchor="lm")
+            x += font.getlength(t)
 
     # QR al centro del cartoncino, a quadretti interi
     matrix = qr_matrix(qr_data)
@@ -146,7 +156,7 @@ def render_done(ssid: str, host: str, run_dir: Path, graphics_dir: Path):
         {"lines": [[("Inquadra il codice", False)]],
          "notes": [[("oppure vai su ", False), (host, True)]]},
     ], f"http://{host}/", run_dir / "done_overlay.png", graphics_dir / "done.png", run_dir / "done_screen.png",
-        pill="Poi aggiungi Cucù alla schermata Home")
+        pill="Poi aggiungi Cucù alla schermata Home", pill_colors=INFO)
 
 
 def render_first(ap_ssid: str, password: str, ap_ip: str, run_dir: Path, graphics_dir: Path):
@@ -159,3 +169,28 @@ def render_first(ap_ssid: str, password: str, ap_ip: str, run_dir: Path, graphic
          "notes": [[("se non si apre, vai su ", False), (ap_ip, True)]]},
     ], wifi_qr_data(ap_ssid, password), run_dir / "first_overlay.png", graphics_dir / "first.png",
         run_dir / "first_screen.png")
+
+
+def render_help(run_dir: Path, graphics_dir: Path, host: str, ap_ssid: str = None, password: str = None,
+                ap_ip: str = None, ssid: str = None, pin_open: bool = False):
+    """"Eccomi!": come raggiungere Cucù adesso. Sull'hotspot (ap_ssid) il QR del suo Wi-Fi,
+    su una rete (ssid) il QR dell'indirizzo. pin_open: c'è la finestra per un nuovo PIN."""
+    if ap_ssid:
+        items = [
+            {"lines": [[("Inquadra il codice con il telefono", False)]],
+             "notes": [[("oppure collegati alla rete ", False), (ap_ssid, True)],
+                       [("password ", False), (password, True)]]},
+            {"lines": [[("Apri l'app Cucù", True), (" o vai su ", False), (ap_ip, True)]]},
+        ]
+        qr = wifi_qr_data(ap_ssid, password)
+    else:
+        items = [
+            {"lines": [[("Collega il telefono al Wi-Fi", False)], [(ssid or "", True)]],
+             "notes": [[("la stessa rete di Cucù", False)]]},
+            {"lines": [[("Apri l'app Cucù", True), (" o inquadra il codice", False)]],
+             "notes": [[("oppure vai su ", False), (host, True)]]},
+        ]
+        qr = f"http://{host}/"
+    pill = [("Puoi scegliere un ", False), ("nuovo PIN", True), (" entro 10 minuti", False)] if pin_open else None
+    render("Eccomi!", items, qr, run_dir / "help_overlay.png", graphics_dir / "first.png",
+           run_dir / "help_screen.png", pill=pill, pill_colors=PIN)

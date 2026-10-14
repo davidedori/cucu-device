@@ -396,6 +396,11 @@ def _start_thumb_worker():
 
 
 @app.on_event("startup")
+def _start_help_worker():
+    threading.Thread(target=_help_worker, name="help", daemon=True).start()
+
+
+@app.on_event("startup")
 def _start_first_screen_check():
     """Schermata del primo collegamento: si decide all'avvio (vedi FIRST_FILE). All'avvio
     del dispositivo NetworkManager può non rispondere ancora: qualche tentativo."""
@@ -601,6 +606,64 @@ DONE_FILE = RUN_STATE_FILE.parent / "done.json"
 FIRST_FILE = RUN_STATE_FILE.parent / "first.json"
 GRAPHICS_DIR = BASE_DIR / "graphics"
 HOTSPOT_DEFAULT_PASSWORD = "cucusetup"   # come in setup_hotspot.sh
+
+
+# - "Eccomi!" dopo il gesto d'emergenza (stessa statuina 5 volte): read_nfc.py scrive
+#   help_request.json (con la scadenza), qui lo si vede entro un secondo e si disegna
+#   come raggiungere Cucù adesso; help.json dice a read_nfc.py che è pronta
+HELP_REQUEST_FILE = RUN_STATE_FILE.parent / "help_request.json"
+HELP_FILE = RUN_STATE_FILE.parent / "help.json"
+
+
+def _active_wifi():
+    """(nome della rete, è l'hotspot) della connessione Wi-Fi attiva, o (None, False)."""
+    res = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE", "con", "show", "--active"],
+                         capture_output=True, text=True, timeout=10)
+    for line in res.stdout.splitlines():
+        parts = re.split(r'(?<!\\):', line)
+        if len(parts) >= 2 and parts[1] == "802-11-wireless":
+            name = parts[0].replace("\\:", ":")
+            if name.endswith("_AP"):
+                return name, True
+            # il nome della connessione può non essere il nome della rete ("preconfigured")
+            ssid = subprocess.run(["nmcli", "-g", "802-11-wireless.ssid", "con", "show", name],
+                                  capture_output=True, text=True, timeout=10).stdout.strip()
+            return ssid or name, False
+    return None, False
+
+
+def _render_help(until: float):
+    run_dir = RUN_STATE_FILE.parent
+    host = f"{socket.gethostname()}.local"
+    ssid, on_hotspot = _active_wifi()
+    import tv_screens
+    if on_hotspot or not ssid:   # senza rete Cucù sta per accendere la sua
+        ap, password = _hotspot()
+        tv_screens.render_help(run_dir, GRAPHICS_DIR, host, ap_ssid=ap, password=password, ap_ip=HOTSPOT_IP,
+                               pin_open=load_ui_auth() is not None and pin_reset_open())
+    else:
+        tv_screens.render_help(run_dir, GRAPHICS_DIR, host, ssid=ssid,
+                               pin_open=load_ui_auth() is not None and pin_reset_open())
+    _write_json_atomic(HELP_FILE, {"until": until})
+
+
+def _help_worker():
+    """Guarda help_request.json (una stat al secondo, in RAM) e disegna "Eccomi!"."""
+    last = None
+    while True:
+        time.sleep(1)
+        try:
+            stamp = HELP_REQUEST_FILE.stat().st_mtime_ns
+            if stamp == last:
+                continue
+            last = stamp
+            until = float(json.loads(HELP_REQUEST_FILE.read_text()).get("until", 0))
+            if until > time.time():
+                _render_help(until)
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            print(f"[help] Schermata 'Eccomi!' non disponibile: {e}")
 
 
 def _hotspot():
