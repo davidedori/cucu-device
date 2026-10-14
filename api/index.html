@@ -926,7 +926,7 @@
     .now-panel .now-sub { color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
     .now-facts { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
     /* Controlli di riproduzione: pulsanti tondi come lo stepper, volume con il cursore */
-    .now-controls { margin-top: 14px; display: grid; gap: 12px; }
+    .now-controls { margin-bottom: 16px; display: grid; gap: 12px; }
     .now-controls[hidden], .now-controls [hidden] { display: none; }
     .ctl-row { display: flex; gap: 10px; }
     .ctl-row .icon-btn { width: 52px; height: 52px; background: var(--bg); color: var(--ink); }
@@ -1215,9 +1215,10 @@
         </figure>
       </div>
       <div class="panel now-panel" aria-live="polite">
+        <!-- in cima: il testo sotto cambia lunghezza, i pulsanti restano fermi sotto il dito -->
+        <div class="now-controls" id="now-controls" hidden></div>
         <div class="now-title" id="now-title">…</div>
         <div class="now-sub" id="now-sub"></div>
-        <div class="now-controls" id="now-controls" hidden></div>
         <div class="now-facts" id="now-facts"></div>
       </div>
     </section>
