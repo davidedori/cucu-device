@@ -3501,16 +3501,16 @@
         });
         els.push(list);
 
-        if (data.saved.length) {
+        // la rete di Cucù ha la sua sezione qui sotto
+        const savedNets = data.saved.filter(ssid => !ssid.endsWith('_AP'));
+        if (savedNets.length) {
           const savedRows = h('div', { class: 'rows' });
-          data.saved.forEach(ssid => {
-            const isAp = ssid.endsWith('_AP');
+          savedNets.forEach(ssid => {
             savedRows.append(h('div', { class: 'row' },
               h('div', { class: 'row-main' },
-                h('div', { class: 'row-title', style: 'font-weight:400', text: ssid }),
-                isAp ? h('div', { class: 'row-sub', text: 'Rete di emergenza di Cucù' }) : null
+                h('div', { class: 'row-title', style: 'font-weight:400', text: ssid })
               ),
-              isAp ? null : h('button', {
+              h('button', {
                 class: 'icon-btn danger', 'aria-label': 'Dimentica ' + ssid, onclick: () => forgetWifi(ssid),
               }, icon('remove'))
             ));
@@ -3519,10 +3519,40 @@
             h('summary', {}, icon('chevron'), 'Reti salvate'), savedRows));
         }
 
+        // Nel primo collegamento no: il telefono è già sulla rete di Cucù
+        if (rootId === 'wifi') els.push(await hotspotSection());
+
         root.replaceChildren(...els);
       } catch (e) {
         root.replaceChildren(h('p', { class: 'muted', text: 'Non riesco a leggere le reti: ' + e.message }));
       }
+    }
+
+    // La rete di Cucù (l'hotspot): per collegare un altro telefono o ritrovare la password.
+    // Cucù la accende da solo quando non trova nessuna rete salvata (per esempio dai nonni)
+    async function hotspotSection() {
+      let hs;
+      try { hs = await api('/system/hotspot'); } catch (_) { return h('div'); }
+      const pw = h('span', { text: '••••••••' });
+      const showPw = h('button', {
+        class: 'icon-btn', type: 'button', 'aria-label': 'Mostra la password',
+        onclick: () => { const hidden = pw.textContent !== hs.password; pw.textContent = hidden ? hs.password : '••••••••'; },
+      }, icon('eye'));
+      const qr = h('img', { src: `/system/hotspot/qr.svg?t=${Date.now()}`, alt: `Codice per collegarsi a ${hs.ssid}`, width: '180', height: '180',
+        style: 'display:block;margin:14px auto 4px;border-radius:12px;background:#fff' });
+      qr.addEventListener('error', () => qr.remove());
+      return h('details', { class: 'more', style: 'margin-top:10px' },
+        h('summary', {}, icon('chevron'), 'La rete di Cucù'),
+        h('p', { class: 'muted', style: 'margin:10px 0 0', text: 'Quando non trova nessuna rete salvata, Cucù accende la sua: per esempio dai nonni. Per collegare un telefono, inquadra il codice.' }),
+        qr,
+        h('div', { class: 'rows' },
+          h('div', { class: 'row' }, h('div', { class: 'row-main' },
+            h('div', { class: 'row-sub', text: 'Nome' }), h('div', { class: 'row-title', style: 'font-weight:400', text: hs.ssid }))),
+          h('div', { class: 'row' }, h('div', { class: 'row-main' },
+            h('div', { class: 'row-sub', text: 'Password' }), h('div', { class: 'row-title', style: 'font-weight:400' }, pw)), showPw),
+          h('div', { class: 'row' }, h('div', { class: 'row-main' },
+            h('div', { class: 'row-sub', text: 'Indirizzo, con il telefono sulla sua rete' }), h('div', { class: 'row-title', style: 'font-weight:400', text: hs.ip })))
+        ));
     }
 
     $('wifi-refresh').addEventListener('click', () => renderWifi());

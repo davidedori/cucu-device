@@ -2350,6 +2350,28 @@ def connect_wifi(payload: WifiConnect, background_tasks: BackgroundTasks):
     
     return {"status": "ok", "message": f"Tentativo di connessione a '{ssid}' avviato..."}
 
+@app.get("/system/hotspot")
+def hotspot_info():
+    """La rete di Cucù (l'hotspot): per collegare un altro telefono o ritrovare la password."""
+    ssid, password = _hotspot()
+    return {"ssid": ssid, "password": password, "ip": HOTSPOT_IP}
+
+
+@app.get("/system/hotspot/qr.svg")
+def hotspot_qr():
+    """QR che collega il telefono all'hotspot (lo stesso della schermata del primo collegamento)."""
+    try:
+        import tv_screens
+        matrix = tv_screens.qr_matrix(tv_screens.wifi_qr_data(*_hotspot()))
+    except ImportError:
+        raise HTTPException(status_code=404, detail="QR non disponibile: manca la libreria qrcode.")
+    n = len(matrix)
+    cells = "".join(f"M{c},{r}h1v1h-1z" for r, row in enumerate(matrix) for c, on in enumerate(row) if on)
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 {n + 4} {n + 4}" shape-rendering="crispEdges">'
+           f'<rect x="-2" y="-2" width="{n + 4}" height="{n + 4}" fill="#fff"/><path d="{cells}" fill="#3d3d3a"/></svg>')
+    return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
+
+
 def _after_forget():
     time.sleep(2)  # prima la risposta al telefono: con l'hotspot la sua rete può cambiare
     try:
