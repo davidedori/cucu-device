@@ -3854,7 +3854,7 @@
           try {
             await postAuth('/auth/reset', { pin: pin.value });
             authState = { pin_set: true, authenticated: true };
-            toast('PIN cambiato: sugli altri telefoni andrà inserito di nuovo');
+            toast('PIN cambiato: sugli altri dispositivi andrà inserito di nuovo');
             exitChildMode();
           } catch (err) { error.textContent = err.message; }
         };
@@ -4600,7 +4600,7 @@
           await postAuth('/auth/reset', { pin: pin.value });
           authState = { pin_set: true, authenticated: true };
           enterApp();
-          toast('PIN cambiato: sugli altri telefoni andrà inserito di nuovo');
+          toast('PIN cambiato: sugli altri dispositivi andrà inserito di nuovo');
         } catch (err) {
           error.textContent = err.message;
           btn.disabled = false;
@@ -4666,11 +4666,11 @@
 
     $('pin-banner-btn').addEventListener('click', () => pinSheet({
       title: 'Un PIN nuovo',
-      text: 'Con la statuina ancora su Cucù. Sugli altri telefoni andrà inserito di nuovo.',
+      text: 'Con la statuina ancora su Cucù. Sugli altri dispositivi andrà inserito di nuovo.',
       ok: 'Salva il nuovo PIN',
       submit: async ({ pin }) => {
         await postAuth('/auth/reset', { pin });
-        toast('PIN cambiato: sugli altri telefoni andrà inserito di nuovo');
+        toast('PIN cambiato: sugli altri dispositivi andrà inserito di nuovo');
         checkPinReset();
       },
     }));
@@ -4678,7 +4678,7 @@
     function setupPin() {
       pinSheet({
         title: 'Imposta un PIN',
-        text: 'Servirà per aprire queste impostazioni da ogni telefono. Su questo telefono resti dentro per tre mesi.',
+        text: 'Servirà per aprire queste impostazioni da ogni dispositivo. Su questo dispositivo resti dentro per tre mesi.',
         ok: 'Imposta il PIN',
         submit: async ({ pin }) => {
           await postAuth('/auth/setup', { pin });
@@ -4696,7 +4696,7 @@
         ok: 'Cambia il PIN',
         submit: async ({ current, pin }) => {
           await postAuth('/auth/change', { current_pin: current, new_pin: pin });
-          toast('PIN cambiato: sugli altri telefoni andrà inserito di nuovo');
+          toast('PIN cambiato: sugli altri dispositivi andrà inserito di nuovo');
         },
       });
     }
@@ -4729,7 +4729,7 @@
           h('div', { class: 'panel-sub', style: 'margin-top:6px', text: 'Le impostazioni sono protette da un PIN. Se lo dimentichi, puoi sceglierne uno nuovo appoggiando la stessa statuina su Cucù 5 volte di fila.' }),
           h('div', { class: 'stack' },
             h('button', { class: 'btn btn-block', text: 'Cambia il PIN', onclick: changePin }),
-            h('button', { class: 'btn btn-block', text: 'Esci da questo telefono', onclick: logout }),
+            h('button', { class: 'btn btn-block', text: 'Esci da questo dispositivo', onclick: logout }),
             h('div', { style: 'text-align:center' },
               h('button', { class: 'btn btn-quiet', style: 'color:var(--danger)', text: 'Togli il PIN', onclick: removePin })))
         );
