@@ -822,6 +822,16 @@
     /* la schermata vera della TV: il loop animato e, sopra, testo e QR disegnati sul Pi */
     .scr-media video, .scr-media .scr-overlay { position: absolute; inset: 0; }
     .scr-media [hidden] { display: none; }
+    .screen[data-state="pause"] #scr-live { filter: grayscale(.4) brightness(.55); }
+    /* audio anche sul telefono: muto di base, si accende da qui */
+    .scr-sound {
+      position: absolute; right: 14px; top: 14px; z-index: 2;
+      width: 40px; height: 40px; border: 0; border-radius: 50%;
+      display: grid; place-items: center; cursor: pointer;
+      background: rgba(0, 0, 0, .45); color: #fff;
+    }
+    .scr-sound[hidden] { display: none; }
+    .scr-sound svg { width: 22px; height: 22px; }
     .screen[data-media="1"] .scr-media { opacity: 1; }
     .screen[data-state="pause"] .scr-media img { filter: grayscale(.4) brightness(.55); }
     .screen[data-media="1"] .scr { color: #fff; }
@@ -1200,7 +1210,8 @@
       <div class="stage" id="stage" data-state="idle">
         <div class="tv">
           <div class="screen" id="screen" data-state="idle" role="img" aria-label="La TV">
-            <div class="scr-media"><img id="scr-img" alt=""><video id="scr-video" muted loop playsinline disablepictureinpicture hidden></video><img class="scr-overlay" id="scr-overlay" alt="" hidden></div>
+            <div class="scr-media"><img id="scr-img" alt=""><video id="scr-video" muted loop playsinline disablepictureinpicture hidden></video><img class="scr-overlay" id="scr-overlay" alt="" hidden><video id="scr-live" muted playsinline disablepictureinpicture preload="metadata" hidden></video><audio id="scr-live-audio" muted preload="metadata"></audio></div>
+            <button class="scr-sound" id="scr-sound" type="button" hidden></button>
             <div class="scr" id="scr-content"></div>
           </div>
           <div class="tv-foot"></div>
@@ -1406,6 +1417,7 @@
       stop: '<rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/>',
       next: '<path d="M5.5 6.2v11.6a1 1 0 0 0 1.5.8l8.6-5.8a1 1 0 0 0 0-1.6L7 5.4a1 1 0 0 0-1.5.8Z" fill="currentColor"/><rect x="16.5" y="5.5" width="3" height="13" rx="1.4" fill="currentColor"/>',
       volume: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+      mute: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z" fill="currentColor"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
       eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" fill="currentColor" opacity=".3"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/>',
     };
 
@@ -3258,8 +3270,15 @@
     let nowTimer = null;
     let lastNow = null;
 
+    // "Adesso" in secondo piano (app in background, schermo spento): il video dell'episodio
+    // si ferma e il collegamento si chiude, così il Pi non lo manda per niente
+    function nowVisibility() {
+      if (document.hidden) stopLive(); else pollNow();
+    }
+
     function startNowPolling() {
       stopNowPolling();
+      document.addEventListener('visibilitychange', nowVisibility);
       pollNow();
       nowTimer = setInterval(() => { if (!document.hidden) pollNow(); }, 2500);
     }
@@ -3267,11 +3286,14 @@
     function stopNowPolling() {
       clearInterval(nowTimer);
       nowTimer = null;
+      document.removeEventListener('visibilitychange', nowVisibility);
+      stopLive();
     }
 
     async function pollNow() {
       try {
         lastNow = await api('/system/now');
+        lastNowAt = performance.now();
         renderAdesso(lastNow);
       } catch (_) { /* si riprova al giro dopo */ }
     }
@@ -3387,26 +3409,32 @@
       const i = n.character ? charIndex(n.character) : -1;
       screen.style.setProperty('--scr', withEpisode && i >= 0 ? TINTS[i % TINTS.length][0] : d.state === 'end' ? 'var(--apricot)' : '#dfe6ec');
 
-      const thumb = withEpisode && n.kind !== 'audio' && n.episode_thumb_v
+      // L'episodio dal vivo, allineato alla TV: il video sullo schermo disegnato, o l'audio
+      // (con il gufetto che ascolta). Se il browser non lo fa partire, l'anteprima ferma
+      const live = syncLive(n);
+      const thumb = !live && withEpisode && n.kind !== 'audio' && n.episode_thumb_v
         ? `/characters/${enc(n.character)}/episodes/${enc(n.episode)}/thumb?v=${n.episode_thumb_v}`
         : null;
       // La schermata vera della TV (pronto, riposo, ascolto, aggiornamento, "Fatto!"...),
-      // quando non c'è l'anteprima di un episodio
-      const tv = !thumb && n.screen ? n.screen : null;
+      // quando non c'è l'episodio
+      const tv = !live && !thumb && n.screen ? n.screen
+        : live === 'audio' && n.screen ? n.screen : null;
       showTvScreen(tv, n.mode === 'paused');
-      screen.dataset.media = thumb || tv ? '1' : '0';
+      screen.dataset.media = live || thumb || tv ? '1' : '0';
       if (thumb) {
         img.hidden = false;
         if (img.getAttribute('src') !== thumb) img.src = thumb;
+      } else if (!tv) {
+        img.hidden = true;   // con la schermata della TV ci pensa showTvScreen
       }
       screen.setAttribute('aria-label', thumb ? `La TV: ${nowItemLabel(n)}` : `La TV: ${d.title}`);
 
       // Il contenuto si ricostruisce solo quando cambia davvero (non a ogni aggiornamento)
-      const key = [d.state, n.character, n.episode, !!thumb, tv ? tv.image : '', d.big, d.small].join('|');
+      const key = [d.state, n.character, n.episode, !!thumb, live, tv ? tv.image : '', d.big, d.small].join('|');
       if (key !== screenKey) {
         screenKey = key;
         const parts = [];
-        if (withEpisode && !thumb && !tv) {
+        if (withEpisode && !thumb && !tv && !live) {
           parts.push(await characterFigure(n.character, { onScreen: true }));
           parts.push(h('span', { class: 'scr-small', text: nowItemLabel(n) }));
         }
@@ -3429,6 +3457,69 @@
         bar.hidden = true;
       }
     }
+
+    /* ----- L'episodio anche sul telefono -----
+       Lo stesso file della TV (/characters/<nome>/episodes/<file>/file), muto di base,
+       allineato alla posizione della TV a ogni aggiornamento: se si stacca di più di un
+       secondo si riallinea. Solo mentre "Adesso" è aperta e in primo piano */
+    let lastNowAt = 0;
+    let liveSound = false;    // audio acceso sul telefono (resta per la sessione)
+    let liveFailed = '';      // file che il browser non ha voluto far partire
+
+    function stopLive() {
+      for (const el of [$('scr-live'), $('scr-live-audio')]) {
+        if (!el.getAttribute('src')) continue;
+        el.pause();
+        el.removeAttribute('src');
+        el.load();   // chiude il collegamento: il Pi smette di mandarlo
+      }
+      $('scr-live').hidden = true;
+      $('scr-sound').hidden = true;
+    }
+
+    function syncLive(n) {
+      const playing = n.alive && (n.mode === 'playing' || n.mode === 'paused') && n.episode
+        && (n.kind === 'video' || n.kind === 'audio') && !document.hidden;
+      const url = playing ? `/characters/${enc(n.character)}/episodes/${enc(n.episode)}/file` : null;
+      if (!url || url === liveFailed) { stopLive(); return null; }
+      const audio = n.kind === 'audio';
+      const el = audio ? $('scr-live-audio') : $('scr-live');
+      const other = audio ? $('scr-live') : $('scr-live-audio');
+      if (other.getAttribute('src')) { other.pause(); other.removeAttribute('src'); other.load(); }
+
+      // dove dovrebbe essere adesso: la posizione della TV più il tempo passato da quando è arrivata
+      const target = ((n.pos_ms || 0) + (n.mode === 'playing' ? performance.now() - lastNowAt : 0)) / 1000;
+      if (el.getAttribute('src') !== url) {
+        el.src = url;
+        el.addEventListener('loadedmetadata', () => { el.currentTime = target; }, { once: true });
+      } else if (el.readyState >= 1 && Math.abs(el.currentTime - target) > (n.mode === 'paused' ? .5 : 1)) {
+        el.currentTime = target;
+      }
+      el.muted = !liveSound;
+      if (n.mode === 'paused') el.pause();
+      else if (el.paused) el.play().catch(() => {
+        // il browser non lo fa partire: si torna all'anteprima ferma (o al gufetto che ascolta)
+        liveFailed = url;
+        stopLive();
+        if (lastNow) renderAdesso(lastNow);
+      });
+      el.hidden = false;
+      const sound = $('scr-sound');
+      sound.hidden = false;
+      sound.setAttribute('aria-label', liveSound ? "Togli l'audio dal telefono" : "Senti l'audio anche sul telefono");
+      sound.replaceChildren(icon(liveSound ? 'volume' : 'mute'));
+      return audio ? 'audio' : 'video';
+    }
+
+    $('scr-sound').addEventListener('click', () => {
+      liveSound = !liveSound;
+      for (const el of [$('scr-live'), $('scr-live-audio')]) {
+        el.muted = !liveSound;
+        // toccare il pulsante conta come gesto: ora il browser lo lascia partire con l'audio
+        if (el.getAttribute('src') && lastNow && lastNow.mode === 'playing') el.play().catch(() => {});
+      }
+      if (lastNow) renderAdesso(lastNow);
+    });
 
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 

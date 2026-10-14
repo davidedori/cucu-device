@@ -1864,6 +1864,22 @@ def delete_character_photo(name: str, filename: str):
     _thumb_path(char_dir, photo.name).with_suffix(".failed").unlink(missing_ok=True)
     return {"character": name, "deleted": photo.name, "total": len(photo_files(char_dir))}
 
+@app.get("/characters/{name}/episodes/{filename}/file")
+def get_episode_file(name: str, filename: str):
+    """
+    Il file dell'episodio, per vederlo anche sul telefono nella pagina "Adesso" (muto di
+    base, allineato alla TV). A pezzi (Range), come lo chiede il browser: si salta al punto
+    della TV senza scaricare tutto. La UI lo chiede solo mentre "Adesso" è aperta e in
+    primo piano, così il Pi non lo manda per niente.
+    """
+    char_dir = CHARACTERS_DIR / name
+    media = char_dir / os.path.basename(filename)
+    if char_dir.resolve().parent != CHARACTERS_DIR.resolve() or not media.is_file() \
+            or media.suffix.lower() not in VIDEO_EXT | AUDIO_EXT:
+        raise HTTPException(status_code=404, detail="Episodio non trovato.")
+    return FileResponse(media, headers={"Cache-Control": "no-store"})
+
+
 @app.get("/characters/{name}/episodes/{filename}/thumb")
 def get_episode_thumb(name: str, filename: str):
     """
