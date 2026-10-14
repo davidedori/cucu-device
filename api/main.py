@@ -1953,6 +1953,7 @@ def check_update():
         "update_available": _version_tuple(remote_version) > _version_tuple(local_version),
         "channel": channel,
         "changelog": remote_data.get("changelog"),
+        "running": _update_status()["running"],
     }
 
 
@@ -1973,12 +1974,57 @@ def _update_service_task():
     except Exception as e:
         with log_file.open("a") as f:
             f.write(f"[{time.ctime()}] EXCEPTION avvio updater: {e}\n")
+    finally:
+        # l'updater la cancella appena parte: se resta, non è partito (la web UI
+        # crederebbe a un aggiornamento in corso fino alla scadenza)
+        UPDATE_REQUEST_FILE.unlink(missing_ok=True)
 
 
 # Richiesta di aggiornamento per updater.sh: sotto systemd parte solo se c'è
 # ed è recente (gli aggiornamenti sono solo manuali, niente timer)
 UPDATE_REQUEST_FILE = BASE_DIR / "update_request.json"
 UPDATE_REQUEST_SEC = 600  # stessa costante in updater.sh
+
+
+# Passo dell'aggiornamento in corso, scritto da updater.sh (stesse costanti lì e in read_nfc.py)
+UPDATE_STATUS_FILE = Path("/run/cucu/update_status.json")
+UPDATE_STATUS_SEC = 600
+
+
+def _update_status():
+    """Aggiornamento in corso? Vero dal "Aggiorna ora" (richiesta ancora da
+    raccogliere) finché updater.sh non ha finito, compreso il riavvio dell'API.
+    Il passo (1..steps) c'è solo quando l'aggiornamento è partito davvero."""
+    now = time.time()
+    status = {"running": False, "step": None, "steps": None}
+    try:
+        data = json.loads(UPDATE_STATUS_FILE.read_text())
+        if 0 < float(data.get("until", 0)) - now <= UPDATE_STATUS_SEC:
+            status.update(running=True, step=int(data["step"]), steps=int(data["steps"]))
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        pass
+    if not status["running"]:
+        # updater.sh la cancella appena parte: se c'è ancora, sta per partire
+        try:
+            until = float(json.loads(UPDATE_REQUEST_FILE.read_text()).get("until", 0))
+            status["running"] = 0 < until - now <= UPDATE_REQUEST_SEC
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+    if not status["running"]:
+        # controllo della versione, prima del passo 1 (oneshot: "activating" finché gira)
+        try:
+            res = subprocess.run(["systemctl", "is-active", "cucu-device-updater.service"],
+                                 capture_output=True, text=True, timeout=5)
+            status["running"] = res.stdout.strip() in ("active", "activating")
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return status
+
+
+@app.get("/system/update-status")
+def update_status():
+    """Per la web UI: aspetta la fine dell'aggiornamento prima di ricaricare la pagina."""
+    return _update_status()
 
 
 class UpdateStart(BaseModel):
@@ -1993,6 +2039,8 @@ def start_update(background_tasks: BackgroundTasks, body: UpdateStart = UpdateSt
     automatico se l'health check fallisce). Lo decide solo il genitore: con un
     episodio in corso risponde 409, e la web UI chiede conferma (force).
     """
+    if _update_status()["running"]:
+        return {"status": "ok", "message": "Aggiornamento già in corso"}
     if _is_player_busy() and not body.force:
         raise HTTPException(status_code=409, detail="C'è un episodio in corso")
     _write_json_atomic(UPDATE_REQUEST_FILE, {"until": int(time.time()) + UPDATE_REQUEST_SEC})

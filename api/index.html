@@ -3598,6 +3598,7 @@
     // All'apertura dell'app: se c'è una versione nuova lo si dice in cima alla pagina.
     // In silenzio se Cucù non è collegato a internet
     async function autoCheckUpdates() {
+      try { if ((await api('/system/update-status')).running) { showUpdateWait(); return; } } catch (_) { /* API vecchia */ }
       let cached = null;
       try { cached = JSON.parse(localStorage.getItem('cucu-update') || 'null'); } catch (_) { /* niente cache */ }
       if (cached && Date.now() - cached.at < UPDATE_CHECK_EVERY) {
@@ -3620,7 +3621,9 @@
         const d = await api('/system/update-check');
         rememberLatest(d.latest_version);
         drawUpdateBanner();
-        if (d.update_available) {
+        if (d.running) {
+          showUpdateWait();
+        } else if (d.update_available) {
           $('update-text').textContent = `C'è una nuova versione: ${d.latest_version} (ora ${d.current_version}).`;
           apply.textContent = `Aggiorna alla ${d.latest_version}`;
           apply.classList.remove('hidden');
@@ -3651,20 +3654,43 @@
       if (!ok) return;
       try {
         await api('/system/update', { method: 'POST', body: { force: busy } });
-        showReconnect('Aggiornamento in corso', 'Può volerci qualche minuto: non spegnere Cucù. La pagina si ricarica da sola.');
+        showUpdateWait();
       } catch (e) { toast(e.message); }
     });
+
+    // Durante l'aggiornamento l'API resta accesa fino al riavvio finale: la pagina si
+    // ricarica solo quando updater.sh ha finito, altrimenti mostrerebbe ancora la
+    // versione vecchia e "Aggiorna ora"
+    async function updateDone(line) {
+      const r = await fetch('/system/update-status', { cache: 'no-store' });
+      if (r.status === 404) return apiAnswers();   // API di prima di questa versione
+      if (!r.ok) return false;                     // si sta riavviando (o serve il PIN)
+      const d = await r.json();
+      if (d.step) {
+        line.textContent = `Passo ${d.step} di ${d.steps}`;
+        line.classList.remove('hidden');
+      }
+      return !d.running;
+    }
+    function showUpdateWait() {
+      showReconnect('Aggiornamento in corso', 'Può volerci qualche minuto: non spegnere Cucù. La pagina si ricarica da sola.',
+        { ready: updateDone, revealAfter: 300 });
+    }
 
     /* ================= Riconnessione ================= */
 
     let reconnectTimer = null;
 
-    function showReconnect(title, text) {
+    // ready(line): vero quando si può ricaricare la pagina (di base: l'API risponde); può
+    // scrivere in line a che punto è. revealAfter: secondi prima del pulsante "Ricarica"
+    const apiAnswers = async () => (await fetch('/api', { cache: 'no-store' })).ok;
+    function showReconnect(title, text, { ready = apiAnswers, revealAfter = 10 } = {}) {
       closeSheet();
       clearInterval(reconnectTimer);
       const timer = h('div', { class: 'timer', text: '0 s' });
       const reload = h('button', { class: 'btn btn-primary hidden', style: 'margin-top:18px', text: 'Ricarica la pagina' });
       const note = h('p', { class: 'hidden', style: 'margin-top:14px' });
+      const line = h('p', { class: 'hidden', style: 'margin-top:8px' });
       reload.addEventListener('click', () => {
         // Sull'hotspot (10.42.0.1) la pagina non tornerà: Cucù è passato a un'altra rete
         if (location.hostname === '10.42.0.1') {
@@ -3681,6 +3707,7 @@
         h('div', { class: 'peek' }, owl()),
         h('h2', { text: title }),
         h('p', { text: text }),
+        line,
         timer, reload, note
       ));
 
@@ -3688,10 +3715,10 @@
       reconnectTimer = setInterval(() => {
         s++;
         timer.textContent = `${s} s`;
-        if (s > 10) reload.classList.remove('hidden');
+        if (s > revealAfter) reload.classList.remove('hidden');
         if (s > 2 && s % 3 === 0) {
-          fetch('/api', { cache: 'no-store' })
-            .then(r => { if (r.ok) { clearInterval(reconnectTimer); location.reload(); } })
+          ready(line)
+            .then(ok => { if (ok) { clearInterval(reconnectTimer); location.reload(); } })
             .catch(() => { });
         }
       }, 1000);
