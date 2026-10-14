@@ -854,6 +854,20 @@
     .tv-full .tv-full-close, .tv-full .tv-full-bar { transition: opacity .3s steps(3, jump-end); }
     .tv-full.quiet .tv-full-close, .tv-full.quiet .tv-full-bar { opacity: 0; pointer-events: none; }
     .tv-full.quiet { cursor: none; }
+    /* comandi bloccati: resta solo l'audio del telefono, per uscire serve il PIN */
+    .tv-full.locked .tv-full-buttons > :not(#tv-full-sound), .tv-full.locked .ctl-volume { display: none; }
+    .tv-pin {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 3;
+      width: min(320px, calc(100% - 32px)); padding: 22px; border-radius: 20px;
+      background: var(--surface); color: var(--ink); display: grid; gap: 12px;
+    }
+    .tv-pin[hidden] { display: none; }
+    .tv-pin h2 { margin: 0; font-family: var(--serif); font-size: 22px; }
+    .tv-pin .actions { display: flex; gap: 10px; }
+    .tv-pin .actions .btn { flex: 1; }
+    .lock-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .lock-row .lock-text { flex: 1; min-width: 0; }
+    .lock-row .lock-text small { display: block; color: var(--muted); font-size: 14px; }
     /* le foto degli album intere, come sulla TV (bande nere), non ritagliate */
     .screen[data-fit="contain"] .scr-media img { object-fit: contain; }
     .scr-sound svg { width: 22px; height: 22px; }
@@ -1214,6 +1228,15 @@
       </div>
       <label class="ctl-volume" id="tv-full-volume"><input type="range" min="0" max="100" step="5" aria-label="Volume di Cucù" id="tv-full-vol"></label>
     </div>
+    <form class="tv-pin" id="tv-pin" hidden>
+      <h2>Per uscire, il PIN</h2>
+      <input class="field pin" id="tv-pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="current-password" placeholder="••••" aria-label="PIN">
+      <div class="form-error" id="tv-pin-error" role="alert"></div>
+      <div class="actions">
+        <button class="btn" type="button" id="tv-pin-cancel">Annulla</button>
+        <button class="btn btn-primary" type="submit">Esci</button>
+      </div>
+    </form>
   </div>
 
   <nav class="nav" aria-label="Sezioni">
@@ -1272,6 +1295,11 @@
         <div class="now-title" id="now-title">…</div>
         <div class="now-sub" id="now-sub"></div>
         <div class="now-facts" id="now-facts"></div>
+        <!-- modalità bambino: a tutto schermo niente comandi, per uscire serve il PIN -->
+        <label class="lock-row">
+          <span class="lock-text">Blocca i comandi a tutto schermo<small>Resta solo l'audio del telefono. Per uscire serve il PIN.</small></span>
+          <span class="switch"><input type="checkbox" id="tv-lock-pref" aria-label="Blocca i comandi a tutto schermo"><span class="slider"></span></span>
+        </label>
       </div>
     </section>
 
@@ -1840,6 +1868,11 @@
     }
 
     function route() {
+      // modalità bambino: la vista a tutto schermo non si lascia senza PIN
+      if (tvLocked && !$('tv-full').hidden) {
+        if (location.hash !== '#/adesso') history.replaceState(null, '', '#/adesso');
+        return;
+      }
       const r = parseRoute();
 
       // Uscendo da Tempo con modifiche non salvate: si chiede prima di perderle
@@ -3575,11 +3608,26 @@
       quietTimer = setTimeout(() => box.classList.add('quiet'), 3000);
     }
 
+    // Modalità bambino (scelta su questo telefono): a tutto schermo resta solo l'audio, al
+    // posto della X un lucchetto che chiede il PIN; Esc, indietro e l'uscita dal tutto schermo
+    // del browser non chiudono. Se l'app si ricarica mentre è bloccata, riparte così
+    const TV_LOCK_PREF = 'cucu-tv-lock', TV_LOCKED = 'cucu-tv-locked';
+    const store = {
+      get: (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } },
+      set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (_) { /* pazienza */ } },
+    };
+    let tvLocked = false;
+
     function openTvFull() {
       const box = $('tv-full');
+      tvLocked = store.get(TV_LOCK_PREF) === '1' && !!authState.pin_set;
+      box.classList.toggle('locked', tvLocked);
+      store.set(TV_LOCKED, tvLocked ? '1' : null);
+      $('tv-pin').hidden = true;
       box.hidden = false;
       box.prepend(document.querySelector('.scr-media'));
-      $('tv-full-close').replaceChildren(icon('remove'));
+      $('tv-full-close').replaceChildren(icon(tvLocked ? 'lock' : 'remove'));
+      $('tv-full-close').setAttribute('aria-label', tvLocked ? 'Esci con il PIN' : 'Chiudi');
       $('tv-full-stop').replaceChildren(icon('stop'));
       $('tv-full-next').replaceChildren(icon('next'));
       const prev = icon('next');
@@ -3591,9 +3639,11 @@
       if (box.requestFullscreen && document.fullscreenEnabled) box.requestFullscreen().catch(() => {});
     }
 
-    function closeTvFull() {
+    function closeTvFull(force) {
       const box = $('tv-full');
-      if (box.hidden) return;
+      if (box.hidden || (tvLocked && !force)) return;   // bloccata: si esce solo con il PIN
+      tvLocked = false;
+      store.set(TV_LOCKED, null);
       box.hidden = true;
       clearTimeout(quietTimer);
       $('screen').prepend(box.querySelector('.scr-media'));   // torna nella TV disegnata
@@ -3624,7 +3674,24 @@
       if (n.volume != null && Date.now() - volumeTouched > 4000) $('tv-full-vol').value = n.volume;
     }
 
-    $('tv-full-close').addEventListener('click', closeTvFull);
+    $('tv-full-close').addEventListener('click', () => {
+      if (!tvLocked) { closeTvFull(); return; }
+      $('tv-pin').hidden = false;
+      $('tv-pin-error').textContent = '';
+      $('tv-pin-input').value = '';
+      $('tv-pin-input').focus();
+    });
+    $('tv-pin-cancel').addEventListener('click', () => { $('tv-pin').hidden = true; });
+    $('tv-pin').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await postAuth('/auth/login', { pin: $('tv-pin-input').value });   // dopo 5 errori si aspetta
+        closeTvFull(true);
+      } catch (err) {
+        $('tv-pin-error').textContent = err.message;
+        $('tv-pin-input').value = '';
+      }
+    });
     $('tv-full-toggle').addEventListener('click', (e) => playback(e.currentTarget.dataset.action));
     $('tv-full-stop').addEventListener('click', () => playback('stop'));
     $('tv-full-next').addEventListener('click', () => playback('next'));
@@ -3636,18 +3703,39 @@
     // comando li tiene accesi
     $('tv-full').addEventListener('click', (e) => {
       const box = $('tv-full');
-      if (e.target.closest('button, input, label')) { wakeTvFull(); return; }
+      if (tvLocked && !document.fullscreenElement && box.requestFullscreen && document.fullscreenEnabled) box.requestFullscreen().catch(() => {});
+      if (e.target.closest('button, input, label, form')) { wakeTvFull(); return; }
       if (box.classList.contains('quiet')) wakeTvFull();
       else { clearTimeout(quietTimer); box.classList.add('quiet'); }
     });
     $('tv-full').addEventListener('input', wakeTvFull);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTvFull(); });
     document.addEventListener('fullscreenchange', () => {
+      // bloccata: la vista resta (si rientra nel tutto schermo del browser al primo tocco)
+      if (tvLocked) return;
       // uscita dal tutto schermo del browser (tasto indietro, Esc): si chiude anche la vista
       if (!document.fullscreenElement && !$('tv-full').hidden && document.fullscreenEnabled) closeTvFull();
     });
 
     $('scr-full').addEventListener('click', openTvFull);
+
+    $('tv-lock-pref').checked = store.get(TV_LOCK_PREF) === '1';
+    $('tv-lock-pref').addEventListener('change', (e) => {
+      if (e.target.checked && !authState.pin_set) {
+        // senza PIN non si può uscire in modo protetto: prima il PIN
+        e.target.checked = false;
+        openSheet({
+          title: 'Serve un PIN',
+          content: h('div', {},
+            h('p', { class: 'sheet-text', text: 'Per bloccare i comandi a tutto schermo serve un PIN: sarà quello per uscire.' }),
+            h('div', { class: 'actions' },
+              h('button', { class: 'btn btn-primary btn-block', text: 'Imposta un PIN', onclick: () => { closeSheet(); setupPin(); } }),
+              h('button', { class: 'btn btn-block', text: 'Non ora', onclick: closeSheet })))
+        });
+        return;
+      }
+      store.set(TV_LOCK_PREF, e.target.checked ? '1' : null);
+    });
 
     function toggleSound() {
       liveSound = !liveSound;
@@ -4537,7 +4625,11 @@
       if (!$('brand-owl').firstChild) $('brand-owl').replaceWith(owl());
       loadInfo();
       if (!location.hash) history.replaceState(null, '', '#/adesso');
+      // l'app si è ricaricata con la modalità bambino aperta: si riparte da lì
+      const relock = store.get(TV_LOCKED) === '1' && authState.pin_set;
+      if (relock) history.replaceState(null, '', '#/adesso');
       route();
+      if (relock) openTvFull();
       // Il riquadro serve solo nel browser di un telefono: già dalla Home o
       // su un computer resta nascosto
       if (!isStandalone() && phonePlatform() && !onHotspot) {
