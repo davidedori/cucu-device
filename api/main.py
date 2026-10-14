@@ -606,7 +606,7 @@ DONE_FILE = RUN_STATE_FILE.parent / "done.json"
 #   e quando dall'app si aggiunge o si dimentica una rete
 FIRST_FILE = RUN_STATE_FILE.parent / "first.json"
 GRAPHICS_DIR = BASE_DIR / "graphics"
-HOTSPOT_DEFAULT_PASSWORD = "cucusetup"   # come in setup_hotspot.sh
+HOTSPOT_DEFAULT_PASSWORD = "cucusetup"   # quella di prima, finché setup_hotspot.sh non ne genera una
 
 
 # - "Eccomi!" dopo il gesto d'emergenza (stessa statuina 5 volte): read_nfc.py scrive
@@ -668,7 +668,7 @@ def _help_worker():
 
 def _hotspot():
     """Nome e password dell'hotspot (setup_hotspot.sh): la password da config.env
-    (HOTSPOT_PASSWORD), altrimenti quella di sempre."""
+    (HOTSPOT_PASSWORD, una per dispositivo), altrimenti quella di prima."""
     cfg = dotenv_values(CONFIG_ENV_FILE) if CONFIG_ENV_FILE.exists() else {}
     return f"{socket.gethostname()}_AP", (cfg.get("HOTSPOT_PASSWORD") or "").strip() or HOTSPOT_DEFAULT_PASSWORD
 

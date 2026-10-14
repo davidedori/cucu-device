@@ -310,6 +310,22 @@ _apply_polkit_rules() {
     fi
 }
 
+# ---- HELPER: PASSWORD DELL'HOTSPOT ------------------------------------------
+# Retrofit sui device installati quando la password era "cucusetup" per tutti:
+# setup_hotspot.sh la genera (una volta, in config.env) e la imposta sull'hotspot.
+# Arriva insieme ai modi per ritrovarla (schermata del primo collegamento, gesto
+# d'emergenza, Impostazioni → Wi-Fi). Un telefono che aveva salvato la vecchia
+# password dovrà ricollegarsi con il QR. Non blocca mai l'aggiornamento.
+_apply_hotspot_password() {
+    [ -f "$PROJECT_DIR/setup_hotspot.sh" ] || return 0
+    if CUCU_CONFIG_ENV="$CONFIG_FILE" bash "$PROJECT_DIR/setup_hotspot.sh" --password-only >>"$LOG_FILE" 2>&1; then
+        chown "$DEPLOY_USER:$DEPLOY_USER" "$CONFIG_FILE" 2>/dev/null || true
+        ok "Password dell'hotspot verificata"
+    else
+        warn "Password dell'hotspot non impostata"
+    fi
+}
+
 # ---- HELPER: CAPTIVE PORTAL DELL'HOTSPOT ------------------------------------
 # Stesso file installato da setup.sh, retrofit sui device aggiornati via OTA.
 # Non blocca mai l'aggiornamento: senza, sull'hotspot la pagina non si apre da sola.
@@ -453,6 +469,9 @@ _apply_polkit_rules
 
 # ---- CAPTIVE PORTAL ---------------------------------------------------------
 _apply_captive_portal
+
+# ---- PASSWORD DELL'HOTSPOT --------------------------------------------------
+_apply_hotspot_password
 
 # ---- RIAVVIA SERVIZI --------------------------------------------------------
 update_status 4

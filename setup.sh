@@ -365,9 +365,12 @@ fi
 step "Configurazione hotspot Wi-Fi di fallback"
 
 # Configura un access point NM che si attiva automaticamente quando nessuna
-# rete nota è raggiungibile. SSID = hostname_AP, password = cucusetup.
-bash "$REPO_DIR/setup_hotspot.sh"
-ok "Hotspot configurato: ${NEW_HOSTNAME}_AP (password: cucusetup)"
+# rete nota è raggiungibile. SSID = hostname_AP, password casuale per
+# dispositivo in config.env (HOTSPOT_PASSWORD): generata la prima volta, poi
+# non cambia (vedi setup_hotspot.sh)
+CUCU_CONFIG_ENV="$CONFIG_ENV_DST" bash "$REPO_DIR/setup_hotspot.sh"
+HOTSPOT_PASSWORD="$(grep -E '^HOTSPOT_PASSWORD=' "$CONFIG_ENV_DST" | tail -1 | cut -d= -f2-)"
+ok "Hotspot configurato: ${NEW_HOSTNAME}_AP (password: ${HOTSPOT_PASSWORD}, in config.env)"
 
 # Captive portal: collegato il telefono all'hotspot, la pagina del Wi-Fi si apre
 # da sola (vedi networkmanager/cucu-captive.conf). Vale dalla prossima accensione
@@ -559,7 +562,7 @@ printf "  %-14s %s\n" "Progetto:"  "$PROJECT_DIR"
 printf "  %-14s %s\n" "API web:"   "http://${NEW_HOSTNAME}.local"
 printf "  %-14s %s\n" "Versione:"  "$VERSION"
 echo ""
-printf "  %-14s %s\n" "Hotspot:"   "${NEW_HOSTNAME}_AP (password: cucusetup)"
+printf "  %-14s %s\n" "Hotspot:"   "${NEW_HOSTNAME}_AP (password: ${HOTSPOT_PASSWORD})"
 echo ""
 echo -e "  ${BOLD}Prossimi passi:${NC}"
 echo "   1. Configura gli aggiornamenti (si avviano dalla web UI):"
