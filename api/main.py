@@ -984,13 +984,13 @@ CONTROL_SEC = 10
 
 
 class Playback(BaseModel):
-    action: str             # pause, resume, stop, next, volume
+    action: str             # pause, resume, stop, next, prev (foto degli album), volume
     value: Optional[int] = None   # per volume: 0..100
 
 
 @app.post("/system/playback")
 def playback(body: Playback):
-    if body.action not in ("pause", "resume", "stop", "next", "volume"):
+    if body.action not in ("pause", "resume", "stop", "next", "prev", "volume"):
         raise HTTPException(status_code=400, detail="Comando sconosciuto.")
     if body.action == "volume" and (body.value is None or not 0 <= body.value <= 100):
         raise HTTPException(status_code=400, detail="Il volume va da 0 a 100.")

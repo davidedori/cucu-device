@@ -832,19 +832,20 @@
     }
     .scr-sound[hidden] { display: none; }
     .scr-full { right: auto; left: 14px; }
-    .photo-full { position: fixed; inset: 0; z-index: 300; background: #000; }
-    .photo-full[hidden] { display: none; }
-    .photo-full img { width: 100%; height: 100%; object-fit: contain; display: block; }
-    .photo-full .scr-sound { width: 52px; height: 52px; background: rgba(255, 255, 255, .18); }
-    .photo-full-close { top: calc(14px + var(--safe-t, 0px)); right: 14px; }
-    .photo-full-next { top: auto; bottom: calc(18px + var(--safe-b, 0px)); right: 18px; }
+    /* Tutto schermo dentro l'app, per l'episodio e le foto, con i comandi di Cucù
+       (non quelli del riproduttore di iOS, che comanderebbero solo il telefono) */
+    .tv-full { position: fixed; inset: 0; z-index: 300; background: #000; }
+    .tv-full[hidden], .tv-full [hidden] { display: none; }
+    .tv-full img, .tv-full video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+    .tv-full .scr-sound { width: 52px; height: 52px; background: rgba(255, 255, 255, .18); }
+    .tv-full-close { top: calc(14px + var(--safe-t)); right: 14px; }
+    .tv-full-bar {
+      position: absolute; left: 0; right: 0; bottom: calc(18px + var(--safe-b));
+      display: flex; justify-content: center; gap: 12px; z-index: 2;
+    }
+    .tv-full-bar .scr-sound { position: static; }
     /* le foto degli album intere, come sulla TV (bande nere), non ritagliate */
     .screen[data-fit="contain"] .scr-media img { object-fit: contain; }
-    /* a tutto schermo (Android, computer): la TV disegnata riempie lo schermo */
-    .screen:fullscreen { background: #000; }
-    .screen:fullscreen::before { border-radius: 0; }
-    .screen:fullscreen .scr-media { inset: 0; border-radius: 0; }
-    .screen:fullscreen .scr-media img, .screen:fullscreen .scr-media video { object-fit: contain; }
     .scr-sound svg { width: 22px; height: 22px; }
     .screen[data-media="1"] .scr-media { opacity: 1; }
     .screen[data-state="pause"] .scr-media img { filter: grayscale(.4) brightness(.55); }
@@ -1190,11 +1191,17 @@
     </div>
   </header>
 
-  <!-- Foto dell'album a tutto schermo (su iPhone il tutto schermo vero vale solo per i video) -->
-  <div class="photo-full" id="photo-full" role="dialog" aria-modal="true" aria-label="Foto a tutto schermo" hidden>
-    <img id="photo-full-img" alt="">
-    <button class="scr-sound photo-full-close" id="photo-full-close" type="button" aria-label="Chiudi"></button>
-    <button class="scr-sound photo-full-next" id="photo-full-next" type="button" aria-label="Foto successiva"></button>
+  <!-- Episodio o foto a tutto schermo, con i comandi di Cucù (il video vero ci viene spostato) -->
+  <div class="tv-full" id="tv-full" role="dialog" aria-modal="true" aria-label="Tutto schermo" hidden>
+    <img id="tv-full-img" alt="">
+    <button class="scr-sound tv-full-close" id="tv-full-close" type="button" aria-label="Chiudi"></button>
+    <div class="tv-full-bar">
+      <button class="scr-sound" id="tv-full-prev" type="button" aria-label="Foto precedente"></button>
+      <button class="scr-sound" id="tv-full-toggle" type="button"></button>
+      <button class="scr-sound" id="tv-full-stop" type="button" aria-label="Ferma"></button>
+      <button class="scr-sound" id="tv-full-next" type="button"></button>
+      <button class="scr-sound" id="tv-full-sound" type="button"></button>
+    </div>
   </div>
 
   <nav class="nav" aria-label="Sezioni">
@@ -3310,8 +3317,8 @@
       clearInterval(nowTimer);
       nowTimer = null;
       document.removeEventListener('visibilitychange', nowVisibility);
+      closeTvFull();
       stopLive();
-      closePhotoFull();
     }
 
     async function pollNow() {
@@ -3448,7 +3455,7 @@
       } else if (!live) {
         $('scr-full').hidden = true;
       }
-      updatePhotoFull(photo ? thumb : null);
+      updateTvFull();
       // La schermata vera della TV (pronto, riposo, ascolto, aggiornamento, "Fatto!"...),
       // quando non c'è l'episodio
       const tv = !live && !thumb && n.screen ? n.screen
@@ -3548,49 +3555,75 @@
       return audio ? 'audio' : 'video';
     }
 
-    // Tutto schermo: su iPhone una pagina può mandarci solo un video (con il riproduttore di
-    // iOS), altrove va a tutto schermo l'intera TV disegnata
-    // Foto a tutto schermo: una vista dentro l'app (sul nero, come la TV), che segue l'album;
-    // dove il browser lo permette anche il tutto schermo vero
-    function openPhotoFull() {
-      const box = $('photo-full');
-      $('photo-full-img').src = $('scr-img').getAttribute('src') || '';
-      $('photo-full-close').replaceChildren(icon('remove'));
-      $('photo-full-next').replaceChildren(icon('next'));
+    // Tutto schermo: una vista dentro l'app, per l'episodio (il video vero ci viene spostato,
+    // senza fermarlo) e per le foto, con i comandi di Cucù: sono quelli della TV, non quelli
+    // del riproduttore del telefono. Dove il browser lo permette, anche il tutto schermo vero
+    function openTvFull() {
+      const box = $('tv-full');
       box.hidden = false;
+      $('tv-full-close').replaceChildren(icon('remove'));
+      $('tv-full-stop').replaceChildren(icon('stop'));
+      $('tv-full-prev').replaceChildren(icon('next'));
+      $('tv-full-prev').firstChild.style.transform = 'scaleX(-1)';
+      updateTvFull();
       if (box.requestFullscreen && document.fullscreenEnabled) box.requestFullscreen().catch(() => {});
     }
 
-    function closePhotoFull() {
-      const box = $('photo-full');
+    function closeTvFull() {
+      const box = $('tv-full');
       if (box.hidden) return;
       box.hidden = true;
+      const video = $('scr-live');
+      if (video.parentNode === box) $('scr-live-audio').before(video);   // torna nella TV disegnata
       if (document.fullscreenElement === box) document.exitFullscreen().catch(() => {});
     }
 
-    // a ogni aggiornamento: la foto della TV, o chiusa se l'album non va più
-    function updatePhotoFull(url) {
-      if ($('photo-full').hidden) return;
-      if (!url) { closePhotoFull(); return; }
-      if ($('photo-full-img').getAttribute('src') !== url) $('photo-full-img').src = url;
+    // a ogni aggiornamento: quello che c'è sulla TV, o chiusa se non va più niente
+    function updateTvFull() {
+      const box = $('tv-full');
+      if (box.hidden) return;
+      const n = lastNow;
+      const episode = n && n.alive && (n.mode === 'playing' || n.mode === 'paused') && n.episode;
+      const photos = episode && n.kind === 'photos';
+      const video = $('scr-live');
+      if (!episode || n.kind === 'audio' || (!photos && !video.getAttribute('src'))) { closeTvFull(); return; }
+      const img = $('tv-full-img');
+      img.hidden = !photos;
+      if (photos) {
+        const url = `/characters/${enc(n.character)}/episodes/${enc(n.episode)}/file`;
+        if (img.getAttribute('src') !== url) img.src = url;
+      } else if (video.parentNode !== box) {
+        box.prepend(video);
+      }
+      const paused = n.mode === 'paused';
+      const toggle = $('tv-full-toggle');
+      toggle.dataset.action = paused ? 'resume' : 'pause';
+      toggle.setAttribute('aria-label', paused ? 'Riprendi' : 'Pausa');
+      toggle.replaceChildren(icon(paused ? 'play' : 'pause'));
+      $('tv-full-prev').hidden = !photos;
+      $('tv-full-next').setAttribute('aria-label', photos ? 'Foto successiva' : 'Episodio successivo');
+      $('tv-full-next').replaceChildren(icon('next'));
+      const sound = $('tv-full-sound');
+      sound.hidden = photos;
+      sound.setAttribute('aria-label', liveSound ? "Togli l'audio dal telefono" : "Senti l'audio anche sul telefono");
+      sound.replaceChildren(icon(liveSound ? 'volume' : 'mute'));
     }
 
-    $('photo-full-close').addEventListener('click', closePhotoFull);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePhotoFull(); });
-    $('photo-full-next').addEventListener('click', () => playback('next'));
+    $('tv-full-close').addEventListener('click', closeTvFull);
+    $('tv-full-toggle').addEventListener('click', (e) => playback(e.currentTarget.dataset.action));
+    $('tv-full-stop').addEventListener('click', () => { playback('stop'); closeTvFull(); });
+    $('tv-full-next').addEventListener('click', () => playback('next'));
+    $('tv-full-prev').addEventListener('click', () => playback('prev'));
+    $('tv-full-sound').addEventListener('click', toggleSound);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTvFull(); });
     document.addEventListener('fullscreenchange', () => {
       // uscita dal tutto schermo del browser (tasto indietro, Esc): si chiude anche la vista
-      if (!document.fullscreenElement && !$('photo-full').hidden && document.fullscreenEnabled) closePhotoFull();
+      if (!document.fullscreenElement && !$('tv-full').hidden && document.fullscreenEnabled) closeTvFull();
     });
 
-    $('scr-full').addEventListener('click', () => {
-      if (lastNow && lastNow.kind === 'photos') { openPhotoFull(); return; }
-      const video = $('scr-live'), screen = $('screen');
-      if (screen.requestFullscreen && document.fullscreenEnabled) screen.requestFullscreen().catch(() => {});
-      else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
-    });
+    $('scr-full').addEventListener('click', openTvFull);
 
-    $('scr-sound').addEventListener('click', () => {
+    function toggleSound() {
       liveSound = !liveSound;
       for (const el of [$('scr-live'), $('scr-live-audio')]) {
         el.muted = !liveSound;
@@ -3598,7 +3631,9 @@
         if (el.getAttribute('src') && lastNow && lastNow.mode === 'playing') el.play().catch(() => {});
       }
       if (lastNow) renderAdesso(lastNow);
-    });
+    }
+
+    $('scr-sound').addEventListener('click', toggleSound);
 
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -3692,14 +3727,17 @@
       const toggle = h('button', { class: 'icon-btn main', type: 'button' });
       const stop = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Ferma', title: 'Ferma', onclick: () => playback('stop') }, icon('stop'));
       const next = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Episodio successivo', title: 'Episodio successivo', onclick: () => playback('next') }, icon('next'));
+      const prevIcon = icon('next');
+      prevIcon.style.transform = 'scaleX(-1)';
+      const prev = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Foto precedente', title: 'Foto precedente', onclick: () => playback('prev') }, prevIcon);
       const vol = h('input', { type: 'range', min: '0', max: '100', step: '5', 'aria-label': 'Volume' });
       vol.addEventListener('input', () => { volumeTouched = Date.now(); });
       vol.addEventListener('change', () => { volumeTouched = Date.now(); playback('volume', Number(vol.value)); });
       toggle.addEventListener('click', () => playback(toggle.dataset.action));
-      const row = h('div', { class: 'ctl-row' }, toggle, stop, next);
+      const row = h('div', { class: 'ctl-row' }, prev, toggle, stop, next);
       const volRow = h('label', { class: 'ctl-volume' }, icon('volume'), vol);
       $('now-controls').replaceChildren(row, volRow);
-      return { toggle, stop, next, vol, row, volRow };
+      return { prev, toggle, stop, next, vol, row, volRow };
     }
 
     function renderControls(n) {
@@ -3718,6 +3756,7 @@
         const label = n.kind === 'photos' ? 'Foto successiva' : 'Episodio successivo';
         c.next.setAttribute('aria-label', label);
         c.next.title = label;
+        c.prev.hidden = n.kind !== 'photos';
       }
       c.volRow.hidden = n.volume == null;
       if (n.volume != null && Date.now() - volumeTouched > 4000) c.vol.value = n.volume;

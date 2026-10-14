@@ -57,7 +57,8 @@ UPDATE_STATUS_SEC = 600
 # - stop: la TV torna su "pronto", la statuina rimasta va tolta e rimessa; l'episodio
 #   resta visto nel giro (lo è da quando è partito)
 # - successivo: il prossimo episodio del giro, con i limiti di tempo come sempre; per
-#   un album la foto dopo, anche in pausa (si va avanti a mano)
+#   un album la foto dopo, anche in pausa (si va avanti a mano); "prev", solo per gli
+#   album, la foto prima
 # - volume (0..100): salvato in volume.json, accanto al codice, e riapplicato
 CONTROL_PATH = RUN_DIR / "control.json"
 CONTROL_MAX_SEC = 30
@@ -766,12 +767,13 @@ def advance_album(elapsed):
         album["index"] += 1
     return True
 
-def album_next():
-    """Foto successiva, chiesta dall'app (anche in pausa: l'album resta fermo su quella
-    nuova, così si va avanti a mano). All'ultima foto non fa niente. Ritorna True se è
-    cambiata."""
+def album_step(step):
+    """Foto successiva (step=1) o precedente (-1), chiesta dall'app (anche in pausa:
+    l'album resta fermo su quella nuova, così si va avanti a mano). All'ultima (o alla
+    prima) non fa niente. Ritorna True se è cambiata."""
     global current_video_path
-    for i in range(album["index"] + 1, len(album["files"])):
+    order = range(album["index"] + 1, len(album["files"])) if step > 0 else range(album["index"] - 1, -1, -1)
+    for i in order:
         photo = album["files"][i]
         if photo.exists():
             album["index"], album["shown"] = i, 0.0
@@ -1071,8 +1073,8 @@ try:
                 player.resume()
                 mode = "playing"
                 paused_by_app = False
-            elif action == "next" and album is not None and mode in ("playing", "paused"):
-                album_next()
+            elif action in ("next", "prev") and album is not None and mode in ("playing", "paused"):
+                album_step(1 if action == "next" else -1)
             elif action in ("stop", "next") and mode in ("playing", "paused"):
                 char = current_character
                 player.stop()
