@@ -1857,6 +1857,7 @@
 
     let characters = [];
     let info = null;
+    let infoReady = Promise.resolve();   // loadInfo() all'avvio
     let imageVersion = Date.now();
     let current = null;          // scheda del personaggio aperto
 
@@ -1955,9 +1956,7 @@
     async function loadInfo() {
       try {
         info = await api('/system/info');
-        const pill = $('device-pill');
-        pill.textContent = [info.hostname, info.version && 'v' + info.version].filter(Boolean).join(' · ');
-        pill.hidden = false;
+        applyDeviceName();
         showHomeScreenPanel();   // senza Wi-Fi per scelta, anche dall'hotspot
       } catch (_) { /* API vecchia o non raggiungibile: la testata resta senza */ }
     }
@@ -1972,6 +1971,54 @@
       $('homescreen').classList.remove('hidden');
     }
 
+    // Il nome scelto per questo Cucù (o "Cucù"): in alto a destra, nel titolo della pagina e
+    // nel nome dell'icona sulla Home (lo prende quando la si aggiunge; il manifest ce l'ha già)
+    function applyDeviceName() {
+      if (!info) return;
+      const name = info.name || 'Cucù';
+      const pill = $('device-pill');
+      pill.textContent = [info.name || info.hostname, info.version && 'v' + info.version].filter(Boolean).join(' · ');
+      pill.hidden = false;
+      document.title = name;
+      document.querySelector('meta[name="apple-mobile-web-app-title"]').setAttribute('content', name);
+    }
+
+    // "Come chiamiamo questo Cucù?": già scritto "Cucù di ", da completare o da cambiare del tutto
+    function askDeviceName({ first = false } = {}) {
+      return new Promise((resolve) => {
+        const input = h('input', { class: 'field', id: 'device-name', type: 'text', maxlength: '30', autocomplete: 'off',
+          autocapitalize: 'words', enterkeyhint: 'done', value: (info && info.name) || 'Cucù di ' });
+        const error = h('div', { class: 'form-error', role: 'alert' });
+        const save = h('button', { class: 'btn btn-primary btn-block', type: 'submit', text: 'Salva' });
+        const later = h('button', { class: 'btn btn-block', type: 'button', text: first ? 'Più tardi' : 'Annulla',
+          onclick: () => { closeSheet(); resolve(false); } });
+        const form = h('form', {},
+          h('p', { class: 'sheet-text', text: 'Serve a riconoscerlo, per esempio se in casa ce n\'è più di uno: lo vedi qui in alto e sotto l\'icona sulla schermata Home.' }),
+          h('label', { class: 'lbl', for: 'device-name', text: 'Nome' }), input, error,
+          h('div', { class: 'actions' }, save, later));
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          save.disabled = true;
+          try {
+            const res = await api('/system/name', { method: 'PUT', body: { name: input.value } });
+            info.name = res.name;
+            applyDeviceName();
+            renderInfo();
+            closeSheet();
+            resolve(true);
+          } catch (err) {
+            error.textContent = err.message;
+            save.disabled = false;
+          }
+        });
+        openSheet({ title: 'Come chiamiamo questo Cucù?', content: form });
+        setTimeout(() => {
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);   // il cursore in fondo
+        }, 100);
+      });
+    }
+
     function renderInfo() {
       const root = $('info');
       const kv = (k, v) => h('div', { class: 'kv' }, h('span', { class: 'muted', text: k }), h('span', { text: v }));
@@ -1980,10 +2027,14 @@
         return;
       }
       root.replaceChildren(
-        kv('Nome', info.hostname),
+        h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Nome' }),
+          h('span', {}, info.name || 'Cucù', ' ',
+            h('button', { class: 'btn btn-quiet', style: 'min-height:0;padding:0 0 0 6px', text: 'Cambia',
+              onclick: () => askDeviceName() }))),
         kv('Indirizzo', `${info.hostname}.local`),
         kv('Versione', info.version ? `${info.version} (${info.channel === 'beta' ? 'prova' : 'stabile'})` : '—'),
         kv('Spazio libero', info.disk ? `${formatBytes(info.disk.free_bytes)} su ${formatBytes(info.disk.total_bytes)}` : '—'),
+        h('p', { class: 'muted small', style: 'margin:10px 0 0', text: 'Se cambi il nome, l\'icona già sulla schermata Home tiene quello vecchio: per aggiornarla, toglila e aggiungila di nuovo.' }),
       );
     }
 
@@ -4727,7 +4778,17 @@
     // All'avvio al massimo una proposta: prima la schermata Home (nel browser),
     // il PIN alla volta dopo. Su iPhone l'app sulla Home ha una memoria sua,
     // quindi lì la proposta del PIN arriva comunque
-    function maybeOfferOnStart() {
+    async function maybeOfferOnStart() {
+      // Il nome di questo Cucù, una volta per telefono se non c'è ancora: prima della
+      // proposta della schermata Home, perché l'icona prende il nome quando la si aggiunge
+      await infoReady;
+      if (info && !info.name && homeScreenHere() && store.get('cucu-name-asked') !== '1') {
+        await new Promise(r => setTimeout(r, 1200));
+        if (!$('sheet-root').firstChild && !parseRoute().name) {
+          store.set('cucu-name-asked', '1');
+          await askDeviceName({ first: true });
+        }
+      }
       if (shouldOfferHomeScreen()) {
         setTimeout(() => {
           if ($('sheet-root').firstChild || parseRoute().name) return;
@@ -4764,7 +4825,7 @@
     function start() {
       started = true;
       if (!$('brand-owl').firstChild) $('brand-owl').replaceWith(owl());
-      loadInfo();
+      infoReady = loadInfo();
       if (!location.hash) history.replaceState(null, '', '#/adesso');
       // l'app si è ricaricata con la modalità bambino aperta: si riparte da lì
       const relock = store.get(TV_LOCKED) === '1' && authState.pin_set;

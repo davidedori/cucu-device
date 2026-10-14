@@ -66,3 +66,4 @@ characters/*
 *.pyc
 volume.json
 no_wifi.json
+device_name.json

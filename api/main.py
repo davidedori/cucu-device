@@ -886,11 +886,45 @@ def auth_remove(payload: PinPayload, request: Request):
 
 # --- Installabile sulla schermata Home -----------------------------------------
 
+# Nome di questo Cucù scelto dal genitore ("Cucù di Anna"): per distinguere più Cucù in
+# casa (icona sulla Home, intestazione e titolo dell'app). Accanto al codice, fuori da git.
+# Indirizzo, hotspot e schermate della TV restano con il nome tecnico (cucu-xxxx)
+DEVICE_NAME_FILE = BASE_DIR / "device_name.json"
+DEVICE_NAME_MAX = 30
+
+
+def _device_name():
+    try:
+        name = str(json.loads(DEVICE_NAME_FILE.read_text()).get("name") or "").strip()
+    except (OSError, ValueError, AttributeError):
+        return None
+    return name or None
+
+
+class DeviceName(BaseModel):
+    name: str
+
+
+@app.put("/system/name")
+def set_device_name(body: DeviceName):
+    """Nome di questo Cucù; vuoto: si torna a "Cucù"."""
+    name = "".join(c for c in re.sub(r"\s+", " ", body.name) if c.isprintable()).strip()
+    if len(name) > DEVICE_NAME_MAX:
+        raise HTTPException(status_code=400, detail=f"Al massimo {DEVICE_NAME_MAX} caratteri.")
+    if name:
+        _write_json_atomic(DEVICE_NAME_FILE, {"name": name})
+    else:
+        DEVICE_NAME_FILE.unlink(missing_ok=True)
+    return {"status": "ok", "name": name or None}
+
+
 @app.get("/manifest.webmanifest")
 def web_manifest():
+    # il nome dell'icona sulla Home: iPhone e Android lo prendono quando la si aggiunge
+    name = _device_name() or "Cucù"
     return JSONResponse({
-        "name": "Cucù",
-        "short_name": "Cucù",
+        "name": name,
+        "short_name": name,
         "start_url": "/",
         "scope": "/",
         "display": "standalone",
@@ -902,7 +936,7 @@ def web_manifest():
             {"src": "/static/img/icon-512.png", "sizes": "512x512", "type": "image/png"},
             {"src": "/static/img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
         ],
-    }, media_type="application/manifest+json")
+    }, media_type="application/manifest+json", headers={"Cache-Control": "no-cache"})
 
 @app.get("/system/info")
 def system_info():
@@ -921,6 +955,7 @@ def system_info():
         "disk": disk_info,
         "thumbnails": _ffmpeg_available(),
         "no_wifi": NO_WIFI_FILE.exists(),   # "Usa Cucù senza Wi-Fi": 10.42.0.1 è il suo indirizzo
+        "name": _device_name(),             # scelto dal genitore, o None ("Cucù")
     }
 
 
