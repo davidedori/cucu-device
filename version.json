@@ -1,5 +1,5 @@
 {
-  "version": "0.9.2",
+  "version": "0.9.3",
   "min_version": "0.1.0",
-  "changelog": "First setup without typing: on Cucù's own network (hotspot) the Wi-Fi page opens by itself (captive portal), the TV shows 'Colleghiamoci!' with a QR to join it while Cucù has no saved network, and 'Fatto!' with a QR to open the app after connecting. A wrong Wi-Fi password brings the hotspot back. The hotspot password is now random for each Cucù (no more 'cucusetup'): it is on the TV and in Settings > Wi-Fi > Cucù's network, with a QR. The same figurine five times shows 'Eccomi!' on the TV (how to reach Cucù) and, with a PIN, lets you choose a new one while the figurine stays; the app shows a banner too. A figurine left on the reader at power-on no longer starts an episode. The app waits for updates to finish before reloading. Empty thumbnails are regenerated. Thinner progress bar on boot and update screens."
+  "changelog": "The Now page mirrors the TV: the same animated screens, and the episode plays live on the phone, muted by default, in sync with the TV. Playback controls and Cucù's volume in the app (pause, resume, stop, next; previous and next photo for albums, also when paused). Full screen turns the phone into Cucù's TV, with controls that fade away; 'Modalità bambino' locks it with sound on and no controls, and leaving needs the PIN (or the figurine gesture if the PIN is forgotten). 'Use Cucù without Wi-Fi' from the first-connection page. The LED breathes fast while Cucù is busy and double-blinks while it waits for a figurine."
 }
