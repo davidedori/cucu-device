@@ -3530,7 +3530,7 @@
 
     // Detto PRIMA di cambiare rete: dopo, sull'hotspot, la pagina non c'è più
     function afterSwitchText(ssid) {
-      if (onHotspot) return `Cucù lascia la sua rete e passa a "${ssid}". Di solito il telefono ci torna da solo e la pagina si riapre su ${deviceHost()}.`;
+      if (onHotspot) return `Cucù lascia la sua rete e passa a "${ssid}". Di solito il telefono ci torna da solo e qui si apre Cucù, su ${deviceHost()}.`;
       return `Il telefono perderà il collegamento con Cucù per qualche secondo. Poi collegalo anche tu a "${ssid}" e apri ${deviceHost()}.`;
     }
 
@@ -3551,8 +3551,8 @@
         h('div', { class: 'peek' }, owl()),
         h('h2', { text: 'Quasi fatto' }),
         h('p', {}, 'Cucù si sta collegando a ', h('strong', { text: ssid }),
-          '. Aspetta qualche secondo: quando anche il telefono torna su quella rete, questa pagina si apre da sola.'),
-        h('p', { class: 'muted', style: 'margin-top:18px' }, 'Se non si apre: collega il telefono a ', h('strong', { text: ssid }),
+          '. Aspetta qualche secondo: quando anche il telefono torna su quella rete, qui si apre da solo Cucù.'),
+        h('p', { class: 'muted', style: 'margin-top:18px' }, 'Se non succede: collega il telefono a ', h('strong', { text: ssid }),
           ' e apri ', h('strong', { text: deviceHost() }), '.'),
         h('p', { class: 'muted', style: 'margin-top:8px', text: `Se non trovi Cucù nemmeno così, la password forse non era giusta: ricollegati a ${ap} e riprova.` })
       ));
