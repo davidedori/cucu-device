@@ -832,6 +832,12 @@
     }
     .scr-sound[hidden] { display: none; }
     .scr-full { right: auto; left: 14px; }
+    .photo-full { position: fixed; inset: 0; z-index: 300; background: #000; }
+    .photo-full[hidden] { display: none; }
+    .photo-full img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .photo-full .scr-sound { width: 52px; height: 52px; background: rgba(255, 255, 255, .18); }
+    .photo-full-close { top: calc(14px + var(--safe-t, 0px)); right: 14px; }
+    .photo-full-next { top: auto; bottom: calc(18px + var(--safe-b, 0px)); right: 18px; }
     /* le foto degli album intere, come sulla TV (bande nere), non ritagliate */
     .screen[data-fit="contain"] .scr-media img { object-fit: contain; }
     /* a tutto schermo (Android, computer): la TV disegnata riempie lo schermo */
@@ -1183,6 +1189,13 @@
       <div class="device-pill" id="device-pill" hidden></div>
     </div>
   </header>
+
+  <!-- Foto dell'album a tutto schermo (su iPhone il tutto schermo vero vale solo per i video) -->
+  <div class="photo-full" id="photo-full" role="dialog" aria-modal="true" aria-label="Foto a tutto schermo" hidden>
+    <img id="photo-full-img" alt="">
+    <button class="scr-sound photo-full-close" id="photo-full-close" type="button" aria-label="Chiudi"></button>
+    <button class="scr-sound photo-full-next" id="photo-full-next" type="button" aria-label="Foto successiva"></button>
+  </div>
 
   <nav class="nav" aria-label="Sezioni">
     <a href="#/adesso" data-nav="adesso">
@@ -3298,6 +3311,7 @@
       nowTimer = null;
       document.removeEventListener('visibilitychange', nowVisibility);
       stopLive();
+      closePhotoFull();
     }
 
     async function pollNow() {
@@ -3428,6 +3442,13 @@
         ? `/characters/${enc(n.character)}/episodes/${enc(n.episode)}/${photo ? 'file' : `thumb?v=${n.episode_thumb_v}`}`
         : null;
       screen.dataset.fit = photo ? 'contain' : '';
+      if (photo) {
+        $('scr-full').hidden = false;
+        $('scr-full').replaceChildren(icon('expand'));
+      } else if (!live) {
+        $('scr-full').hidden = true;
+      }
+      updatePhotoFull(photo ? thumb : null);
       // La schermata vera della TV (pronto, riposo, ascolto, aggiornamento, "Fatto!"...),
       // quando non c'è l'episodio
       const tv = !live && !thumb && n.screen ? n.screen
@@ -3529,7 +3550,41 @@
 
     // Tutto schermo: su iPhone una pagina può mandarci solo un video (con il riproduttore di
     // iOS), altrove va a tutto schermo l'intera TV disegnata
+    // Foto a tutto schermo: una vista dentro l'app (sul nero, come la TV), che segue l'album;
+    // dove il browser lo permette anche il tutto schermo vero
+    function openPhotoFull() {
+      const box = $('photo-full');
+      $('photo-full-img').src = $('scr-img').getAttribute('src') || '';
+      $('photo-full-close').replaceChildren(icon('remove'));
+      $('photo-full-next').replaceChildren(icon('next'));
+      box.hidden = false;
+      if (box.requestFullscreen && document.fullscreenEnabled) box.requestFullscreen().catch(() => {});
+    }
+
+    function closePhotoFull() {
+      const box = $('photo-full');
+      if (box.hidden) return;
+      box.hidden = true;
+      if (document.fullscreenElement === box) document.exitFullscreen().catch(() => {});
+    }
+
+    // a ogni aggiornamento: la foto della TV, o chiusa se l'album non va più
+    function updatePhotoFull(url) {
+      if ($('photo-full').hidden) return;
+      if (!url) { closePhotoFull(); return; }
+      if ($('photo-full-img').getAttribute('src') !== url) $('photo-full-img').src = url;
+    }
+
+    $('photo-full-close').addEventListener('click', closePhotoFull);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePhotoFull(); });
+    $('photo-full-next').addEventListener('click', () => playback('next'));
+    document.addEventListener('fullscreenchange', () => {
+      // uscita dal tutto schermo del browser (tasto indietro, Esc): si chiude anche la vista
+      if (!document.fullscreenElement && !$('photo-full').hidden && document.fullscreenEnabled) closePhotoFull();
+    });
+
     $('scr-full').addEventListener('click', () => {
+      if (lastNow && lastNow.kind === 'photos') { openPhotoFull(); return; }
       const video = $('scr-live'), screen = $('screen');
       if (screen.requestFullscreen && document.fullscreenEnabled) screen.requestFullscreen().catch(() => {});
       else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
@@ -3659,7 +3714,10 @@
         c.toggle.setAttribute('aria-label', paused ? 'Riprendi' : 'Pausa');
         c.toggle.title = paused ? 'Riprendi' : 'Pausa';
         c.toggle.replaceChildren(icon(paused ? 'play' : 'pause'));
-        c.next.hidden = n.kind === 'photos';   // un album non ha un "successivo"
+        // per un album: la foto dopo (anche in pausa: si va avanti a mano)
+        const label = n.kind === 'photos' ? 'Foto successiva' : 'Episodio successivo';
+        c.next.setAttribute('aria-label', label);
+        c.next.title = label;
       }
       c.volRow.hidden = n.volume == null;
       if (n.volume != null && Date.now() - volumeTouched > 4000) c.vol.value = n.volume;

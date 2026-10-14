@@ -56,7 +56,8 @@ UPDATE_STATUS_SEC = 600
 #   rimettendo la statuina (non subito perché è ancora lì: paused_by_app)
 # - stop: la TV torna su "pronto", la statuina rimasta va tolta e rimessa; l'episodio
 #   resta visto nel giro (lo è da quando è partito)
-# - successivo: il prossimo episodio del giro, con i limiti di tempo come sempre
+# - successivo: il prossimo episodio del giro, con i limiti di tempo come sempre; per
+#   un album la foto dopo, anche in pausa (si va avanti a mano)
 # - volume (0..100): salvato in volume.json, accanto al codice, e riapplicato
 CONTROL_PATH = RUN_DIR / "control.json"
 CONTROL_MAX_SEC = 30
@@ -765,6 +766,20 @@ def advance_album(elapsed):
         album["index"] += 1
     return True
 
+def album_next():
+    """Foto successiva, chiesta dall'app (anche in pausa: l'album resta fermo su quella
+    nuova, così si va avanti a mano). All'ultima foto non fa niente. Ritorna True se è
+    cambiata."""
+    global current_video_path
+    for i in range(album["index"] + 1, len(album["files"])):
+        photo = album["files"][i]
+        if photo.exists():
+            album["index"], album["shown"] = i, 0.0
+            current_video_path = photo
+            player.play_media(photo)
+            return True
+    return False
+
 def start_video(character):
     """Ritorna "played", "blocked" (limiti di tempo) o "missing" (nessun video)."""
     global current_character, mode, current_video_path, album
@@ -1056,6 +1071,8 @@ try:
                 player.resume()
                 mode = "playing"
                 paused_by_app = False
+            elif action == "next" and album is not None and mode in ("playing", "paused"):
+                album_next()
             elif action in ("stop", "next") and mode in ("playing", "paused"):
                 char = current_character
                 player.stop()
