@@ -394,6 +394,22 @@ def _mark_thumb_failed(char_dir: Path, video: Path):
 def _start_thumb_worker():
     threading.Thread(target=_thumb_worker, name="thumb-worker", daemon=True).start()
 
+
+@app.on_event("startup")
+def _start_first_screen_check():
+    """Schermata del primo collegamento: si decide all'avvio (vedi FIRST_FILE). All'avvio
+    del dispositivo NetworkManager può non rispondere ancora: qualche tentativo."""
+    def check():
+        for _ in range(6):
+            try:
+                _wifi_connections()
+            except Exception:
+                time.sleep(10)
+                continue
+            _refresh_first_screen()
+            return
+    threading.Thread(target=check, name="first-screen", daemon=True).start()
+
 def _video_files(char_dir: Path):
     return [p for p in char_dir.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT]
 
@@ -567,9 +583,10 @@ class PinGuard:
 
 app.add_middleware(PinGuard)
 
-# "Fatto!" sulla TV dopo un cambio di rete dall'app: nome della rete, indirizzo e QR
-# (api/done_screen.py) in done_overlay.png, che read_nfc.py posa sul loop done.mp4,
-# più la schermata intera e ferma done_screen.png come ripiego.
+# Schermate della TV con testo e QR, disegnate qui (api/tv_screens.py) perché cambiano
+# da dispositivo a dispositivo: <nome>_overlay.png, che read_nfc.py posa sul loop
+# <nome>.mp4, più la schermata intera e ferma <nome>_screen.png come ripiego.
+# - "Fatto!" dopo un cambio di rete dall'app: nome della rete, indirizzo e QR.
 # done.json dice fino a quando: la schermata sparisce prima, appena il telefono apre
 # Cucù dal suo indirizzo .local (cioè l'ha trovato), oppure alla scadenza. In RAM,
 # accanto allo stato di read_nfc.py. Stesse costanti in read_nfc.py
@@ -577,19 +594,73 @@ DONE_SEC = 600
 DONE_FILE = RUN_STATE_FILE.parent / "done.json"
 
 
+# - "Colleghiamoci!" finché Cucù non ha nessuna rete salvata (vero primo avvio): QR del
+#   Wi-Fi dell'hotspot. Se ha reti salvate ma nessuna raggiungibile (dai nonni) no: la
+#   TV resta su "pronto". first.json c'è finché vale; si ricalcola all'avvio dell'API
+#   e quando dall'app si aggiunge o si dimentica una rete
+FIRST_FILE = RUN_STATE_FILE.parent / "first.json"
+GRAPHICS_DIR = BASE_DIR / "graphics"
+HOTSPOT_DEFAULT_PASSWORD = "cucusetup"   # come in setup_hotspot.sh
+
+
+def _hotspot():
+    """Nome e password dell'hotspot (setup_hotspot.sh): la password da config.env
+    (HOTSPOT_PASSWORD), altrimenti quella di sempre."""
+    cfg = dotenv_values(CONFIG_ENV_FILE) if CONFIG_ENV_FILE.exists() else {}
+    return f"{socket.gethostname()}_AP", (cfg.get("HOTSPOT_PASSWORD") or "").strip() or HOTSPOT_DEFAULT_PASSWORD
+
+
 def _show_done(ssid: str):
     run_dir = RUN_STATE_FILE.parent
     if not run_dir.is_dir():
         return
-    host = f"{socket.gethostname()}.local"
     try:
-        import done_screen
-        done_screen.render(ssid, host, run_dir / "done_overlay.png",
-                           BASE_DIR / "graphics" / "done.png", run_dir / "done_screen.png")
+        import tv_screens
+        tv_screens.render_done(ssid, f"{socket.gethostname()}.local", run_dir, GRAPHICS_DIR)
     except Exception as e:  # senza Pillow o qrcode la schermata non c'è, niente di grave
         print(f"[WiFi] Schermata 'Fatto!' non disponibile: {e}")
         return
     _write_json_atomic(DONE_FILE, {"until": time.time() + DONE_SEC, "ssid": ssid})
+
+
+def _wifi_connections():
+    """Nomi delle connessioni Wi-Fi salvate in NetworkManager (hotspot compreso)."""
+    res = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE", "con", "show"],
+                         capture_output=True, text=True, check=True, timeout=10)
+    names = []
+    for line in res.stdout.splitlines():
+        # es: Vodafone-123:802-11-wireless (i ":" nei nomi sono preceduti da \)
+        parts = re.split(r'(?<!\\):', line)
+        if len(parts) >= 2 and parts[1] == "802-11-wireless":
+            names.append(parts[0].replace("\\:", ":"))
+    return names
+
+
+def _saved_networks():
+    """Reti a cui Cucù sa collegarsi da solo: tutte tranne il suo hotspot ("preconfigured"
+    è quella scritta da Raspberry Pi Imager: conta)."""
+    return [n for n in _wifi_connections() if not n.endswith("_AP") and n != "Hotspot"]
+
+
+def _refresh_first_screen():
+    """Mostra o toglie "Colleghiamoci!" a seconda che Cucù abbia reti salvate."""
+    run_dir = RUN_STATE_FILE.parent
+    try:
+        saved = _saved_networks()
+    except Exception as e:  # nmcli non risponde: non si cambia niente
+        print(f"[WiFi] Reti salvate illeggibili: {e}")
+        return
+    if saved or not run_dir.is_dir():
+        FIRST_FILE.unlink(missing_ok=True)
+        return
+    ssid, password = _hotspot()
+    try:
+        import tv_screens
+        tv_screens.render_first(ssid, password, HOTSPOT_IP, run_dir, GRAPHICS_DIR)
+    except Exception as e:
+        print(f"[WiFi] Schermata del primo collegamento non disponibile: {e}")
+        return
+    _write_json_atomic(FIRST_FILE, {"ssid": ssid})
 
 
 # Captive portal: sull'hotspot ogni nome risponde 10.42.0.1 (networkmanager/
@@ -2151,19 +2222,8 @@ def list_wifi():
     # 2. Connessioni salvate
     saved = []
     try:
-        # nmcli -t -f NAME,TYPE con show
-        res = subprocess.run(
-            ["nmcli", "-t", "-f", "NAME,TYPE", "con", "show"],
-            capture_output=True, text=True
-        )
-        for line in res.stdout.splitlines():
-            # es: Vodafone-123:802-11-wireless
-            parts = line.split(":")
-            if len(parts) >= 2 and parts[1] == "802-11-wireless":
-                name = parts[0]
-                # Filtra connessioni di sistema o hotspot che non vogliamo eliminare
-                if name not in ("Hotspot", "CucuDevice_AP", "Cucu_AP", "preconfigured"):
-                    saved.append(name)
+        # Filtra connessioni di sistema o hotspot che non vogliamo eliminare
+        saved = [n for n in _wifi_connections() if n not in ("Hotspot", "CucuDevice_AP", "Cucu_AP", "preconfigured")]
     except Exception as e:
         print(f"Errore check saved wifi: {e}")
 
@@ -2215,12 +2275,13 @@ def list_wifi():
 def _connect_wifi_task(ssid: str, password: str):
     """Logica di connessione eseguita in background."""
     print(f"[WiFi] Avvio connessione a '{ssid}'...")
+    ap_name = f"{socket.gethostname()}_AP"
+    created = False
     try:
         # 0. Abbatti l'hotspot se è attivo per liberare l'antenna wlan0. Prima un
         # attimo di attesa: il telefono sull'hotspot deve ricevere la risposta e
         # mostrare cosa fare dopo, perché da qui in poi la sua rete sparisce
         time.sleep(2)
-        ap_name = f"{socket.gethostname()}_AP"
         subprocess.run(["sudo", "nmcli", "con", "down", ap_name], capture_output=True)
 
         # 1. Elimina eventuale vecchia connessione con stesso nome
@@ -2232,6 +2293,7 @@ def _connect_wifi_task(ssid: str, password: str):
              "con-name", ssid, "ssid", ssid],
             check=True, capture_output=True
         )
+        created = True
         
         # 3. Configura password (se presente)
         if password:
@@ -2260,9 +2322,17 @@ def _connect_wifi_task(ssid: str, password: str):
         )
         print(f"[WiFi] Connessione a '{ssid}' completata con successo.")
         _show_done(ssid)
-        
+        _refresh_first_screen()
+
     except Exception as e:
         print(f"[WiFi] Errore connessione a '{ssid}': {e}")
+        # Password sbagliata o rete sparita: via la connessione appena creata (con una
+        # password sbagliata Cucù crederebbe di avere una rete) e di nuovo l'hotspot,
+        # così il telefono può ricollegarsi e riprovare
+        if created:
+            subprocess.run(["sudo", "nmcli", "con", "delete", ssid], capture_output=True)
+        subprocess.run(["sudo", "nmcli", "con", "up", ap_name], capture_output=True, timeout=30)
+        _refresh_first_screen()
 
 
 @app.post("/system/wifi")
@@ -2279,6 +2349,17 @@ def connect_wifi(payload: WifiConnect, background_tasks: BackgroundTasks):
     background_tasks.add_task(_connect_wifi_task, ssid, payload.password)
     
     return {"status": "ok", "message": f"Tentativo di connessione a '{ssid}' avviato..."}
+
+def _after_forget():
+    time.sleep(2)  # prima la risposta al telefono: con l'hotspot la sua rete può cambiare
+    try:
+        if not _saved_networks():
+            subprocess.run(["sudo", "nmcli", "con", "up", f"{socket.gethostname()}_AP"],
+                           capture_output=True, timeout=30)
+    except Exception as e:
+        print(f"[WiFi] Hotspot non acceso: {e}")
+    _refresh_first_screen()
+
 
 @app.post("/system/wifi/{ssid}/connect")
 def switch_wifi(ssid: str, background_tasks: BackgroundTasks):
@@ -2309,9 +2390,10 @@ def switch_wifi(ssid: str, background_tasks: BackgroundTasks):
 
 
 @app.delete("/system/wifi/{ssid}")
-def forget_wifi(ssid: str):
+def forget_wifi(ssid: str, background_tasks: BackgroundTasks):
     """
-    Dimentica (elimina) una connessione salvata.
+    Dimentica (elimina) una connessione salvata. Se era l'ultima, Cucù torna
+    all'hotspot e la TV mostra il primo collegamento.
     """
     if ssid == "Hotspot" or ssid.endswith("_AP"):
         raise HTTPException(status_code=400, detail="Non puoi eliminare l'Hotspot di sistema da qui.")
@@ -2321,6 +2403,7 @@ def forget_wifi(ssid: str):
             ["sudo", "nmcli", "con", "delete", ssid],
             check=True, capture_output=True
         )
+        background_tasks.add_task(_after_forget)
         return {"status": "ok", "deleted": ssid}
     except subprocess.CalledProcessError as e:
         raise HTTPException(status_code=404, detail=f"Errore (forse rete non trovata): {e}")

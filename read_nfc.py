@@ -49,17 +49,19 @@ LOCK_MAX_SEC = 30
 UPDATE_STATUS_PATH = RUN_DIR / "update_status.json"
 UPDATE_STEPS = 4
 UPDATE_STATUS_SEC = 600
-# "Fatto!" dopo un cambio di rete dall'app: l'API scrive done.json (scadenza),
-# done_overlay.png (rete, indirizzo e QR, disegnati sul Pi perché cambiano da
-# dispositivo a dispositivo: si posano sul loop done.mp4 con il filtro logo di VLC)
-# e done_screen.png, la schermata intera e ferma, se il loop manca. L'API toglie
-# done.json appena il telefono apre Cucù dal suo indirizzo .local. Stesse costanti
-# in api/main.py
-DONE_PATH = RUN_DIR / "done.json"
-DONE_OVERLAY = RUN_DIR / "done_overlay.png"
-DONE_FULL = RUN_DIR / "done_screen.png"
-DONE_IMAGE = GRAPHICS_DIR / "done.png"   # sfondo senza testo: il loop done.mp4
+# Schermate con testo e QR, che l'API disegna sul Pi (api/tv_screens.py) perché
+# cambiano da dispositivo a dispositivo. Per ognuna: <nome>.json (c'è da mostrarla),
+# <nome>_overlay.png (testo e QR, posati sul loop <nome>.mp4 con il filtro logo di
+# VLC) e <nome>_screen.png (la schermata intera e ferma, se il loop manca).
+# - done, "Fatto!": dopo un cambio di rete dall'app; scade dopo DONE_SEC, e l'API
+#   lo toglie appena il telefono apre Cucù dal suo indirizzo .local
+# - first, "Colleghiamoci!": finché Cucù non ha nessuna rete salvata (QR del Wi-Fi
+#   dell'hotspot). Senza scadenza: lo ricalcola l'API
+# Stesse costanti in api/main.py
 DONE_SEC = 600
+DONE_IMAGE = GRAPHICS_DIR / "done.png"     # sfondo senza testo, come il loop done.mp4
+FIRST_IMAGE = GRAPHICS_DIR / "first.png"
+TEXT_SCREENS = {DONE_IMAGE: "done", FIRST_IMAGE: "first"}
 DAILY_USAGE_PATH = BASE_DIR / "daily_usage.json"
 
 # Schermate sulla TV (sorgente e rigenerazione: graphics/src/). Si mostra il loop
@@ -694,12 +696,13 @@ def refresh_graphic(path):
     global current_graphic_path
     if path != current_graphic_path:
         print(f"Cambio grafica: {path.name}")
-        if path == DONE_IMAGE and not (LOOPS_DIR / "done.mp4").exists():
-            player.show_screen(DONE_FULL)       # la schermata intera, ferma
+        name = TEXT_SCREENS.get(path)
+        if name and not (LOOPS_DIR / f"{name}.mp4").exists():
+            player.show_screen(RUN_DIR / f"{name}_screen.png")   # la schermata intera, ferma
         else:
             player.show_screen(path)
-            if path == DONE_IMAGE:
-                player.want_overlay(DONE_OVERLAY)
+            if name:
+                player.want_overlay(RUN_DIR / f"{name}_overlay.png")
         current_graphic_path = path
 
 # Statuina sconosciuta appoggiata adesso (None: nessuna). La schermata resta
@@ -731,13 +734,16 @@ def update_step():
         return None
     return min(max(step, 1), UPDATE_STEPS)
 
-def done_active():
-    """Vero se c'è da mostrare "Fatto!" (vedi DONE_PATH)."""
+def text_screen_active(name, max_sec=None):
+    """Vero se l'API ha preparato la schermata con testo e QR `name` (vedi TEXT_SCREENS);
+    con max_sec anche la scadenza ("until") deve valere."""
     try:
-        until = float(json.loads(DONE_PATH.read_text()).get("until", 0))
+        data = json.loads((RUN_DIR / f"{name}.json").read_text())
+        if max_sec is not None and not 0 < float(data.get("until", 0)) - time.time() <= max_sec:
+            return False
     except (OSError, ValueError, TypeError, AttributeError):
         return False
-    return 0 < until - time.time() <= DONE_SEC and DONE_OVERLAY.exists() and DONE_FULL.exists()
+    return (RUN_DIR / f"{name}_overlay.png").exists() and (RUN_DIR / f"{name}_screen.png").exists()
 
 def idle_screen(blocked, locked=False, updating=None):
     """Schermata quando non va niente (né in riproduzione né in pausa): una
@@ -751,8 +757,10 @@ def idle_screen(blocked, locked=False, updating=None):
         return update_image(updating)
     if locked:
         return SETUP_IMAGE
-    if done_active():
+    if text_screen_active("done", DONE_SEC):
         return DONE_IMAGE
+    if text_screen_active("first"):
+        return FIRST_IMAGE
     if unknown_uid is not None:
         return UNKNOWN_IMAGE
     return REST_IMAGE if blocked else IDLE_IMAGE
