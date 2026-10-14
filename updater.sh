@@ -52,6 +52,27 @@ ok()   { _log "OK   " "$@"; }
 warn() { _log "WARN " "$@"; }
 fail() { _log "ERROR" "$@"; }
 
+# ---- SCHERMATA "AGGIORNAMENTO" SULLA TV ------------------------------------
+# read_nfc.py mostra il gufetto con gli ingranaggi e la barra finché esiste
+# questo file: passo (1..UPDATE_STEPS, la lunghezza della barra) e scadenza.
+# In RAM accanto allo stato di read_nfc.py (/run/cucu resta tra un riavvio e
+# l'altro del servizio, che l'aggiornamento riavvia; sparisce con il reboot).
+# Si cancella all'uscita (trap più sotto); se lo script muore senza uscire la
+# scadenza riporta comunque la TV su "pronto"
+UPDATE_STATUS_FILE="/run/cucu/update_status.json"
+UPDATE_STEPS=4          # stessi passi in read_nfc.py e render_loops.mjs (update_1..4)
+UPDATE_STATUS_SEC=600   # stessa costante in read_nfc.py
+
+update_status() {
+    # Solo se /run/cucu c'è (la crea systemd per cucu-device.service): creata
+    # qui sarebbe di root e read_nfc.py non potrebbe più scriverci
+    [ -d "$(dirname "$UPDATE_STATUS_FILE")" ] || return 0
+    local tmp="${UPDATE_STATUS_FILE}.tmp"
+    printf '{"step": %d, "steps": %d, "until": %d}\n' "$1" "$UPDATE_STEPS" "$(( $(date +%s) + UPDATE_STATUS_SEC ))" > "$tmp" \
+        && chmod 644 "$tmp" && mv "$tmp" "$UPDATE_STATUS_FILE" || rm -f "$tmp"
+}
+update_status_clear() { rm -f "$UPDATE_STATUS_FILE" "${UPDATE_STATUS_FILE}.tmp"; }
+
 # Rotazione log: mantieni solo gli ultimi 500 KB
 if [ -f "$LOG_FILE" ] && [ "$(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)" -gt 512000 ]; then
     mv "$LOG_FILE" "${LOG_FILE}.old"
@@ -188,7 +209,7 @@ log "Aggiornamento disponibile: $LOCAL_VERSION → $REMOTE_VERSION"
 # e ripristinati dopo.
 VOLATILE_FILES=("tags.json" "time_limits.json" "tag_labels.json" "ui_auth.json")
 BACKUP_DIR="$(mktemp -d /tmp/cucu-ota-XXXXXX)"
-trap 'rm -rf "$BACKUP_DIR"' EXIT
+trap 'rm -rf "$BACKUP_DIR"; update_status_clear' EXIT
 
 for f in "${VOLATILE_FILES[@]}"; do
     if [ -f "$PROJECT_DIR/$f" ]; then
@@ -369,6 +390,7 @@ _restore_volatile_files() {
 }
 
 # ---- GIT FETCH + RESET ------------------------------------------------------
+update_status 1
 log "Scarico aggiornamenti dal repository..."
 
 if ! sudo -u "$DEPLOY_USER" git -C "$PROJECT_DIR" fetch origin "$GIT_BRANCH" \
@@ -395,6 +417,7 @@ _restore_volatile_files
 sync
 
 # ---- AGGIORNA DIPENDENZE PYTHON ---------------------------------------------
+update_status 2
 log "Verifica dipendenze Python..."
 if [ -f "$VENV_PIP" ]; then
     sudo -u "$DEPLOY_USER" "$VENV_PIP" install \
@@ -408,12 +431,14 @@ fi
 _apply_service_files
 
 # ---- SINCRONIZZA TEMA PLYMOUTH ----------------------------------------------
+update_status 3
 _apply_plymouth_theme
 
 # ---- REGOLA POLKIT ----------------------------------------------------------
 _apply_polkit_rules
 
 # ---- RIAVVIA SERVIZI --------------------------------------------------------
+update_status 4
 log "Riavvio servizi..."
 systemctl restart cucu-device.service     2>>"$LOG_FILE" || true
 systemctl restart cucu-device-api.service 2>>"$LOG_FILE" || true

@@ -42,6 +42,13 @@ STATE_PATH = (RUN_DIR if STATE_IN_RAM else BASE_DIR) / "last_seen_tag.json"
 # LOCK_MAX_SEC da ora (orologio spostato) non vale
 LOCK_PATH = STATE_PATH.with_name("lock.json")
 LOCK_MAX_SEC = 30
+# Aggiornamento in corso: updater.sh (root) scrive qui il passo (1..UPDATE_STEPS)
+# con una scadenza, e lo cancella quando finisce. Sempre in /run/cucu, che resta
+# tra un riavvio e l'altro del servizio: appena riavviato dall'aggiornamento,
+# read_nfc.py rimette subito la schermata. Stesse costanti in updater.sh
+UPDATE_STATUS_PATH = RUN_DIR / "update_status.json"
+UPDATE_STEPS = 4
+UPDATE_STATUS_SEC = 600
 DAILY_USAGE_PATH = BASE_DIR / "daily_usage.json"
 
 # Schermate sulla TV (sorgente e rigenerazione: graphics/src/). Si mostra il loop
@@ -53,6 +60,8 @@ REST_IMAGE = GRAPHICS_DIR / "rest.png"            # adesso no: il gufetto dorme 
 LISTEN_IMAGE = GRAPHICS_DIR / "listen.png"        # audio in corso: "Si ascolta"
 UNKNOWN_IMAGE = GRAPHICS_DIR / "unknown.png"      # statuina sconosciuta, finché resta appoggiata
 SETUP_IMAGE = GRAPHICS_DIR / "setup.png"          # configurazione dall'app: Cucù non parte
+# aggiornamento: update_1..UPDATE_STEPS.png, la barra si allunga a ogni passo di updater.sh
+update_image = lambda step: GRAPHICS_DIR / f"update_{step}.png"
 
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 # Persistiamo il conteggio minuti solo ogni tot secondi di riproduzione continua,
@@ -649,13 +658,27 @@ def lock_active():
         return False
     return 0 < until - time.time() <= LOCK_MAX_SEC
 
-def idle_screen(blocked, locked=False):
+def update_step():
+    """Passo dell'aggiornamento in corso (1..UPDATE_STEPS), o None (vedi UPDATE_STATUS_PATH)."""
+    try:
+        data = json.loads(UPDATE_STATUS_PATH.read_text())
+        step, until = int(data.get("step", 0)), float(data.get("until", 0))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+    if not 0 < until - time.time() <= UPDATE_STATUS_SEC:
+        return None
+    return min(max(step, 1), UPDATE_STEPS)
+
+def idle_screen(blocked, locked=False, updating=None):
     """Schermata quando non va niente (né in riproduzione né in pausa): una
     sola, "pronto", per attesa, fine episodio e statuina tolta (al bambino
     serve solo riconoscere quando può appoggiarne una). Se adesso Cucù non si
     può usare il gufetto dorme, con o senza statuina: anche a fine episodio,
     che arriva sempre alla fine prima di questo. La statuina sconosciuta
-    vince finché è appoggiata: dice qualcosa anche quando Cucù dorme."""
+    vince finché è appoggiata: dice qualcosa anche quando Cucù dorme.
+    L'aggiornamento vince su tutto: il genitore deve vedere di non spegnere."""
+    if updating:
+        return update_image(updating)
     if locked:
         return SETUP_IMAGE
     if unknown_uid is not None:
@@ -666,7 +689,8 @@ def idle_screen(blocked, locked=False):
 
 print("cucu-device player avviato.")
 load_episode_state()
-refresh_graphic(IDLE_IMAGE) # Avvio con idle
+# Avvio con "pronto", o con l'aggiornamento se è stato lui a riavviare il servizio
+refresh_graphic(idle_screen(False, updating=update_step()))
 # Dopo la grafica idle: il probe del PN532 può richiedere qualche istante (o
 # riprovare a lungo se il chip non risponde) e lo schermo non deve restare
 # grigio nel frattempo.
@@ -736,7 +760,22 @@ try:
         except Exception as e:
             print(f"[WARN] Limiti di tempo illeggibili ({e}): nessun limite.")
             blocked = False
-        locked = lock_active()
+        updating = update_step()
+        if updating and mode in ("playing", "paused"):
+            # il genitore ha scelto "Interrompi e aggiorna": fra poco l'aggiornamento
+            # riavvia il servizio, intanto la TV dice di non spegnere. La statuina
+            # rimasta appoggiata non fa ripartire niente (va tolta e rimessa)
+            print("Aggiornamento in corso: episodio interrotto.")
+            player.stop()
+            mode = "idle"
+            album = None
+            current_character = current_video_path = None
+            current_graphic_path = None
+            start_blocked_uid = uid
+            save_daily_usage()
+            usage_unsaved_seconds = 0.0
+        # durante l'aggiornamento, come durante la configurazione, non parte niente
+        locked = lock_active() or updating is not None
         if locked:
             unknown_uid = None  # il genitore la sta abbinando: niente punto di domanda, nemmeno dopo
         try:
@@ -757,7 +796,8 @@ try:
                     "album": {"index": album["index"] + 1, "total": len(album["files"])} if album else None,
                     "pin_reset": pin_reset_open(),
                     "unknown": unknown_uid is not None,  # statuina sconosciuta: il LED lampeggia ogni tanto
-                    "locked": locked,  # configurazione dall'app
+                    "locked": locked,  # configurazione dall'app (o aggiornamento)
+                    "updating": updating,  # passo dell'aggiornamento in corso, o None
                 })
         except Exception:
             pass
@@ -855,7 +895,7 @@ try:
         # Schermata quando non va niente: segue anche i cambi senza statuina
         # (si apre o si chiude una fascia oraria, finiscono i minuti)
         if mode not in ("playing", "paused"):
-            refresh_graphic(idle_screen(blocked, locked))
+            refresh_graphic(idle_screen(blocked, locked, updating))
 
         # Aggiorna tracking
         last_uid = uid
