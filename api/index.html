@@ -200,7 +200,7 @@
     body.scroll-locked { position: fixed; left: 0; right: 0; }
 
     /* Primo collegamento (#/wifi, anche nel mini-browser del captive portal): solo il Wi-Fi */
-    body.setup-mode .nav, body.setup-mode #update-banner { display: none !important; }
+    body.setup-mode .nav, body.setup-mode #update-banner, body.setup-mode #pin-banner { display: none !important; }
 
     /* ---------- Navigazione ---------- */
     .nav {
@@ -273,6 +273,8 @@
     .note { border-radius: 14px; padding: 12px 14px; font-size: 15px; line-height: 1.4; background: var(--blue); color: var(--blue-ink); }
     .note.alert { background: var(--apricot); color: var(--apricot-ink); }
     a.update-banner { display: block; margin-bottom: 16px; text-decoration: none; }
+    .pin-banner { margin-bottom: 16px; }
+    .pin-banner .btn { margin-top: 10px; min-height: 40px; }
     .note strong { font-weight: 600; }
 
     .rows { margin: 4px -18px 0; }
@@ -1173,6 +1175,11 @@
   <main>
     <!-- C'è un aggiornamento: lo installa il genitore quando vuole (niente aggiornamenti automatici) -->
     <a class="note update-banner hidden" id="update-banner" href="#/impostazioni"><strong>C'è un aggiornamento di Cucù.</strong> Lo installi quando vuoi, da Impostazioni.</a>
+    <!-- Gesto con la statuina fatto mentre questo telefono è già dentro: si può scegliere un PIN nuovo -->
+    <div class="note alert pin-banner hidden" id="pin-banner" role="status">
+      <strong>Cucù è pronto per un PIN nuovo.</strong> Puoi sceglierlo finché la statuina resta su Cucù.
+      <button class="btn btn-block" id="pin-banner-btn" type="button">Scegli il PIN</button>
+    </div>
 
     <!-- Adesso: cosa succede sulla TV -->
     <section id="view-adesso" class="view hidden" aria-labelledby="t-adesso">
@@ -3995,6 +4002,31 @@
       return res.json();
     }
 
+    // Gesto con la statuina (PIN dimenticato) mentre questo telefono è già dentro: lo si
+    // dice in cima alla pagina finché la finestra resta aperta (cioè finché la statuina è
+    // su Cucù), anche se il PIN qui non serve. Un controllo ogni 3 s, solo in primo piano
+    async function checkPinReset() {
+      let open = false;
+      if (authState.pin_set && authState.authenticated && !document.hidden) {
+        try {
+          const res = await fetch('/auth/status', { cache: 'no-store' });
+          if (res.ok) open = !!(await res.json()).reset_open;
+        } catch (_) { /* rete assente: niente avviso */ }
+      }
+      $('pin-banner').classList.toggle('hidden', !open);
+    }
+
+    $('pin-banner-btn').addEventListener('click', () => pinSheet({
+      title: 'Un PIN nuovo',
+      text: 'Con la statuina ancora su Cucù. Sugli altri telefoni andrà inserito di nuovo.',
+      ok: 'Salva il nuovo PIN',
+      submit: async ({ pin }) => {
+        await postAuth('/auth/reset', { pin });
+        toast('PIN cambiato: sugli altri telefoni andrà inserito di nuovo');
+        checkPinReset();
+      },
+    }));
+
     function setupPin() {
       pinSheet({
         title: 'Imposta un PIN',
@@ -4162,6 +4194,9 @@
         $('homescreen').classList.remove('hidden');
         $('homescreen-guide').addEventListener('click', showHomeScreenGuide);
       }
+      checkPinReset();
+      setInterval(checkPinReset, 3000);
+      document.addEventListener('visibilitychange', checkPinReset);
       // nel primo collegamento solo il Wi-Fi: niente proposte né aggiornamenti
       if (parseRoute().section === 'wifi') return;
       maybeOfferOnStart();
