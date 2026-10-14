@@ -854,8 +854,8 @@
     .tv-full .tv-full-close, .tv-full .tv-full-bar { transition: opacity .3s steps(3, jump-end); }
     .tv-full.quiet .tv-full-close, .tv-full.quiet .tv-full-bar { opacity: 0; pointer-events: none; }
     .tv-full.quiet { cursor: none; }
-    /* comandi bloccati: resta solo l'audio del telefono, per uscire serve il PIN */
-    .tv-full.locked .tv-full-buttons > :not(#tv-full-sound), .tv-full.locked .ctl-volume { display: none; }
+    /* modalità bambino: nessun comando (l'audio è acceso), per uscire serve il PIN */
+    .tv-full.locked .tv-full-bar { display: none; }   /* audio sempre acceso: nessun comando */
     .tv-pin {
       position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 3;
       width: min(320px, calc(100% - 32px)); padding: 22px; border-radius: 20px;
@@ -3547,6 +3547,7 @@
        secondo si riallinea. Solo mentre "Adesso" è aperta e in primo piano */
     let lastNowAt = 0;
     let liveSound = false;    // audio acceso sul telefono (resta per la sessione)
+    let soundBlocked = false; // il browser non lascia partire l'audio senza un tocco: muto finché non si tocca
     let liveFailed = '';      // file che il browser non ha voluto far partire
 
     function stopLive() {
@@ -3578,13 +3579,19 @@
       } else if (el.readyState >= 1 && Math.abs(el.currentTime - target) > (n.mode === 'paused' ? .5 : 1)) {
         el.currentTime = target;
       }
-      el.muted = !liveSound;
-      if (n.mode === 'paused') el.pause();
-      else if (el.paused) el.play().catch(() => {
+      el.muted = !liveSound || soundBlocked;
+      const fail = () => {
         // il browser non lo fa partire: si torna all'anteprima ferma (o al gufetto che ascolta)
         liveFailed = url;
         stopLive();
         if (lastNow) renderAdesso(lastNow);
+      };
+      if (n.mode === 'paused') el.pause();
+      else if (el.paused) el.play().catch(() => {
+        // con l'audio senza un tocco (app ricaricata in modalità bambino) iPhone non parte:
+        // si riprova muto, e al primo tocco sullo schermo l'audio si accende
+        if (!el.muted) { soundBlocked = true; el.muted = true; el.play().catch(fail); return; }
+        fail();
       });
       el.hidden = false;
       const sound = $('scr-sound');
@@ -3618,9 +3625,22 @@
     };
     let tvLocked = false;
 
+    // Dentro un tocco: iOS ricorda che questi due elementi sono partiti con un gesto e poi li
+    // lascia suonare anche per gli episodi dopo (che partono senza tocco)
+    function unlockSound() {
+      soundBlocked = false;
+      for (const el of [$('scr-live'), $('scr-live-audio')]) {
+        el.muted = false;
+        const p = el.play();
+        if (p) p.catch(() => {});
+        if (!el.getAttribute('src') || !lastNow || lastNow.mode !== 'playing') el.pause();
+      }
+    }
+
     function openTvFull() {
       const box = $('tv-full');
       tvLocked = store.get(TV_LOCK_PREF) === '1' && !!authState.pin_set;
+      if (tvLocked) { liveSound = true; unlockSound(); }   // in modalità bambino il telefono fa da TV: con l'audio
       box.classList.toggle('locked', tvLocked);
       store.set(TV_LOCKED, tvLocked ? '1' : null);
       $('tv-pin').hidden = true;
@@ -3690,6 +3710,7 @@
         store.set(TV_LOCK_PREF, null);
         $('tv-lock-pref').checked = false;
         closeTvFull(true);
+        if (liveSound) toggleSound();   // fuori dalla modalità bambino l'audio torna muto
       } catch (err) {
         $('tv-pin-error').textContent = err.message;
         $('tv-pin-input').value = '';
@@ -3706,6 +3727,7 @@
     // comando li tiene accesi
     $('tv-full').addEventListener('click', (e) => {
       const box = $('tv-full');
+      if (soundBlocked && liveSound) unlockSound();   // il tocco che serviva al browser per l'audio
       if (tvLocked && !document.fullscreenElement && box.requestFullscreen && document.fullscreenEnabled) box.requestFullscreen().catch(() => {});
       if (e.target.closest('button, input, label, form')) { wakeTvFull(); return; }
       if (box.classList.contains('quiet')) wakeTvFull();
