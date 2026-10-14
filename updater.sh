@@ -310,6 +310,20 @@ _apply_polkit_rules() {
     fi
 }
 
+# ---- HELPER: CAPTIVE PORTAL DELL'HOTSPOT ------------------------------------
+# Stesso file installato da setup.sh, retrofit sui device aggiornati via OTA.
+# Non blocca mai l'aggiornamento: senza, sull'hotspot la pagina non si apre da sola.
+_apply_captive_portal() {
+    local src="$PROJECT_DIR/networkmanager/cucu-captive.conf"
+    local dir="/etc/NetworkManager/dnsmasq-shared.d"
+    [ -f "$src" ] || return 0
+    if mkdir -p "$dir" && install -m 644 "$src" "$dir/cucu-captive.conf" 2>>"$LOG_FILE"; then
+        ok "Captive portal dell'hotspot aggiornato"
+    else
+        warn "Captive portal non installato"
+    fi
+}
+
 _apply_plymouth_theme() {
     local theme_dir="/usr/share/plymouth/themes/cucu"
     if [ ! -d "$PROJECT_DIR/plymouth" ]; then
@@ -436,6 +450,9 @@ _apply_plymouth_theme
 
 # ---- REGOLA POLKIT ----------------------------------------------------------
 _apply_polkit_rules
+
+# ---- CAPTIVE PORTAL ---------------------------------------------------------
+_apply_captive_portal
 
 # ---- RIAVVIA SERVIZI --------------------------------------------------------
 update_status 4

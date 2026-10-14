@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Dict
@@ -566,6 +566,33 @@ class PinGuard:
         await self.app(scope, receive, send)
 
 app.add_middleware(PinGuard)
+
+# Captive portal: sull'hotspot ogni nome risponde 10.42.0.1 (networkmanager/
+# cucu-captive.conf), quindi il controllo di connessione dei telefoni appena
+# collegati (captive.apple.com, connectivitycheck.gstatic.com, ...) arriva qui.
+# Una richiesta arrivata sull'hotspot con un nome che non è il nostro indirizzo
+# va sempre alla pagina del Wi-Fi, a un indirizzo fisso (mai preso dalla
+# richiesta): il telefono capisce che c'è una pagina da aprire e la apre.
+# Prima del PinGuard, che altrimenti risponderebbe "Serve il PIN".
+HOTSPOT_IP = "10.42.0.1"
+CAPTIVE_URL = f"http://{HOTSPOT_IP}/#/wifi"
+
+class CaptivePortal:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and (scope.get("server") or ("",))[0] == HOTSPOT_IP:
+            host = dict(scope.get("headers") or []).get(b"host", b"").decode("latin-1")
+            if host.rsplit(":", 1)[0] != HOTSPOT_IP:
+                response = RedirectResponse(CAPTIVE_URL, status_code=302,
+                                            headers={"Cache-Control": "no-store"})
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+# aggiunto dopo PinGuard, quindi lo precede
+app.add_middleware(CaptivePortal)
 
 # Tentativi sbagliati per indirizzo: dopo 5 errori si aspetta, sempre di più
 _login_failures: Dict[str, dict] = {}
@@ -2155,7 +2182,10 @@ def _connect_wifi_task(ssid: str, password: str):
     """Logica di connessione eseguita in background."""
     print(f"[WiFi] Avvio connessione a '{ssid}'...")
     try:
-        # 0. Abbatti l'hotspot se è attivo per liberare l'antenna wlan0
+        # 0. Abbatti l'hotspot se è attivo per liberare l'antenna wlan0. Prima un
+        # attimo di attesa: il telefono sull'hotspot deve ricevere la risposta e
+        # mostrare cosa fare dopo, perché da qui in poi la sua rete sparisce
+        time.sleep(2)
         ap_name = f"{socket.gethostname()}_AP"
         subprocess.run(["sudo", "nmcli", "con", "down", ap_name], capture_output=True)
 
@@ -2226,6 +2256,7 @@ def switch_wifi(ssid: str, background_tasks: BackgroundTasks):
     def _switch_wifi_task(target_ssid: str):
         print(f"[WiFi] Switch a rete salvata '{target_ssid}'...")
         try:
+            time.sleep(2)  # come in _connect_wifi_task: prima la risposta al telefono
             ap_name = f"{socket.gethostname()}_AP"
             subprocess.run(["sudo", "nmcli", "con", "down", ap_name], capture_output=True)
             time.sleep(1)

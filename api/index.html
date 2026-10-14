@@ -199,6 +199,9 @@
        (top impostato da JS alla posizione di scorrimento) */
     body.scroll-locked { position: fixed; left: 0; right: 0; }
 
+    /* Primo collegamento (#/wifi, anche nel mini-browser del captive portal): solo il Wi-Fi */
+    body.setup-mode .nav, body.setup-mode #update-banner { display: none !important; }
+
     /* ---------- Navigazione ---------- */
     .nav {
       position: fixed;
@@ -1255,6 +1258,25 @@
       </div>
     </section>
 
+    <!-- Primo collegamento: si apre da solo collegandosi all'hotspot (captive portal) -->
+    <section id="view-wifi" class="view hidden" aria-labelledby="t-wifi">
+      <div class="view-head">
+        <h1 id="t-wifi">Il Wi-Fi di casa</h1>
+      </div>
+      <div class="stack">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Scegli la rete</h2>
+            <button class="icon-btn" id="wifi-setup-refresh" aria-label="Cerca di nuovo le reti">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.1-5M19 4.5V9h-4.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+          <div class="panel-sub" style="margin:-4px 0 14px">Cucù si collega alla rete di casa e da lì lo trovi sempre. Cartoni, statuine e orari li sistemi dopo, dalla rete di casa.</div>
+          <div id="wifi-setup"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- Impostazioni -->
     <section id="view-impostazioni" class="view hidden" aria-labelledby="t-impostazioni">
       <div class="view-head">
@@ -1728,7 +1750,7 @@
 
     function parseRoute() {
       const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
-      const section = ['adesso', 'personaggi', 'tempo', 'impostazioni'].includes(parts[0]) ? parts[0] : 'adesso';
+      const section = ['adesso', 'personaggi', 'tempo', 'impostazioni', 'wifi'].includes(parts[0]) ? parts[0] : 'adesso';
       return { section, name: section === 'personaggi' ? parts[1] || null : null };
     }
 
@@ -1756,6 +1778,7 @@
         return;
       }
       lastSection = r.section;
+      document.body.classList.toggle('setup-mode', r.section === 'wifi');
       drawUpdateBanner();
 
       stopTagScan();
@@ -1782,6 +1805,9 @@
       } else if (r.section === 'tempo') {
         showView('tempo');
         renderTimeLimits();
+      } else if (r.section === 'wifi') {
+        showView('wifi');
+        renderWifi('wifi-setup');
       } else {
         showView('impostazioni');
         renderWifi();
@@ -3419,6 +3445,11 @@
     /* ================= Wi-Fi ================= */
 
     let wifiCurrent = null;
+    // Telefono collegato all'hotspot di Cucù: cambiando rete la pagina non torna più
+    // a questo indirizzo (Cucù lascia l'hotspot), quindi niente attesa della riconnessione
+    const HOTSPOT_IP = '10.42.0.1';
+    const onHotspot = location.hostname === HOTSPOT_IP;
+    const deviceHost = () => `${info ? info.hostname : 'cucu-xxxx'}.local`;
 
     function signalBars(signal) {
       const s = parseInt(signal, 10) || 0;
@@ -3427,8 +3458,8 @@
         [1, 2, 3, 4].map(i => h('i', { class: i <= n ? 'on' : '' })));
     }
 
-    async function renderWifi() {
-      const root = $('wifi');
+    async function renderWifi(rootId = 'wifi') {
+      const root = $(rootId);
       root.replaceChildren(h('p', { class: 'muted', text: 'Cerco le reti…' }));
       try {
         const data = await api('/system/wifi');
@@ -3494,11 +3525,35 @@
       }
     }
 
-    $('wifi-refresh').addEventListener('click', renderWifi);
+    $('wifi-refresh').addEventListener('click', () => renderWifi());
+    $('wifi-setup-refresh').addEventListener('click', () => renderWifi('wifi-setup'));
 
+    // Detto PRIMA di cambiare rete: dopo, sull'hotspot, la pagina non c'è più
     function afterSwitchText(ssid) {
-      const host = info ? `${info.hostname}.local` : 'Cucù';
-      return `Il telefono perderà il collegamento con Cucù per qualche secondo. Poi collegalo anche tu a "${ssid}" e apri ${host}.`;
+      if (onHotspot) return `Cucù lascia la sua rete e passa a "${ssid}". Poi collega anche il telefono a "${ssid}" e apri ${deviceHost()}.`;
+      return `Il telefono perderà il collegamento con Cucù per qualche secondo. Poi collegalo anche tu a "${ssid}" e apri ${deviceHost()}.`;
+    }
+
+    function afterSwitch(ssid) {
+      if (onHotspot) showJoinHome(ssid);
+      else showReconnect('Cambio rete', afterSwitchText(ssid));
+    }
+
+    // Ultimo passo dall'hotspot: la pagina resta com'è (senza rete), con quello che c'è da fare
+    function showJoinHome(ssid) {
+      closeSheet();
+      clearInterval(reconnectTimer);
+      const ap = `${info ? info.hostname : 'cucu-xxxx'}_AP`;
+      $('reconnect-root').replaceChildren(h('div', { class: 'reconnect', role: 'alertdialog', 'aria-live': 'assertive' },
+        h('div', { class: 'deco a pop' }),
+        h('div', { class: 'deco b pop', style: 'animation-delay:.1s' }),
+        h('div', { class: 'deco c pop', style: 'animation-delay:.2s' }),
+        h('div', { class: 'peek' }, owl()),
+        h('h2', { text: 'Ultimo passo' }),
+        h('p', {}, '1. Collega il telefono a ', h('strong', { text: ssid }), '.'),
+        h('p', {}, '2. Apri ', h('strong', { text: deviceHost() }), ' nel browser.'),
+        h('p', { class: 'muted', style: 'margin-top:14px', text: `Se fra un minuto non trovi Cucù, forse la password non era giusta: ricollega il telefono a ${ap} e riprova.` })
+      ));
     }
 
     async function switchWifi(ssid) {
@@ -3506,7 +3561,7 @@
       if (!ok) return;
       try {
         await api(`/system/wifi/${enc(ssid)}/connect`, { method: 'POST' });
-        showReconnect('Cambio rete', afterSwitchText(ssid));
+        afterSwitch(ssid);
       } catch (e) { toast(e.message); }
     }
 
@@ -3531,7 +3586,7 @@
         try {
           await api('/system/wifi', { method: 'POST', body: { ssid, password: input.value } });
           closeSheet();
-          showReconnect('Cambio rete', afterSwitchText(ssid));
+          afterSwitch(ssid);
         } catch (err) {
           toast(err.message);
           btn.disabled = false;
@@ -4009,7 +4064,8 @@
 
     // Una volta per telefono, solo nel browser di un iPhone o di un Android
     function shouldOfferHomeScreen() {
-      if (isStandalone() || !phonePlatform()) return false;
+      // dall'hotspot l'app resterebbe legata a 10.42.0.1, che sulla rete di casa non c'è
+      if (isStandalone() || !phonePlatform() || onHotspot) return false;
       try { return localStorage.getItem('cucu-home-offered') !== '1'; } catch (_) { return false; }
     }
 
@@ -4058,10 +4114,12 @@
       route();
       // Il riquadro serve solo nel browser di un telefono: già dalla Home o
       // su un computer resta nascosto
-      if (!isStandalone() && phonePlatform()) {
+      if (!isStandalone() && phonePlatform() && !onHotspot) {
         $('homescreen').classList.remove('hidden');
         $('homescreen-guide').addEventListener('click', showHomeScreenGuide);
       }
+      // nel primo collegamento solo il Wi-Fi: niente proposte né aggiornamenti
+      if (parseRoute().section === 'wifi') return;
       maybeOfferOnStart();
       autoCheckUpdates();
     }

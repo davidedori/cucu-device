@@ -369,6 +369,13 @@ step "Configurazione hotspot Wi-Fi di fallback"
 bash "$REPO_DIR/setup_hotspot.sh"
 ok "Hotspot configurato: ${NEW_HOSTNAME}_AP (password: cucusetup)"
 
+# Captive portal: collegato il telefono all'hotspot, la pagina del Wi-Fi si apre
+# da sola (vedi networkmanager/cucu-captive.conf). Vale dalla prossima accensione
+# dell'hotspot. Idempotente: il file viene riscritto uguale
+mkdir -p /etc/NetworkManager/dnsmasq-shared.d
+install -m 644 "$REPO_DIR/networkmanager/cucu-captive.conf" /etc/NetworkManager/dnsmasq-shared.d/cucu-captive.conf
+ok "Captive portal dell'hotspot configurato"
+
 # Rimosso Step 11 (Pulizia reti Wi-Fi) per garantire idempotenza secondo CLAUDE.md.
 # La pulizia della rete utente deve essere fatta manualmente pre-consegna tramite:
 # nmcli connection delete NOME_RETE
