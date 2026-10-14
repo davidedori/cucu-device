@@ -3554,6 +3554,17 @@
         h('p', {}, '2. Apri ', h('strong', { text: deviceHost() }), ' nel browser.'),
         h('p', { class: 'muted', style: 'margin-top:14px', text: `Se fra un minuto non trovi Cucù, forse la password non era giusta: ricollega il telefono a ${ap} e riprova.` })
       ));
+      // Se la pagina resta aperta (Safari, Android) e il telefono torna sulla rete di casa,
+      // si apre da sola su cucu-xxxx.local: appena un'immagine di là si carica, Cucù c'è.
+      // Un'immagine si carica anche da un altro indirizzo, e /static non chiede il PIN.
+      // Nel mini-browser del captive portal di iOS no: si chiude quando l'hotspot sparisce
+      if (!info) return;
+      const home = `http://${deviceHost()}/`;
+      reconnectTimer = setInterval(() => {
+        const img = new Image();
+        img.onload = () => { clearInterval(reconnectTimer); location.href = home; };
+        img.src = `${home}static/img/scritta.png?t=${Date.now()}`;
+      }, 3000);
     }
 
     async function switchWifi(ssid) {
