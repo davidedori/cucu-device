@@ -225,11 +225,13 @@ def _thumb_path(char_dir: Path, filename: str) -> Path:
     return char_dir / THUMB_DIR_NAME / f"{filename}.jpg"
 
 def _thumb_version(char_dir: Path, video: Path):
-    """mtime dell'anteprima se è ancora valida (più recente del video), altrimenti None."""
+    """mtime dell'anteprima se è ancora valida (più recente del video e non vuota),
+    altrimenti None. Vuota: scritta poco prima di una mancanza di corrente (visto
+    sul dispositivo): va rifatta, e il worker la rifà da solo."""
     thumb = _thumb_path(char_dir, video.name)
     try:
-        t = thumb.stat().st_mtime
-        return int(t) if t >= video.stat().st_mtime else None
+        st = thumb.stat()
+        return int(st.st_mtime) if st.st_size > 0 and st.st_mtime >= video.stat().st_mtime else None
     except OSError:
         return None
 
@@ -258,6 +260,7 @@ def _generate_photo_thumb(char_dir: Path, photo: Path) -> bool:
             im = ImageOps.exif_transpose(im).convert("RGB")
             im.thumbnail((THUMB_WIDTH, THUMB_WIDTH * 2))
             im.save(tmp, "JPEG", quality=80)
+        _fsync_path(tmp)  # vedi _fsync_path: senza, dopo una mancanza di corrente resta vuota
         os.replace(tmp, thumb)
         return True
     except Exception as e:
@@ -288,6 +291,7 @@ def _generate_thumb(char_dir: Path, video: Path) -> bool:
             print(f"[thumb] ffmpeg fallito su {video.name}: {e}")
             continue
         if tmp.exists() and tmp.stat().st_size > 0:
+            _fsync_path(tmp)
             os.replace(tmp, thumb)
             return True
     tmp.unlink(missing_ok=True)
