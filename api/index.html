@@ -1295,10 +1295,10 @@
         <div class="now-title" id="now-title">…</div>
         <div class="now-sub" id="now-sub"></div>
         <div class="now-facts" id="now-facts"></div>
-        <!-- modalità bambino: a tutto schermo niente comandi, per uscire serve il PIN -->
+        <!-- modalità bambino: si accende e Cucù va a tutto schermo senza comandi; si esce con il PIN -->
         <label class="lock-row">
-          <span class="lock-text">Blocca i comandi a tutto schermo<small>Resta solo l'audio del telefono. Per uscire serve il PIN.</small></span>
-          <span class="switch"><input type="checkbox" id="tv-lock-pref" aria-label="Blocca i comandi a tutto schermo"><span class="slider"></span></span>
+          <span class="lock-text">Modalità bambino<small>Cucù a tutto schermo, senza comandi. Per uscire serve il PIN.</small></span>
+          <span class="switch"><input type="checkbox" id="tv-lock-pref" aria-label="Modalità bambino"><span class="slider"></span></span>
         </label>
       </div>
     </section>
@@ -3686,6 +3686,9 @@
       e.preventDefault();
       try {
         await postAuth('/auth/login', { pin: $('tv-pin-input').value });   // dopo 5 errori si aspetta
+        // uscita con il PIN: la modalità bambino si spegne (l'interruttore dice com'è davvero)
+        store.set(TV_LOCK_PREF, null);
+        $('tv-lock-pref').checked = false;
         closeTvFull(true);
       } catch (err) {
         $('tv-pin-error').textContent = err.message;
@@ -3727,7 +3730,7 @@
         openSheet({
           title: 'Serve un PIN',
           content: h('div', {},
-            h('p', { class: 'sheet-text', text: 'Per bloccare i comandi a tutto schermo serve un PIN: sarà quello per uscire.' }),
+            h('p', { class: 'sheet-text', text: 'Per la modalità bambino serve un PIN: sarà quello per uscire.' }),
             h('div', { class: 'actions' },
               h('button', { class: 'btn btn-primary btn-block', text: 'Imposta un PIN', onclick: () => { closeSheet(); setupPin(); } }),
               h('button', { class: 'btn btn-block', text: 'Non ora', onclick: closeSheet })))
@@ -3735,6 +3738,7 @@
         return;
       }
       store.set(TV_LOCK_PREF, e.target.checked ? '1' : null);
+      if (e.target.checked) openTvFull();   // accesa: subito a tutto schermo, bloccata
     });
 
     function toggleSound() {
