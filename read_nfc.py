@@ -837,6 +837,12 @@ refresh_graphic(idle_screen(False, updating=update_step()))
 # grigio nel frattempo.
 reader = create_reader()
 
+# Statuina già appoggiata all'accensione (o al riavvio del servizio): non fa partire
+# niente, va tolta e rimessa. Una finestra e non solo la prima lettura: appena partito,
+# il lettore può saltare un giro e vederla solo dopo
+STARTUP_GRACE_SEC = 2.0
+startup_until = time.monotonic() + STARTUP_GRACE_SEC
+
 last_tick_ts = time.monotonic()
 usage_unsaved_seconds = 0.0
 
@@ -954,6 +960,11 @@ try:
         tag_just_added = (has_tag and not had_tag) or tag_swapped
         # tag_removed: vero se tolto O se swappato (conta come rimozione del vecchio)
         tag_removed = ((not has_tag) and had_tag) or tag_swapped
+
+        if tag_just_added and time.monotonic() < startup_until:
+            print(f"Statuina già appoggiata all'avvio ({uid}): non parte niente, va tolta e rimessa.")
+            tag_just_added = False
+            start_blocked_uid = uid
 
         if tag_just_added:
             track_pin_reset_gesture(uid)
