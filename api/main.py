@@ -913,6 +913,68 @@ def system_info():
     }
 
 
+# --- Schermate della TV per la pagina "Adesso" --------------------------------
+# read_nfc.py scrive in last_seen_tag.json quale schermata è sulla TV ("screen", il nome
+# della PNG); la web UI mostra lo stesso loop animato (muto) e, per le schermate con
+# testo e QR, la stessa sovrapposizione disegnata qui sul Pi. Solo lettura, nomi controllati
+LOOPS_DIR = GRAPHICS_DIR / "loops"
+TV_TEXT_SCREENS = {"done": "done", "first": "first", "help": "first"}   # nome -> loop, come in read_nfc.py
+_TV_NAME = re.compile(r"^[a-z0-9_]+$")
+
+
+def _tv_screen(name):
+    """URL per mostrare nella UI la schermata `name`: loop, immagine ferma e sovrapposizione."""
+    if not name or not _TV_NAME.match(name):
+        return None
+    v = lambda p: int(p.stat().st_mtime) if p.exists() else 0
+    run_dir = RUN_STATE_FILE.parent
+    text = name[:-len("_screen")] if name.endswith("_screen") else None
+    if text in TV_TEXT_SCREENS:
+        loop = LOOPS_DIR / f"{TV_TEXT_SCREENS[text]}.mp4"
+        overlay = run_dir / f"{text}_overlay.png"
+        return {
+            "loop": f"/tv/loops/{loop.name}?v={v(loop)}" if loop.exists() else None,
+            "image": f"/tv/run/{name}.png?v={v(run_dir / f'{name}.png')}",
+            "overlay": f"/tv/run/{overlay.name}?v={v(overlay)}" if loop.exists() else None,
+        }
+    png, loop = GRAPHICS_DIR / f"{name}.png", LOOPS_DIR / f"{name}.mp4"
+    if not png.exists():
+        return None
+    return {
+        "loop": f"/tv/loops/{loop.name}?v={v(loop)}" if loop.exists() else None,
+        "image": f"/tv/graphics/{png.name}?v={v(png)}",
+        "overlay": None,
+    }
+
+
+def _tv_file(directory: Path, name: str, suffix: str, cache: bool):
+    if not name.endswith(suffix) or not _TV_NAME.match(name[:-len(suffix)]):
+        raise HTTPException(status_code=404, detail="Schermata non trovata.")
+    path = directory / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Schermata non trovata.")
+    # ?v=mtime nell'URL: le grafiche del repository si tengono a lungo
+    return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable" if cache else "no-store"})
+
+
+@app.get("/tv/graphics/{name}")
+def tv_graphic(name: str):
+    return _tv_file(GRAPHICS_DIR, name, ".png", cache=True)
+
+
+@app.get("/tv/loops/{name}")
+def tv_loop(name: str):
+    return _tv_file(LOOPS_DIR, name, ".mp4", cache=True)
+
+
+@app.get("/tv/run/{name}")
+def tv_run(name: str):
+    # solo le schermate con testo e QR disegnate qui (cambiano: niente cache lunga)
+    if not re.match(r"^(done|first|help)_(screen|overlay)\.png$", name):
+        raise HTTPException(status_code=404, detail="Schermata non trovata.")
+    return _tv_file(RUN_STATE_FILE.parent, name, ".png", cache=False)
+
+
 @app.get("/system/now")
 def system_now():
     """
@@ -983,6 +1045,9 @@ def system_now():
         "round": char_info,
         "next_window_start": starts[0] if starts else None,
         "usage": usage,
+        # la schermata sulla TV (vedi _tv_screen); durante un audio, "ascolto"
+        "screen": _tv_screen("listen" if kind == "audio" and mode in ("playing", "paused")
+                             else data.get("screen") if alive else None),
     }
 
 @app.get("/characters")

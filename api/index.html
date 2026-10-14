@@ -793,7 +793,7 @@
       --scr: #dfe6ec;
       position: relative;
       isolation: isolate;
-      aspect-ratio: 16 / 10;
+      aspect-ratio: 16 / 9;   /* come la TV: le schermate vere si vedono intere */
       color: var(--ink);
     }
 
@@ -818,7 +818,10 @@
       transition: opacity .3s steps(3, jump-end);
     }
 
-    .scr-media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .scr-media img, .scr-media video { display: block; width: 100%; height: 100%; object-fit: cover; }
+    /* la schermata vera della TV: il loop animato e, sopra, testo e QR disegnati sul Pi */
+    .scr-media video, .scr-media .scr-overlay { position: absolute; inset: 0; }
+    .scr-media [hidden] { display: none; }
     .screen[data-media="1"] .scr-media { opacity: 1; }
     .screen[data-state="pause"] .scr-media img { filter: grayscale(.4) brightness(.55); }
     .screen[data-media="1"] .scr { color: #fff; }
@@ -1187,7 +1190,7 @@
       <div class="stage" id="stage" data-state="idle">
         <div class="tv">
           <div class="screen" id="screen" data-state="idle" role="img" aria-label="La TV">
-            <div class="scr-media"><img id="scr-img" alt=""></div>
+            <div class="scr-media"><img id="scr-img" alt=""><video id="scr-video" muted loop playsinline disablepictureinpicture hidden></video><img class="scr-overlay" id="scr-overlay" alt="" hidden></div>
             <div class="scr" id="scr-content"></div>
           </div>
           <div class="tv-foot"></div>
@@ -3366,19 +3369,26 @@
       const i = n.character ? charIndex(n.character) : -1;
       screen.style.setProperty('--scr', withEpisode && i >= 0 ? TINTS[i % TINTS.length][0] : d.state === 'end' ? 'var(--apricot)' : '#dfe6ec');
 
-      const thumb = withEpisode && n.episode_thumb_v
+      const thumb = withEpisode && n.kind !== 'audio' && n.episode_thumb_v
         ? `/characters/${enc(n.character)}/episodes/${enc(n.episode)}/thumb?v=${n.episode_thumb_v}`
         : null;
-      screen.dataset.media = thumb ? '1' : '0';
-      if (thumb && img.getAttribute('src') !== thumb) img.src = thumb;
-      screen.setAttribute('aria-label', thumb ? `La TV: ${nowItemLabel(n)}` : `La TV: ${d.big || d.title}`);
+      // La schermata vera della TV (pronto, riposo, ascolto, aggiornamento, "Fatto!"...),
+      // quando non c'è l'anteprima di un episodio
+      const tv = !thumb && n.screen ? n.screen : null;
+      showTvScreen(tv, n.mode === 'paused');
+      screen.dataset.media = thumb || tv ? '1' : '0';
+      if (thumb) {
+        img.hidden = false;
+        if (img.getAttribute('src') !== thumb) img.src = thumb;
+      }
+      screen.setAttribute('aria-label', thumb ? `La TV: ${nowItemLabel(n)}` : `La TV: ${d.title}`);
 
       // Il contenuto si ricostruisce solo quando cambia davvero (non a ogni aggiornamento)
-      const key = [d.state, n.character, n.episode, !!thumb, d.big, d.small].join('|');
+      const key = [d.state, n.character, n.episode, !!thumb, tv ? tv.image : '', d.big, d.small].join('|');
       if (key !== screenKey) {
         screenKey = key;
         const parts = [];
-        if (withEpisode && !thumb) {
+        if (withEpisode && !thumb && !tv) {
           parts.push(await characterFigure(n.character, { onScreen: true }));
           parts.push(h('span', { class: 'scr-small', text: nowItemLabel(n) }));
         }
@@ -3386,7 +3396,7 @@
           parts.unshift(h('span', { class: 'pause-icon' }));
           parts.push(h('span', { class: 'scr-small', text: 'in pausa' }));
         }
-        if (!withEpisode) {
+        if (!withEpisode && !tv) {   // API di prima: la schermata a parole
           parts.push(h('span', { class: 'scr-big', text: d.big }));
           parts.push(h('span', { class: 'scr-small', text: d.small }));
         }
@@ -3400,6 +3410,44 @@
       } else if (bar) {
         bar.hidden = true;
       }
+    }
+
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+    // Loop animato (muto) o immagine ferma, più la sovrapposizione con testo e QR;
+    // fermo quando sulla TV è fermo (audio in pausa) o con "riduci movimento"
+    function showTvScreen(tv, paused) {
+      const img = $('scr-img'), video = $('scr-video'), overlay = $('scr-overlay');
+      if (!tv) {
+        video.hidden = true;
+        video.pause();
+        overlay.hidden = true;
+        return;
+      }
+      const animate = tv.loop && !reduceMotion.matches;
+      video.hidden = !animate;
+      img.hidden = !!animate;
+      if (animate) {
+        if (video.getAttribute('src') !== tv.loop) {
+          video.poster = tv.image;
+          video.src = tv.loop;
+        }
+        video.muted = true;   // senza, iOS non lo fa partire da solo
+        if (paused) video.pause();
+        else video.play().catch(() => {
+          // il browser non lo fa partire da solo: l'immagine ferma (quella intera, testo compreso)
+          video.hidden = true;
+          overlay.hidden = true;
+          img.hidden = false;
+          if (img.getAttribute('src') !== tv.image) img.src = tv.image;
+        });
+      } else {
+        video.pause();
+        // senza animazione l'immagine intera (per le schermate con testo e QR, già con il testo)
+        if (img.getAttribute('src') !== tv.image) img.src = tv.image;
+      }
+      overlay.hidden = !(animate && tv.overlay);
+      if (animate && tv.overlay && overlay.getAttribute('src') !== tv.overlay) overlay.src = tv.overlay;
     }
 
     function renderFacts(n, d) {

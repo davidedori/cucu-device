@@ -956,6 +956,9 @@ try:
                     # perché la configurazione: con "pairing" (abbinamento di una statuina) il LED
                     # fa il doppio lampeggio, come per il PIN: Cucù aspetta una statuina
                     "lock_reason": lock_reason(),
+                    # schermata sulla TV quando non va un episodio (nome della PNG: "idle",
+                    # "update_2", "help_screen"...), per mostrarla uguale nella pagina "Adesso"
+                    "screen": current_graphic_path.stem if current_graphic_path and mode not in ("playing", "paused") else None,
                     "updating": updating,  # passo dell'aggiornamento in corso, o None
                 })
         except Exception:
