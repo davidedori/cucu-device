@@ -4042,6 +4042,14 @@
         // Nel primo collegamento no: il telefono è già sulla rete di Cucù
         if (rootId === 'wifi') els.push(await hotspotSection());
 
+        // Senza Wi-Fi: dal primo collegamento si può scegliere di non collegarlo; in
+        // Impostazioni lo si ricorda finché non c'è una rete
+        if (rootId === 'wifi-setup') {
+          els.push(h('button', { class: 'btn btn-quiet btn-block', style: 'margin-top:14px', text: 'Usa Cucù senza Wi-Fi', onclick: useWithoutWifi }));
+        } else if (data.no_wifi && !data.current) {
+          els.unshift(h('div', { class: 'note', style: 'margin-bottom:14px', text: NO_WIFI_NOTE }));
+        }
+
         root.replaceChildren(...els);
       } catch (e) {
         root.replaceChildren(h('p', { class: 'muted', text: 'Non riesco a leggere le reti: ' + e.message }));
@@ -4073,6 +4081,21 @@
           h('div', { class: 'row' }, h('div', { class: 'row-main' },
             h('div', { class: 'row-sub', text: 'Poi apri nel browser' }), h('div', { class: 'row-title', style: 'font-weight:400', text: hs.ip })))
         ));
+    }
+
+    const NO_WIFI_NOTE = 'Cucù è senza Wi-Fi: statuine, cartoni, foto e audio funzionano, ma minuti e orari restano sospesi (Cucù non sa che ore sono) e gli aggiornamenti non arrivano. Puoi collegarlo a una rete quando vuoi, qui sotto.';
+
+    async function useWithoutWifi() {
+      const ok = await confirmSheet({
+        title: 'Usare Cucù senza Wi-Fi?',
+        text: 'Statuine, cartoni, foto e audio funzionano anche così. Senza internet però alcune cose non ci sono: minuti e orari restano sospesi, perché Cucù non sa che ore sono, e gli aggiornamenti non arrivano. Puoi collegarlo a una rete quando vuoi, da Impostazioni.',
+        ok: 'Usa senza Wi-Fi',
+      });
+      if (!ok) return;
+      try {
+        await api('/system/no-wifi', { method: 'POST', body: { enabled: true } });
+        location.hash = '#/adesso';   // l'app, qui sull'indirizzo di Cucù (10.42.0.1)
+      } catch (e) { toast(e.message); }
     }
 
     $('wifi-refresh').addEventListener('click', () => renderWifi());

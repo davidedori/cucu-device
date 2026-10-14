@@ -65,3 +65,4 @@ characters/*
 # Raspberry Pi specifici
 *.pyc
 volume.json
+no_wifi.json

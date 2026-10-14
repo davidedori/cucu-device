@@ -705,6 +705,12 @@ def _saved_networks():
     return [n for n in _wifi_connections() if not n.endswith("_AP") and n != "Hotspot"]
 
 
+# "Usa Cucù senza Wi-Fi" (dalla pagina del primo collegamento): niente "Colleghiamoci!"
+# sulla TV anche senza reti salvate. Sul disco, perché vale anche dopo un riavvio; si
+# toglie da solo appena Cucù si collega a una rete dall'app
+NO_WIFI_FILE = BASE_DIR / "no_wifi.json"
+
+
 def _refresh_first_screen():
     """Mostra o toglie "Colleghiamoci!" a seconda che Cucù abbia reti salvate."""
     run_dir = RUN_STATE_FILE.parent
@@ -713,7 +719,7 @@ def _refresh_first_screen():
     except Exception as e:  # nmcli non risponde: non si cambia niente
         print(f"[WiFi] Reti salvate illeggibili: {e}")
         return
-    if saved or not run_dir.is_dir():
+    if saved or NO_WIFI_FILE.exists() or not run_dir.is_dir():
         FIRST_FILE.unlink(missing_ok=True)
         return
     ssid, password = _hotspot()
@@ -2445,7 +2451,8 @@ def list_wifi():
     return {
         "current": current,
         "saved": saved,
-        "scan": scan_results
+        "scan": scan_results,
+        "no_wifi": NO_WIFI_FILE.exists(),   # "Usa Cucù senza Wi-Fi"
     }
 
 
@@ -2498,6 +2505,7 @@ def _connect_wifi_task(ssid: str, password: str):
             check=True, capture_output=True, timeout=30
         )
         print(f"[WiFi] Connessione a '{ssid}' completata con successo.")
+        NO_WIFI_FILE.unlink(missing_ok=True)   # ora una rete c'è
         _show_done(ssid)
         _refresh_first_screen()
 
@@ -2526,6 +2534,22 @@ def connect_wifi(payload: WifiConnect, background_tasks: BackgroundTasks):
     background_tasks.add_task(_connect_wifi_task, ssid, payload.password)
     
     return {"status": "ok", "message": f"Tentativo di connessione a '{ssid}' avviato..."}
+
+class NoWifi(BaseModel):
+    enabled: bool
+
+
+@app.post("/system/no-wifi")
+def set_no_wifi(body: NoWifi):
+    """Usare Cucù senza Wi-Fi (o tornare a chiedere una rete): toglie o rimette
+    "Colleghiamoci!" sulla TV. Statuine e cartoni funzionano comunque."""
+    if body.enabled:
+        _write_json_atomic(NO_WIFI_FILE, {"since": int(time.time())})
+    else:
+        NO_WIFI_FILE.unlink(missing_ok=True)
+    _refresh_first_screen()
+    return {"status": "ok", "no_wifi": body.enabled}
+
 
 @app.get("/system/hotspot")
 def hotspot_info():
@@ -2580,6 +2604,7 @@ def switch_wifi(ssid: str, background_tasks: BackgroundTasks):
                 check=True, capture_output=True, timeout=30
             )
             print(f"[WiFi] Connesso a '{target_ssid}' completato.")
+            NO_WIFI_FILE.unlink(missing_ok=True)
             _show_done(target_ssid)
         except Exception as e:
             print(f"[WiFi] Errore switch a '{target_ssid}': {e}")
