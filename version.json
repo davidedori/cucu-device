@@ -1,5 +1,5 @@
 {
-  "version": "0.9.3",
+  "version": "0.2.0",
   "min_version": "0.1.0",
-  "changelog": "The Now page mirrors the TV: the same animated screens, and the episode plays live on the phone, muted by default, in sync with the TV. Playback controls and Cucù's volume in the app (pause, resume, stop, next; previous and next photo for albums, also when paused). Full screen turns the phone into Cucù's TV, with controls that fade away; 'Modalità bambino' locks it with sound on and no controls, and leaving needs the PIN (or the figurine gesture if the PIN is forgotten). 'Use Cucù without Wi-Fi' from the first-connection page. The LED breathes fast while Cucù is busy and double-blinks while it waits for a figurine."
+  "changelog": "First stable release for hardware v2 (everything since 0.1.9). PN532 NFC reader over I2C with a native driver, status LED on hardware PWM. Animated owl screens on the TV (ready, rest, listening, unknown figurine, setup, update) and a new boot animation. First connection through Cucù's own Wi-Fi: per-device hotspot password, QR on the TV, captive portal, 'Fatto!' screen after a network change, use without Wi-Fi. New parent app: Now page mirroring the TV with the live episode, playback controls and volume, full screen and child mode, audio and photo album characters, episode previews, unplayable videos rejected with advice, parent PIN with the figurine reset gesture, 'Eccomi!' emergency gesture, a name for each Cucù, simpler time limits. Updates are manual only, started from the app."
 }
