@@ -384,7 +384,7 @@ ok "Captive portal dell'hotspot configurato"
 mkdir -p /etc/systemd/journald.conf.d /var/log/journal
 install -m 644 "$REPO_DIR/systemd/journald-cucu.conf" /etc/systemd/journald.conf.d/50-cucu.conf
 systemd-tmpfiles --create --prefix /var/log/journal || true
-systemctl restart systemd-journald || warn "journald non riavviato: il log persistente vale dal prossimo avvio"
+systemctl restart systemd-journald && journalctl --flush || warn "journald non riavviato: il log persistente vale dal prossimo avvio"
 ok "Log di sistema persistente (max 32 MB)"
 
 # Rimosso Step 11 (Pulizia reti Wi-Fi) per garantire idempotenza secondo CLAUDE.md.

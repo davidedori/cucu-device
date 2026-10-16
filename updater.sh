@@ -354,7 +354,7 @@ _apply_journald() {
     cmp -s "$src" "$dst" && return 0
     if mkdir -p /etc/systemd/journald.conf.d /var/log/journal && install -m 644 "$src" "$dst" \
         && systemd-tmpfiles --create --prefix /var/log/journal 2>>"$LOG_FILE" \
-        && systemctl restart systemd-journald 2>>"$LOG_FILE"; then
+        && systemctl restart systemd-journald 2>>"$LOG_FILE" && journalctl --flush 2>>"$LOG_FILE"; then
         ok "Log di sistema conservato tra un riavvio e l'altro"
     else
         warn "Log di sistema persistente non configurato"
