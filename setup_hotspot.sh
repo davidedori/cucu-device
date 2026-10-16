@@ -1,7 +1,9 @@
 #!/bin/bash
 # setup_hotspot.sh — configura l'hotspot Wi-Fi di fallback per cucu-device
 # Usato da setup.sh come step di configurazione e può essere eseguito standalone.
-# L'hotspot si attiva automaticamente quando nessuna rete nota è disponibile.
+# L'hotspot lo accende l'API (_wifi_watchdog in api/main.py) quando nessuna rete nota
+# risponde, e lo spegne riprovando le reti salvate: NetworkManager non lo accende da solo
+# (autoconnect no), altrimenti all'avvio vinceva sulla rete di casa e ci restava.
 #
 # SSID e nome connessione NM vengono derivati dall'hostname del dispositivo
 # (es. hostname=cucu-4aab → SSID=cucu-4aab_AP, connessione NM=cucu-4aab_AP)
@@ -13,8 +15,8 @@
 # Prima era "cucusetup" per tutti, scritta nel repository pubblico.
 #
 #   bash setup_hotspot.sh                  crea (o ricrea) l'hotspot
-#   bash setup_hotspot.sh --password-only  solo la password: la genera se manca e la
-#                                          imposta sull'hotspot che c'è (dall'OTA)
+#   bash setup_hotspot.sh --password-only  solo password e autoconnect sull'hotspot che c'è
+#                                          (dall'OTA): la password la genera se manca
 # CUCU_CONFIG_ENV: dove sta config.env (di base accanto allo script)
 
 # Configurazione
@@ -45,8 +47,9 @@ chmod 600 "$CONFIG_ENV"   # contiene una password: la legge solo il proprietario
 
 if [ "${1:-}" = "--password-only" ]; then
     if nmcli -t -f NAME con show 2>/dev/null | grep -qx "$CONNECTION_NAME"; then
-        nmcli con modify "$CONNECTION_NAME" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$HOTSPOT_PASSWORD"
-        echo "Password dell'hotspot impostata su $CONNECTION_NAME"
+        nmcli con modify "$CONNECTION_NAME" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$HOTSPOT_PASSWORD" \
+            connection.autoconnect no
+        echo "Password dell'hotspot impostata su $CONNECTION_NAME (acceso dall'API, non da NetworkManager)"
     fi
     exit 0
 fi
@@ -71,11 +74,11 @@ done < <(nmcli -t -f NAME connection show 2>/dev/null)
 # Crea la connessione hotspot
 echo "Creazione connessione hotspot: $CONNECTION_NAME..."
 nmcli con add type wifi ifname wlan0 con-name "$CONNECTION_NAME" \
-    autoconnect yes \
+    autoconnect no \
     ssid "$HOTSPOT_SSID"
 
 # Configura: AP mode, banda 2.4GHz, DHCP condiviso, WPA2-PSK
-# autoconnect-priority -1: attivato solo se nessuna rete con priorità >= 0 è disponibile
+# autoconnect-priority -1: resta la più bassa, se mai l'autoconnect venisse riacceso
 nmcli con modify "$CONNECTION_NAME" \
     802-11-wireless.mode ap \
     802-11-wireless.band bg \

@@ -247,6 +247,9 @@ rollback() {
     _restore_volatile_files
     sync  # vedi sync dopo il git reset nel flusso normale
 
+    # Un commit senza il controllo del Wi-Fi nell'API non accenderebbe mai l'hotspot
+    _restore_hotspot_autoconnect
+
     systemctl restart cucu-device.service     2>>"$LOG_FILE" || true
     systemctl restart cucu-device-api.service 2>>"$LOG_FILE" || true
 
@@ -323,6 +326,38 @@ _apply_hotspot_password() {
         ok "Password dell'hotspot verificata"
     else
         warn "Password dell'hotspot non impostata"
+    fi
+}
+
+# L'hotspot lo accende l'API (_wifi_watchdog), non NetworkManager (autoconnect no, da
+# setup_hotspot.sh). Se il rollback torna a un'API senza quel controllo, va riacceso
+# l'autoconnect: altrimenti senza la rete di casa Cucù non sarebbe più raggiungibile.
+_restore_hotspot_autoconnect() {
+    grep -q "_wifi_watchdog" "$PROJECT_DIR/api/main.py" 2>/dev/null && return 0
+    local ap
+    ap="$(hostname)_AP"
+    if nmcli con modify "$ap" connection.autoconnect yes 2>>"$LOG_FILE"; then
+        ok "Hotspot di nuovo acceso da NetworkManager (API senza controllo del Wi-Fi)"
+    else
+        warn "Autoconnect dell'hotspot non ripristinato"
+    fi
+}
+
+# ---- HELPER: LOG DI SISTEMA PERSISTENTE --------------------------------------
+# Raspberry Pi OS tiene il journal solo in RAM (40-rpi-volatile-storage.conf): dopo un
+# riavvio non si vede più cosa è successo prima. Lo teniamo sulla SD, piccolo (scrive
+# poco: i servizi di Cucù loggano solo gli eventi). Non blocca mai l'aggiornamento.
+_apply_journald() {
+    local src="$PROJECT_DIR/systemd/journald-cucu.conf"
+    local dst="/etc/systemd/journald.conf.d/50-cucu.conf"
+    [ -f "$src" ] || return 0
+    cmp -s "$src" "$dst" && return 0
+    if mkdir -p /etc/systemd/journald.conf.d /var/log/journal && install -m 644 "$src" "$dst" \
+        && systemd-tmpfiles --create --prefix /var/log/journal 2>>"$LOG_FILE" \
+        && systemctl restart systemd-journald 2>>"$LOG_FILE"; then
+        ok "Log di sistema conservato tra un riavvio e l'altro"
+    else
+        warn "Log di sistema persistente non configurato"
     fi
 }
 
@@ -470,8 +505,11 @@ _apply_polkit_rules
 # ---- CAPTIVE PORTAL ---------------------------------------------------------
 _apply_captive_portal
 
-# ---- PASSWORD DELL'HOTSPOT --------------------------------------------------
+# ---- PASSWORD E AUTOCONNECT DELL'HOTSPOT -------------------------------------
 _apply_hotspot_password
+
+# ---- LOG DI SISTEMA ---------------------------------------------------------
+_apply_journald
 
 # ---- RIAVVIA SERVIZI --------------------------------------------------------
 update_status 4

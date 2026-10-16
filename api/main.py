@@ -2498,6 +2498,11 @@ def list_wifi():
 
 def _connect_wifi_task(ssid: str, password: str):
     """Logica di connessione eseguita in background."""
+    with _wifi_lock:
+        _connect_wifi(ssid, password)
+
+
+def _connect_wifi(ssid: str, password: str):
     print(f"[WiFi] Avvio connessione a '{ssid}'...")
     ap_name = f"{socket.gethostname()}_AP"
     created = False
@@ -2614,6 +2619,11 @@ def hotspot_qr():
 
 
 def _after_forget():
+    with _wifi_lock:
+        _forget_followup()
+
+
+def _forget_followup():
     time.sleep(2)  # prima la risposta al telefono: con l'hotspot la sua rete può cambiare
     try:
         if not _saved_networks():
@@ -2622,6 +2632,127 @@ def _after_forget():
     except Exception as e:
         print(f"[WiFi] Hotspot non acceso: {e}")
     _refresh_first_screen()
+
+
+# Hotspot solo quando serve, e ritorno alla rete di casa. NetworkManager non accende più
+# l'hotspot da solo (autoconnect no, setup_hotspot.sh): all'avvio lo accendeva prima ancora
+# di aver visto la rete di casa, e una volta acceso non la cercava più (in modalità AP non
+# scansiona). Qui: senza reti salvate l'hotspot si accende subito; con reti salvate solo
+# dopo HOTSPOT_GRACE_SEC senza rete. Sull'hotspot, con reti salvate e nessun telefono
+# collegato, ogni tanto si riprovano le reti salvate (sempre più di rado: dai nonni senza
+# Wi-Fi l'hotspot sparisce per meno di un minuto ogni 10). Le azioni dall'app prendono
+# _wifi_lock, così questo controllo non le disturba.
+WIFI_CHECK_SEC = 15
+HOTSPOT_GRACE_SEC = 45
+RETURN_FIRST_SEC = 120
+RETURN_MAX_SEC = 600
+WPA_CTRL = Path("/run/wpa_supplicant/wlan0")   # wpa_supplicant -O "... GROUP=netdev"
+_wifi_lock = threading.Lock()
+
+
+def _hotspot_clients():
+    """Quanti telefoni sono collegati all'hotspot (dal socket di controllo di wpa_supplicant,
+    che fa anche da access point), o None se non si riesce a saperlo."""
+    run_dir = RUN_STATE_FILE.parent   # in RAM; il socket di risposta deve stare da qualche parte
+    path = (run_dir if run_dir.is_dir() else Path("/tmp")) / f"wpa-{os.getpid()}"
+    path.unlink(missing_ok=True)
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    try:
+        s.bind(str(path))
+        s.settimeout(3)
+        s.connect(str(WPA_CTRL))
+        count, cmd = 0, b"STA-FIRST"
+        while count < 32:
+            s.send(cmd)
+            reply = s.recv(4096).decode(errors="replace").strip()
+            if not reply or reply == "FAIL":
+                return count
+            count += 1
+            cmd = b"STA-NEXT " + reply.split("\n", 1)[0].encode()
+        return count
+    except OSError:
+        return None
+    finally:
+        s.close()
+        path.unlink(missing_ok=True)
+
+
+def _recent_networks():
+    """Reti salvate, dall'ultima usata."""
+    res = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE,TIMESTAMP", "con", "show"],
+                         capture_output=True, text=True, check=True, timeout=10)
+    nets = []
+    for line in res.stdout.splitlines():
+        parts = re.split(r'(?<!\\):', line)
+        if len(parts) >= 3 and parts[1] == "802-11-wireless":
+            name = parts[0].replace("\\:", ":")
+            if not name.endswith("_AP") and name != "Hotspot":
+                nets.append((int(parts[2] or 0), name))
+    return [name for _, name in sorted(nets, reverse=True)]
+
+
+def _hotspot_up(reason: str):
+    print(f"[WiFi] Accendo l'hotspot: {reason}")
+    subprocess.run(["sudo", "nmcli", "con", "up", f"{socket.gethostname()}_AP"],
+                   capture_output=True, timeout=45)
+
+
+def _try_saved_networks():
+    """Dall'hotspot prova le reti salvate (al massimo 3). True se una si collega."""
+    for name in _recent_networks()[:3]:
+        try:
+            res = subprocess.run(["sudo", "nmcli", "con", "up", name], capture_output=True, timeout=45)
+            if res.returncode == 0:
+                print(f"[WiFi] Tornato sulla rete '{name}'")
+                return True
+        except subprocess.TimeoutExpired:
+            pass
+    ssid, on_ap = _active_wifi()   # nel frattempo NetworkManager può essersi collegato da solo
+    return bool(ssid) and not on_ap
+
+
+def _wifi_watchdog():
+    lost_since = time.monotonic()   # all'avvio come se la rete fosse appena sparita
+    next_try, wait = None, RETURN_FIRST_SEC
+    while True:
+        if _wifi_lock.acquire(blocking=False):
+            try:
+                now = time.monotonic()
+                ssid, on_ap = _active_wifi()
+                if ssid and not on_ap:   # sulla rete di casa: tutto a posto
+                    lost_since, next_try, wait = None, None, RETURN_FIRST_SEC
+                else:
+                    saved = _saved_networks()
+                    if not ssid:   # nessuna rete: l'hotspot, subito se non ce n'è una salvata
+                        lost_since = lost_since or now
+                        if not saved:
+                            _hotspot_up("nessuna rete salvata")
+                        elif now - lost_since >= HOTSPOT_GRACE_SEC:
+                            _hotspot_up(f"nessuna rete salvata raggiungibile da {HOTSPOT_GRACE_SEC} s")
+                            next_try = time.monotonic() + wait
+                    elif saved:   # sull'hotspot con reti salvate: ogni tanto si riprova
+                        lost_since = None
+                        if next_try is None:
+                            next_try = now + wait
+                        elif now >= next_try:
+                            if _hotspot_clients():   # qualcuno lo sta usando: più tardi
+                                next_try = now + RETURN_FIRST_SEC
+                            elif _try_saved_networks():
+                                next_try, wait = None, RETURN_FIRST_SEC
+                            else:
+                                _hotspot_up("le reti salvate non rispondono")
+                                wait = min(wait * 2, RETURN_MAX_SEC)
+                                next_try = time.monotonic() + wait
+            except Exception as e:   # NetworkManager non ancora pronto all'avvio, nmcli lento...
+                print(f"[WiFi] Controllo della rete: {e}")
+            finally:
+                _wifi_lock.release()
+        time.sleep(WIFI_CHECK_SEC)
+
+
+@app.on_event("startup")
+def _start_wifi_watchdog():
+    threading.Thread(target=_wifi_watchdog, name="wifi-watchdog", daemon=True).start()
 
 
 @app.post("/system/wifi/{ssid}/connect")
@@ -2633,6 +2764,10 @@ def switch_wifi(ssid: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail="Non puoi connetterti manualmente all'Hotspot da qui.")
         
     def _switch_wifi_task(target_ssid: str):
+        with _wifi_lock:
+            _switch(target_ssid)
+
+    def _switch(target_ssid: str):
         print(f"[WiFi] Switch a rete salvata '{target_ssid}'...")
         try:
             time.sleep(2)  # come in _connect_wifi_task: prima la risposta al telefono

@@ -364,8 +364,8 @@ fi
 # =============================================================================
 step "Configurazione hotspot Wi-Fi di fallback"
 
-# Configura un access point NM che si attiva automaticamente quando nessuna
-# rete nota è raggiungibile. SSID = hostname_AP, password casuale per
+# Configura un access point NM che l'API accende quando nessuna rete nota
+# è raggiungibile (_wifi_watchdog in api/main.py). SSID = hostname_AP, password casuale per
 # dispositivo in config.env (HOTSPOT_PASSWORD): generata la prima volta, poi
 # non cambia (vedi setup_hotspot.sh)
 CUCU_CONFIG_ENV="$CONFIG_ENV_DST" bash "$REPO_DIR/setup_hotspot.sh"
@@ -378,6 +378,14 @@ ok "Hotspot configurato: ${NEW_HOSTNAME}_AP (password: ${HOTSPOT_PASSWORD}, in c
 mkdir -p /etc/NetworkManager/dnsmasq-shared.d
 install -m 644 "$REPO_DIR/networkmanager/cucu-captive.conf" /etc/NetworkManager/dnsmasq-shared.d/cucu-captive.conf
 ok "Captive portal dell'hotspot configurato"
+
+# Log di sistema conservato dopo un riavvio (Raspberry Pi OS lo tiene solo in RAM):
+# serve a capire cosa è successo prima di uno spegnimento. Piccolo, per la SD
+mkdir -p /etc/systemd/journald.conf.d /var/log/journal
+install -m 644 "$REPO_DIR/systemd/journald-cucu.conf" /etc/systemd/journald.conf.d/50-cucu.conf
+systemd-tmpfiles --create --prefix /var/log/journal || true
+systemctl restart systemd-journald || warn "journald non riavviato: il log persistente vale dal prossimo avvio"
+ok "Log di sistema persistente (max 32 MB)"
 
 # Rimosso Step 11 (Pulizia reti Wi-Fi) per garantire idempotenza secondo CLAUDE.md.
 # La pulizia della rete utente deve essere fatta manualmente pre-consegna tramite:

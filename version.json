@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.2.1",
   "min_version": "0.1.0",
-  "changelog": "First stable release for hardware v2 (everything since 0.1.9). PN532 NFC reader over I2C with a native driver, status LED on hardware PWM. Animated owl screens on the TV (ready, rest, listening, unknown figurine, setup, update) and a new boot animation. First connection through Cucù's own Wi-Fi: per-device hotspot password, QR on the TV, captive portal, 'Fatto!' screen after a network change, use without Wi-Fi. New parent app: Now page mirroring the TV with the live episode, playback controls and volume, full screen and child mode, audio and photo album characters, episode previews, unplayable videos rejected with advice, parent PIN with the figurine reset gesture, 'Eccomi!' emergency gesture, a name for each Cucù, simpler time limits. Updates are manual only, started from the app."
+  "changelog": "Cucù no longer gets stuck on its own Wi-Fi: the hotspot turns on only when no saved network answers (right away on first setup, after 45 seconds otherwise), and from the hotspot Cucù goes back to the home network by itself when nobody is connected to it. The system log is kept across reboots."
 }
