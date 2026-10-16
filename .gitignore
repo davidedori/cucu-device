@@ -67,3 +67,7 @@ characters/*
 volume.json
 no_wifi.json
 device_name.json
+
+# Note interne (repository privato cucu-interno, collegato con un link)
+CLAUDE.md
+.claude/
