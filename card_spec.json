@@ -1,13 +1,13 @@
 {
   "model": "statuina-1",
   "paper_w": 24.0,
-  "flap_h": 40.0,
+  "flap_h": 41.0,
   "window": {
     "w": 21.0,
     "h": 37.0,
     "r": 3.0,
     "side": 1.5,
     "bottom": 1.5,
-    "fold": 1.5
+    "fold": 2.5
   }
 }
