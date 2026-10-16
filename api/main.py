@@ -570,6 +570,27 @@ def _cookie_from_scope(scope) -> str:
                     return val
     return ""
 
+# Il PDF dei cartellini si apre in una finestra a parte: da un'app sulla schermata Home
+# iPhone la apre con i cookie di Safari, senza la sessione. Il link porta con sé un
+# permesso firmato, valido qualche ora e solo per quel PDF
+CARDS_LINK_SEC = 6 * 3600
+
+def _cards_link(auth) -> str:
+    if not auth:
+        return ""
+    expires = str(int(time.time()) + CARDS_LINK_SEC)
+    sig = hmac.new(bytes.fromhex(auth["secret"]), b"cards." + expires.encode(), "sha256").hexdigest()
+    return f"{expires}.{sig}"
+
+def _cards_link_valid(auth: dict, scope) -> bool:
+    from urllib.parse import parse_qs
+    token = parse_qs(scope.get("query_string", b"").decode("latin-1")).get("t", [""])[0]
+    expires, _, sig = token.partition(".")
+    if not expires.isdigit() or int(expires) < time.time():
+        return False
+    expected = hmac.new(bytes.fromhex(auth["secret"]), b"cards." + expires.encode(), "sha256").hexdigest()
+    return hmac.compare_digest(sig, expected)
+
 class PinGuard:
     """Middleware ASGI puro (non BaseHTTPMiddleware): lascia passare in streaming
     gli upload dei video senza bufferizzarli."""
@@ -581,7 +602,8 @@ class PinGuard:
             path = scope.get("path", "")
             auth = load_ui_auth()
             if auth and path not in _PUBLIC_PATHS and not path.startswith("/static/") \
-                    and not _session_valid(auth, _cookie_from_scope(scope)):
+                    and not _session_valid(auth, _cookie_from_scope(scope)) \
+                    and not (path == "/cards.pdf" and _cards_link_valid(auth, scope)):
                 response = JSONResponse({"detail": "Serve il PIN"}, status_code=401)
                 await response(scope, receive, send)
                 return
@@ -1175,6 +1197,7 @@ def list_characters():
                 "seen": len(seen),
             },
             "tags_count": tags_count,
+            "card": _card_info(char_dir),
         })
 
     # ordiniamo per nome giusto per estetica
@@ -1442,6 +1465,7 @@ def get_character(name: str, request: Request):
         "image_url": image_url,
         "time_limit_exempt": name in time_limits.get("exempt_characters", []),
         "kind": kind,
+        "card": _card_info(char_dir),
 
         "tag_uids": tag_uids,
 
@@ -2141,6 +2165,239 @@ async def upload_character_image(name: str, file: UploadFile = File(...)):
     _fsync_path(char_dir)
 
     return {"status": "ok", "filename": f"profile{ext}"}
+
+# ---------- Cartellini delle statuine (api/cards.py) ----------
+# Inquadratura in characters/<nome>/.card/card.json; l'immagine è quella del
+# personaggio oppure una scelta solo per il cartellino (.card/image.jpg). Il lembo
+# si ritaglia a ogni richiesta: cambiando l'immagine del personaggio, cambia anche lui.
+# Le misure stanno in card_spec.json accanto al codice, scritto dalla macro della statuina
+
+CARD_SPEC_FILE = API_DIR.parent / "card_spec.json"
+CARD_DIR_NAME = ".card"
+CARD_IMAGE_MAX = (1600, 1600)
+CARD_COPIES_MAX = 99
+
+class CardSettings(BaseModel):
+    source: str = "profile"     # "profile" o "custom"
+    cx: float = 0.5
+    cy: float = 0.5
+    zoom: float = 1.0
+
+def _profile_image(char_dir: Path) -> Optional[Path]:
+    for ext in IMAGE_EXT:
+        p = char_dir / f"profile{ext}"
+        if p.exists():
+            return p
+    return None
+
+def _card_settings(char_dir: Path) -> dict:
+    import cards
+    try:
+        with (char_dir / CARD_DIR_NAME / "card.json").open() as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = {}
+    settings = cards.normalize(data)
+    custom = (char_dir / CARD_DIR_NAME / "image.jpg").exists()
+    settings["source"] = "custom" if custom and data.get("source") == "custom" else "profile"
+    return settings
+
+def _card_source(char_dir: Path, settings: dict) -> Optional[Path]:
+    if settings["source"] == "custom":
+        return char_dir / CARD_DIR_NAME / "image.jpg"
+    return _profile_image(char_dir)
+
+def _card_flap(char_dir: Path, spec: dict, settings: dict) -> Optional[bytes]:
+    """Il lembo ritagliato (JPEG), None senza immagine. Sul Pi ci vuole più di mezzo
+    secondo: si tiene in .card/flap.jpg finché immagine, inquadratura e misure sono le stesse."""
+    import cards
+    src = _card_source(char_dir, settings)
+    if not src:
+        return None
+    key = json.dumps([str(src.name), src.stat().st_mtime_ns, settings, spec], sort_keys=True)
+    cache, cache_key = char_dir / CARD_DIR_NAME / "flap.jpg", char_dir / CARD_DIR_NAME / "flap.key"
+    try:
+        if cache_key.read_text() == key:
+            return cache.read_bytes()
+    except OSError:
+        pass
+    data = cards.flap_jpeg(src, spec, settings)
+    try:
+        cache.parent.mkdir(exist_ok=True)
+        tmp = cache.with_name("flap.jpg.part")
+        tmp.write_bytes(data)
+        os.replace(tmp, cache)
+        cache_key.write_text(key)
+    except OSError:
+        pass
+    return data
+
+def _card_info(char_dir: Path) -> dict:
+    """Per la web UI: inquadratura, immagine di partenza e versione (per la cache)."""
+    settings = _card_settings(char_dir)
+    src = _card_source(char_dir, settings)
+    files = [src, char_dir / CARD_DIR_NAME / "card.json"]
+    version = max((p.stat().st_mtime_ns // 1_000_000 for p in files if p and p.exists()), default=0)
+    name = char_dir.name
+    return {
+        **settings,
+        "has_custom": (char_dir / CARD_DIR_NAME / "image.jpg").exists(),
+        "source_url": (f"/characters/{name}/card/image" if settings["source"] == "custom"
+                       else f"/characters/{name}/image") if src else None,
+        "v": version if src else None,
+    }
+
+def _char_dir_or_404(name: str) -> Path:
+    char_dir = CHARACTERS_DIR / name
+    if "/" in name or name.startswith(".") or not char_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Personaggio '{name}' non trovato")
+    return char_dir
+
+def _other_origin(request: Request) -> str:
+    """Un indirizzo di Cucù diverso da quello della pagina (l'IP invece del nome .local,
+    o il contrario). Da un'app sulla schermata Home iPhone apre i link dello stesso
+    indirizzo dentro l'app, a tutto schermo e senza pulsanti: un PDF resterebbe lì senza
+    modo di stamparlo né di uscire. Un altro indirizzo si apre nella finestra di Safari,
+    con Fine e Condividi › Stampa. "" se non ce n'è uno."""
+    host = (request.headers.get("host") or "").rsplit(":", 1)[0].strip("[]").lower()
+    server = request.scope.get("server") or ("", 80)
+    ip, port = str(server[0] or ""), server[1]
+    if ":" in ip:
+        # arrivati in IPv6 (mDNS può dare quello): l'IPv4 della rete in uso
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.connect(("10.254.254.254", 1))   # nessun pacchetto: sceglie solo l'interfaccia
+                ip = sock.getsockname()[0]
+        except OSError:
+            ip = ""
+    name = socket.gethostname()
+    if ip == HOTSPOT_IP:
+        # sull'hotspot ogni nome porta a Cucù (cucu-captive.conf): il nome senza .local
+        # non dipende da mDNS
+        other = name if host != name.lower() else HOTSPOT_IP
+    elif ip and host != ip:
+        other = ip
+    elif host != f"{name}.local".lower():
+        other = f"{name}.local"
+    else:
+        return ""
+    return f"http://{other}" + (f":{port}" if port and port != 80 else "")
+
+@app.get("/cards")
+def cards_info(request: Request):
+    """Misure, posizione dei cartellini sul foglio, indirizzo e permesso per il link al PDF."""
+    import cards
+    spec = cards.load_spec(CARD_SPEC_FILE)
+    return {"spec": spec, "layout": cards.layout(spec), "link": _cards_link(load_ui_auth()),
+            "pdf_origin": _other_origin(request)}
+
+@app.get("/characters/{name}/card.jpg")
+def get_card_flap(name: str):
+    """Un lembo del cartellino com'è stampato (per le anteprime)."""
+    import cards
+    char_dir = _char_dir_or_404(name)
+    try:
+        data = _card_flap(char_dir, cards.load_spec(CARD_SPEC_FILE), _card_settings(char_dir))
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Su Cucù manca la libreria per le immagini (Pillow): va aggiornato.")
+    except Exception:
+        raise HTTPException(status_code=422, detail="Non riesco a leggere l'immagine del cartellino.")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Nessuna immagine per il cartellino")
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+
+@app.get("/characters/{name}/card/image")
+def get_card_image(name: str):
+    path = _char_dir_or_404(name) / CARD_DIR_NAME / "image.jpg"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Immagine non trovata")
+    return FileResponse(path)
+
+@app.put("/characters/{name}/card")
+def set_card(name: str, body: CardSettings):
+    """Inquadratura del cartellino. Tornando all'immagine del personaggio, quella
+    scelta solo per il cartellino si cancella."""
+    import cards
+    char_dir = _char_dir_or_404(name)
+    card_dir = char_dir / CARD_DIR_NAME
+    data = cards.normalize(body.model_dump())
+    data["source"] = "custom" if body.source == "custom" and (card_dir / "image.jpg").exists() else "profile"
+    card_dir.mkdir(exist_ok=True)
+    _write_json_atomic(card_dir / "card.json", data)
+    if data["source"] == "profile":
+        (card_dir / "image.jpg").unlink(missing_ok=True)
+    return _card_info(char_dir)
+
+@app.post("/characters/{name}/card/image")
+def upload_card_image(name: str, file: UploadFile = File(...)):
+    """Un'immagine solo per il cartellino (per esempio il disegno fotografato), al centro."""
+    char_dir = _char_dir_or_404(name)
+    card_dir = char_dir / CARD_DIR_NAME
+    card_dir.mkdir(exist_ok=True)
+    tmp = card_dir / "image.upload"
+    try:
+        with tmp.open("wb") as f:
+            shutil.copyfileobj(file.file, f, 1024 * 1024)
+        try:
+            from PIL import Image, ImageOps
+        except ImportError:
+            raise HTTPException(status_code=503, detail="Su Cucù manca la libreria per le immagini (Pillow): va aggiornato.")
+        try:
+            with Image.open(tmp) as im:
+                im.draft("RGB", CARD_IMAGE_MAX)
+                im = ImageOps.exif_transpose(im)
+                if im.mode in ("RGBA", "LA", "PA") or (im.mode == "P" and "transparency" in im.info):
+                    im = im.convert("RGBA")
+                    bg = Image.new("RGB", im.size, "white")
+                    bg.paste(im, mask=im.getchannel("A"))
+                    im = bg
+                im = im.convert("RGB")
+                im.thumbnail(CARD_IMAGE_MAX)
+                part = card_dir / "image.jpg.part"
+                im.save(part, "JPEG", quality=88)
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=400, detail="Non è un'immagine che Cucù riesce a leggere (usa JPEG o PNG).")
+        _fsync_path(part)
+        os.replace(part, card_dir / "image.jpg")
+        _write_json_atomic(card_dir / "card.json", {"source": "custom", "cx": .5, "cy": .5, "zoom": 1})
+    finally:
+        tmp.unlink(missing_ok=True)
+    return _card_info(char_dir)
+
+@app.get("/cards.pdf")
+def cards_pdf(c: str = "", blank: int = 1):
+    """Foglio A4 (o più) di cartellini da stampare. c: "nome:copie,nome:copie";
+    blank=1 riempie gli spazi liberi dell'ultimo foglio con cartellini da disegnare
+    (senza personaggi: un foglio intero)."""
+    import cards
+    spec = cards.load_spec(CARD_SPEC_FILE)
+    per_page = len(cards.layout(spec)["slots"])
+    episode_state = load_episode_state()
+    items = []
+    for part in filter(None, c.split(",")):
+        name, _, n = part.partition(":")
+        char_dir = _char_dir_or_404(name.strip())
+        copies = min(max(int(n) if n.strip().isdigit() else 1, 0), CARD_COPIES_MAX)
+        if not copies:
+            continue
+        try:
+            jpeg = _card_flap(char_dir, spec, _card_settings(char_dir))
+        except ImportError:
+            raise HTTPException(status_code=503, detail="Su Cucù manca la libreria per le immagini (Pillow): va aggiornato.")
+        except Exception:
+            jpeg = None   # immagine illeggibile: resta da disegnare, con il nome sotto
+        label = _display_name(episode_state, char_dir.name)
+        items += [(jpeg, label)] * copies
+    if len(items) > per_page * 10:
+        raise HTTPException(status_code=400, detail="Troppi cartellini in una volta.")
+    if blank and (not items or len(items) % per_page):
+        items += [(None, None)] * (per_page - len(items) % per_page)
+    pdf = cards.build_pdf(spec, items)
+    return Response(pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": 'inline; filename="cartellini-cucu.pdf"',
+                             "Cache-Control": "no-store"})
 
 def _restart_service_task():
     """Riavvia il servizio con un piccolo ritardo per permettere all'API di rispondere."""
