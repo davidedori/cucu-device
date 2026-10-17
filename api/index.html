@@ -2055,9 +2055,27 @@
 
     /* ================= Informazioni dispositivo ================= */
 
+    // Dopo un ripristino di fabbrica (fatto anche da un altro telefono) l'installazione è
+    // un'altra: si dimenticano le scelte fatte qui e si riparte, come la prima volta.
+    // Senza un id ricordato (app di prima) lo si ricorda e basta
+    function forgetIfReset(id) {
+      if (!id) return false;
+      let seen = null;
+      try { seen = localStorage.getItem('cucu-install'); } catch (_) { return false; }
+      if (seen && seen !== id) {
+        try { Object.keys(localStorage).filter(k => k.startsWith('cucu')).forEach(k => localStorage.removeItem(k)); } catch (_) { /* pazienza */ }
+        try { localStorage.setItem('cucu-install', id); } catch (_) { /* pazienza */ }
+        location.reload();
+        return true;
+      }
+      if (!seen) try { localStorage.setItem('cucu-install', id); } catch (_) { /* pazienza */ }
+      return false;
+    }
+
     async function loadInfo() {
       try {
         info = await api('/system/info');
+        if (forgetIfReset(info.install_id)) return;
         applyDeviceName();
         drawSpaceBanner();
         if (parseRoute().section === 'impostazioni') { renderSpace(); renderInfo(); }

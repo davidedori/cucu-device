@@ -1009,6 +1009,23 @@ def web_manifest():
         ],
     }, media_type="application/manifest+json", headers={"Cache-Control": "no-cache"})
 
+# Identificativo di questa installazione, nuovo a ogni ripristino di fabbrica. L'app lo
+# ricorda (per telefono, e su iPhone anche per l'app sulla Home): se cambia, dimentica le
+# scelte fatte lì (nome già chiesto, proposte della Home e del PIN, modalità bambino),
+# così dopo un ripristino ogni telefono trova Cucù come nuovo
+INSTALL_ID_FILE = BASE_DIR / "install_id.json"
+
+def _install_id() -> str:
+    try:
+        return str(json.loads(INSTALL_ID_FILE.read_text())["id"])
+    except (OSError, ValueError, KeyError, TypeError):
+        new_id = secrets.token_hex(8)
+        try:
+            _write_json_atomic(INSTALL_ID_FILE, {"id": new_id})
+        except OSError:
+            pass
+        return new_id
+
 @app.get("/system/info")
 def system_info():
     """Dati del dispositivo per la UI: nome in rete, versione, canale OTA, spazio libero."""
@@ -1033,6 +1050,7 @@ def system_info():
         "thumbnails": _ffmpeg_available(),
         "no_wifi": NO_WIFI_FILE.exists(),   # "Usa Cucù senza Wi-Fi": 10.42.0.1 è il suo indirizzo
         "name": _device_name(),             # scelto dal genitore, o None ("Cucù")
+        "install_id": _install_id(),        # cambia con il ripristino di fabbrica
     }
 
 
@@ -3159,7 +3177,7 @@ def forget_wifi(ssid: str, background_tasks: BackgroundTasks):
 
 FACTORY_FILES = [EPISODE_STATE_FILE, BASE_DIR / "episode_state.json.bak", TAG_LABELS_FILE,
                  TIME_LIMITS_FILE, DAILY_USAGE_FILE, DEVICE_NAME_FILE, BASE_DIR / "volume.json",
-                 NO_WIFI_FILE, UI_AUTH_FILE]
+                 NO_WIFI_FILE, UI_AUTH_FILE, INSTALL_ID_FILE]
 
 class FactoryReset(BaseModel):
     pin: str = ""
