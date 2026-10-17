@@ -4720,7 +4720,15 @@
       }
       root.setAttribute('aria-busy', 'true');
       try {
-        const data = await api('/system/wifi');
+        // Subito dopo un cambio di rete il telefono può essere ancora a metà del passaggio:
+        // la richiesta non arriva nemmeno a Cucù. Si riprova un paio di volte prima di dirlo
+        let data;
+        for (let attempt = 0; ; attempt++) {
+          try { data = await api('/system/wifi'); break; } catch (e) {
+            if (!(e instanceof TypeError) || attempt >= 3) throw e;   // TypeError: rete, non Cucù
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        }
         wifiCurrent = data.current ? data.current.ssid : null;
         const els = [];
 
@@ -4798,7 +4806,9 @@
 
         root.replaceChildren(...els);
       } catch (e) {
-        root.replaceChildren(h('p', { class: 'muted', text: 'Non riesco a leggere le reti: ' + e.message }));
+        root.replaceChildren(
+          h('p', { class: 'muted', text: e instanceof TypeError ? 'Non riesco a raggiungere Cucù per leggere le reti.' : 'Non riesco a leggere le reti: ' + e.message }),
+          h('button', { class: 'btn btn-block', style: 'margin-top:12px', text: 'Riprova', onclick: () => renderWifi(rootId) }));
       } finally {
         root.style.opacity = '';
         root.removeAttribute('aria-busy');
