@@ -1207,11 +1207,23 @@
     .owl .eye-l .pupil-core { transform-origin: 563.7px 355.7px; }
 
     /* ---------- Comparse a scatti (10 fps, come uno stop-motion) ---------- */
-    .appear { animation: comparsa .4s steps(4, end) both; animation-delay: calc(var(--i, 0) * 100ms); }
+    /* Su iPhone: angoli scritti nei fotogrammi (con var() Safari non affida l'animazione alla
+       scheda grafica e la calcola a ogni passo) e un livello a sé per ogni scheda, così il
+       fondo "fatto a mano" (filtro SVG) si disegna una volta sola e non a ogni scatto */
+    .appear {
+      animation: comparsa .4s steps(4, end) both; animation-delay: calc(var(--i, 0) * 100ms);
+      will-change: transform, opacity;
+    }
+    .appear.sx { animation-name: comparsa-sx; }
 
     @keyframes comparsa {
-      0% { opacity: 0; transform: translateY(12px) rotate(var(--r, 1.2deg)); }
-      60% { opacity: 1; transform: translateY(-2px) rotate(calc(var(--r, 1.2deg) * -.4)); }
+      0% { opacity: 0; transform: translateY(12px) rotate(1.2deg); }
+      60% { opacity: 1; transform: translateY(-2px) rotate(-.5deg); }
+      100% { opacity: 1; transform: none; }
+    }
+    @keyframes comparsa-sx {
+      0% { opacity: 0; transform: translateY(12px) rotate(-1.2deg); }
+      60% { opacity: 1; transform: translateY(-2px) rotate(.5deg); }
       100% { opacity: 1; transform: none; }
     }
 
@@ -2256,9 +2268,9 @@
         if (!c.tags_count) hint = 'Manca la statuina';
         else if (!eps) hint = w.missing;
         const card = h('a', {
-          class: 'char-card appear',
+          class: 'char-card appear' + (i % 2 ? ' sx' : ''),
           href: '#/personaggi/' + enc(c.name),
-          style: `--i:${Math.min(i, 8)};--r:${i % 2 ? -1.2 : 1.2}deg`,
+          style: `--i:${Math.min(i, 8)}`,
         },
           avatar(c, i),
           h('div', { class: 'char-name', text: c.display_name }),
