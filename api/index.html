@@ -2043,6 +2043,8 @@
       } else if (r.section === 'personaggi') {
         showView('personaggi');
         current = null;
+        // le schede vecchie ripartirebbero comunque: si ridisegnano adesso, una volta sola
+        if (characters.length) renderCharacters(); else $('characters').replaceChildren();
         loadCharacters();
       } else if (r.section === 'cartellini') {
         showView('cartellini');
@@ -2214,9 +2216,16 @@
 
     /* ================= Personaggi ================= */
 
+    // Le schede si disegnano subito con i personaggi già noti, e di nuovo solo se Cucù
+    // risponde con qualcosa di diverso: ridisegnarle a metà dell'entrata la farebbe
+    // ripartire, e la prima scheda (senza ritardo) lampeggerebbe
+    let charactersDrawn = '';
+
     async function loadCharacters() {
       try {
-        characters = await api('/characters');
+        const list = await api('/characters');
+        characters = list;
+        if (JSON.stringify(list) === charactersDrawn && $('characters').firstChild) return;
         renderCharacters();
       } catch (e) {
         $('characters').replaceChildren(h('p', { class: 'muted', text: 'Non riesco a leggere i personaggi: ' + e.message }));
@@ -2231,6 +2240,7 @@
 
     function renderCharacters() {
       const root = $('characters');
+      charactersDrawn = JSON.stringify(characters);
 
       if (!characters.length) {
         root.replaceChildren(h('div', { class: 'empty' },
