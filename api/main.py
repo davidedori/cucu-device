@@ -812,7 +812,6 @@ def _refresh_first_screen():
 # Prima del PinGuard, che altrimenti risponderebbe "Serve il PIN".
 HOTSPOT_IP = "10.42.0.1"
 CAPTIVE_URL = f"http://{HOTSPOT_IP}/#/wifi"
-CAPTIVE_APP_URL = f"http://{HOTSPOT_IP}/#/nowifi"   # senza Wi-Fi per scelta: dove usare Cucù, non l'app
 
 class CaptivePortal:
     def __init__(self, app):
@@ -841,10 +840,10 @@ class CaptivePortal:
                 except OSError:
                     pass
             if name not in ours:
-                # senza Wi-Fi per scelta non c'è una rete da scegliere: la pagina che dice di
-                # aprire Cucù in Safari (nel mini-browser del captive portal l'app non va)
-                url = CAPTIVE_APP_URL if NO_WIFI_FILE.exists() else CAPTIVE_URL
-                response = RedirectResponse(url, status_code=302,
+                # Sempre la pagina del Wi-Fi, anche senza Wi-Fi per scelta: se il portale si
+                # riapre, sull'iPhone la scelta non è stata completata (chiusa la finestrella
+                # senza "usa senza Internet"), e si riparte da lì. "Usa Cucù senza Wi-Fi" c'è
+                response = RedirectResponse(CAPTIVE_URL, status_code=302,
                                             headers={"Cache-Control": "no-store"})
                 await response(scope, receive, send)
                 return
