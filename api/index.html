@@ -1485,7 +1485,7 @@
       </div>
       <div class="stack">
         <div class="panel">
-          <p style="margin:0">Cucù funziona senza Wi-Fi. Se l'app di Cucù è già sulla schermata Home, aprila: funziona anche qui. Altrimenti apri <strong>10.42.0.1</strong> in Safari e aggiungilo alla schermata Home.</p>
+          <p style="margin:0">Cucù funziona senza Wi-Fi. Se l'app di Cucù è già sulla schermata Home, aprila: funziona anche qui. Altrimenti apri <strong id="nowifi-host">cucu-xxxx.local</strong> nel browser e aggiungilo alla schermata Home: funzionerà anche quando Cucù sarà sulla rete di casa. Se non si apre, usa <strong>10.42.0.1</strong>.</p>
           <p class="muted" id="nowifi-captive" style="margin:12px 0 0">Chiudi questa finestra con la X e scegli di usare la rete senza Internet: così resti collegato a Cucù. Lo chiede solo la prima volta.</p>
           <p class="muted" style="margin:12px 0 0">Se perdi l'indirizzo: appoggia la stessa statuina 5 volte di fila e lasciala lì, e sulla TV compare come raggiungere Cucù.</p>
           <a class="btn btn-primary btn-block" id="nowifi-open" href="#/adesso" style="margin-top:16px">Apri Cucù</a>
@@ -2058,6 +2058,7 @@
         renderWifi('wifi-setup');
       } else if (r.section === 'nowifi') {
         showView('nowifi');
+        infoReady.then(() => { if (info) $('nowifi-host').textContent = `${info.hostname}.local`; });
         // l'app solo fuori dal mini-browser del captive portal (non ricorda il PIN, niente caricamenti)
         $('nowifi-open').hidden = inCaptiveBrowser();
         $('nowifi-captive').hidden = !inCaptiveBrowser();
@@ -2105,10 +2106,11 @@
       } catch (_) { /* API vecchia o non raggiungibile: la testata resta senza */ }
     }
 
-    // Sulla Home l'app resta legata all'indirizzo da cui la si installa: dall'hotspot
-    // (10.42.0.1) no, perché sulla rete di casa non c'è; se però Cucù è senza Wi-Fi per
-    // scelta, 10.42.0.1 è il suo indirizzo per sempre
-    const homeScreenHere = () => !onHotspot || !!(info && info.no_wifi);
+    // Sulla Home l'app resta legata all'indirizzo da cui la si installa: da 10.42.0.1 no,
+    // perché sulla rete di casa non c'è. Da cucu-xxxx.local sì, anche sulla rete di Cucù:
+    // vale in tutti e due i posti (provato su iPhone il 17/10). Senza Wi-Fi per scelta, da
+    // 10.42.0.1 solo su Android, dove i nomi .local non sempre si aprono
+    const homeScreenHere = () => !onHotspot || !!(info && info.no_wifi && phonePlatform() === 'android');
 
     function showHomeScreenPanel() {
       if (isStandalone() || !phonePlatform() || !homeScreenHere()) return;
