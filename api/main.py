@@ -830,7 +830,17 @@ class CaptivePortal:
             # i nostri nomi restano: l'app sulla Home (cucu-xxxx.local) usata sull'hotspot,
             # per esempio dai nonni, trova Cucù con mDNS e deve funzionare come sempre
             ours = {HOTSPOT_IP, socket.gethostname().lower(), f"{socket.gethostname()}.local".lower()}
-            if host.rsplit(":", 1)[0].lower() not in ours:
+            name = host.rsplit(":", 1)[0].lower()
+            # l'app aperta con il nome .local (installata a casa) sulla rete di Cucù: chi la usa
+            # sa già raggiungerlo, è "Usa Cucù senza Wi-Fi". Via "Colleghiamoci!" dalla TV
+            # (torna da sola appena Cucù si collega a una rete dall'app)
+            if name == f"{socket.gethostname()}.local".lower() and FIRST_FILE.exists() and not NO_WIFI_FILE.exists():
+                try:
+                    _write_json_atomic(NO_WIFI_FILE, {"since": int(time.time()), "from": "app"})
+                    FIRST_FILE.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            if name not in ours:
                 # senza Wi-Fi per scelta non c'è una rete da scegliere: la pagina che dice di
                 # aprire Cucù in Safari (nel mini-browser del captive portal l'app non va)
                 url = CAPTIVE_APP_URL if NO_WIFI_FILE.exists() else CAPTIVE_URL
