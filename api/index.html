@@ -718,6 +718,13 @@
     .space-bar .used.low { background: var(--apricot-ink); }
     .space-bar .reserve { margin-left: auto; background: repeating-linear-gradient(-45deg, #d6d7d3 0 3px, transparent 3px 6px); }
     .row .chev svg { width: 18px; height: 18px; color: var(--muted); display: block; }
+    /* File trascinati sulla scheda del personaggio */
+    .drop-veil {
+      position: fixed; inset: 10px; z-index: 900; display: grid; place-items: center; pointer-events: none;
+      border: 3px dashed var(--orange-text); border-radius: var(--radius); background: rgba(250, 251, 248, .88);
+    }
+    .drop-veil[hidden] { display: none; }
+    .drop-veil span { font-family: var(--serif); font-variation-settings: "SOFT" 100; font-size: 24px; color: var(--orange-text); padding: 0 24px; text-align: center; }
     .card-line { margin-top: 16px; }
     .card-line .row { padding-right: 14px; }
     .card-line .row > .card-strip { width: 18px; margin: 0 9px; }
@@ -1423,7 +1430,7 @@
 
         <div class="panel">
           <h2>La settimana</h2>
-          <div class="panel-sub" style="margin-top:4px">Tocca un giorno per cambiarlo. Puoi copiare le stesse regole su altri giorni.</div>
+          <div class="panel-sub" style="margin-top:4px">Scegli un giorno per cambiarlo. Puoi copiare le stesse regole su altri giorni.</div>
           <div class="week" id="tl-week"></div>
         </div>
 
@@ -1533,6 +1540,7 @@
     </section>
   </main>
 
+  <div class="drop-veil" id="drop-veil" hidden><span></span></div>
   <div id="sheet-root"></div>
   <div id="toast-root" aria-live="polite"></div>
   <div id="reconnect-root"></div>
@@ -2290,7 +2298,11 @@
     // Dopo "Aggiungi" il selettore di iOS resta aperto mentre prepara i file
     // (converte video e foto in formati compatibili) e la pagina non può
     // mostrare niente sopra: lo si dice prima, così l'attesa non sembra un blocco
-    function pickerHint(kind) {
+    // Con mouse o trackpad (computer) i file si possono anche trascinare sulla scheda
+    const canDrop = () => !phonePlatform() && matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+    function pickerHint(kind, { drop } = {}) {
+      if (drop && canDrop()) return h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: 'Oppure trascina i file qui.' });
       if (phonePlatform() !== 'ios') return null;
       const text = {
         photos: "Dopo la scelta l'iPhone prepara le foto per qualche istante prima di chiudere: è normale.",
@@ -3183,7 +3195,7 @@
         more,
         h('div', { id: 'upload-slot' }),
         h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => pickVideos(c.name, c.kind) }, icon('upload'), words(c.kind).add),
-        pickerHint(c.kind),
+        pickerHint(c.kind, { drop: true }),
         info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.usable_bytes ?? info.disk.free_bytes)}` }) : null
       );
     }
@@ -3337,7 +3349,7 @@
           : h('div', { class: 'row-empty', text: 'Ancora nessuna foto.' }),
         h('div', { id: 'upload-slot' }),
         h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => pickPhotos(c.name) }, icon('upload'), 'Aggiungi foto'),
-        pickerHint('photos'),
+        pickerHint('photos', { drop: true }),
         info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.usable_bytes ?? info.disk.free_bytes)}` }) : null
       );
     }
@@ -3444,15 +3456,81 @@
 
     function pickPhotos(charName) {
       if (isUploading()) { toast('Aspetta che finiscano i caricamenti in corso'); return; }
-      pickFiles({ accept: 'image/*', multiple: true }, async (files) => {
-        let displayName = charName;
-        try { displayName = (await api(`/characters/${enc(charName)}`)).display_name; } catch (_) { /* pazienza */ }
-        // Nomi doppi non sono un problema: Cucù li rende unici
-        queue = { target: charName, displayName, kind: 'photos', items: files.map(file => ({ file, status: 'waiting', loaded: 0, error: null, xhr: null })) };
-        renderUploadQueue();
-        runQueue();
-      });
+      pickFiles({ accept: 'image/*', multiple: true }, (files) => enqueuePhotos(charName, files));
     }
+
+    async function enqueuePhotos(charName, files) {
+      let displayName = charName;
+      try { displayName = (await api(`/characters/${enc(charName)}`)).display_name; } catch (_) { /* pazienza */ }
+      // Nomi doppi non sono un problema: Cucù li rende unici
+      queue = { target: charName, displayName, kind: 'photos', items: files.map(file => ({ file, status: 'waiting', loaded: 0, error: null, xhr: null })) };
+      renderUploadQueue();
+      runQueue();
+    }
+
+    /* ---------- File trascinati sulla scheda del personaggio (dal computer) ----------
+       Vanno nella stessa coda del pulsante, con gli stessi controlli. Fuori dalla scheda
+       non si sa a chi darli: si dice dove trascinarli. In ogni caso il browser non apre il
+       file al posto dell'app */
+
+    const DROP_EXT = {
+      video: ['.mp4', '.mkv', '.avi', '.mov', '.m4v'],
+      audio: ['.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.flac', '.qta', '.caf', '.aif', '.aiff'],
+      photos: ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp'],
+    };
+    const DROP_MIME = { video: 'video/', audio: 'audio/', photos: 'image/' };
+
+    function dropTarget() {
+      const r = parseRoute();
+      return r.section === 'personaggi' && r.name && current && current.name === r.name ? current : null;
+    }
+
+    const dragHasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    let dragDepth = 0;
+
+    function showDropVeil(show) {
+      const veil = $('drop-veil');
+      const c = dropTarget();
+      if (show && c) veil.querySelector('span').textContent = `Rilascia per aggiungerli a ${c.display_name}`;
+      veil.hidden = !(show && c);
+    }
+
+    document.addEventListener('dragenter', (e) => {
+      if (!dragHasFiles(e)) return;
+      e.preventDefault();
+      dragDepth++;
+      showDropVeil(true);
+    });
+    document.addEventListener('dragover', (e) => {
+      if (!dragHasFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = dropTarget() ? 'copy' : 'none';
+    });
+    document.addEventListener('dragleave', (e) => {
+      if (!dragHasFiles(e)) return;
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (!dragDepth) showDropVeil(false);
+    });
+    document.addEventListener('drop', (e) => {
+      if (!dragHasFiles(e)) return;
+      e.preventDefault();
+      dragDepth = 0;
+      showDropVeil(false);
+      const c = dropTarget();
+      if (!c) { toast('Apri un personaggio e trascina i file sulla sua scheda'); return; }
+      if (tvLocked) return;
+      if (isUploading()) { toast('Aspetta che finiscano i caricamenti in corso'); return; }
+      const kind = c.kind || 'video';
+      const all = Array.from(e.dataTransfer.files || []);
+      const files = all.filter(f => f.type.startsWith(DROP_MIME[kind]) || DROP_EXT[kind].includes(splitExt(f.name)[1].toLowerCase()));
+      const skipped = all.length - files.length;
+      if (skipped) {
+        const what = { video: 'video', audio: 'audio', photos: 'foto' }[kind];
+        toast(files.length ? `${plural(skipped, 'file lasciato', 'file lasciati')} fuori: qui vanno solo ${what}` : `Qui vanno solo ${what}`);
+      }
+      if (!files.length) return;
+      if (kind === 'photos') enqueuePhotos(c.name, files); else enqueueVideos(c.name, files, kind);
+    });
 
     // Foto ridotte sul telefono prima di inviarle: entro lo schermo della TV
     // (1920×1080), in JPEG, già dritte (il browser applica l'orientamento EXIF
@@ -4187,7 +4265,7 @@
       el.hidden = false;
       const sound = $('scr-sound');
       sound.hidden = false;
-      sound.setAttribute('aria-label', liveSound ? "Togli l'audio dal telefono" : "Senti l'audio anche sul telefono");
+      sound.setAttribute('aria-label', liveSound ? "Togli l'audio qui" : "Senti l'audio anche qui");
       sound.replaceChildren(icon(liveSound ? 'volume' : 'mute'));
       return audio ? 'audio' : 'video';
     }
@@ -4280,7 +4358,7 @@
       $('tv-full-next').setAttribute('aria-label', photos ? 'Foto successiva' : 'Episodio successivo');
       const sound = $('tv-full-sound');
       sound.hidden = !(episode && (n.kind === 'video' || n.kind === 'audio'));
-      sound.setAttribute('aria-label', liveSound ? "Togli l'audio dal telefono" : "Senti l'audio anche sul telefono");
+      sound.setAttribute('aria-label', liveSound ? "Togli l'audio qui" : "Senti l'audio anche qui");
       sound.replaceChildren(icon(liveSound ? 'volume' : 'mute'));
       $('tv-full-volume').hidden = n.volume == null;
       // l'audio aspetta un tocco (app ricaricata in modalità bambino): lo si dice in grande
@@ -4711,7 +4789,7 @@
       qr.addEventListener('error', () => qr.remove());
       return h('details', { class: 'more', style: 'margin-top:10px' },
         h('summary', {}, icon('chevron'), 'La rete di Cucù'),
-        h('p', { class: 'muted', style: 'margin:10px 0 0', text: 'Quando non trova nessuna rete salvata, Cucù accende la sua: per esempio dai nonni. Per collegare un telefono, inquadra il codice.' }),
+        h('p', { class: 'muted', style: 'margin:10px 0 0', text: 'Quando non trova nessuna rete salvata, Cucù accende la sua: per esempio dai nonni. Per collegarti, inquadra il codice con il telefono oppure scegli la rete e scrivi la password.' }),
         qr,
         h('div', { class: 'rows' },
           h('div', { class: 'row' }, h('div', { class: 'row-main' },
@@ -4759,8 +4837,8 @@
     function afterSwitchText(ssid) {
       // Nel mini-browser del captive portal (il caso normale) questo è l'ultimo testo che si legge con calma:
       // quando l'hotspot sparisce, iOS lo chiude
-      if (onHotspot) return `Cucù passa a "${ssid}" e la sua rete sparisce. Poi, con il telefono di nuovo su "${ssid}", inquadra il codice che compare sulla TV (oppure apri ${deviceHost()}).`;
-      return `Il telefono perderà il collegamento con Cucù per qualche secondo. Poi collegalo anche tu a "${ssid}" e inquadra il codice che compare sulla TV (oppure apri ${deviceHost()}).`;
+      if (onHotspot) return `Cucù passa a "${ssid}" e la sua rete sparisce. Poi torna anche tu su "${ssid}" e inquadra il codice che compare sulla TV (oppure apri ${deviceHost()}).`;
+      return `Per qualche secondo perdi il collegamento con Cucù. Poi collegati anche tu a "${ssid}" e inquadra il codice che compare sulla TV (oppure apri ${deviceHost()}).`;
     }
 
     function afterSwitch(ssid) {
@@ -4780,7 +4858,7 @@
         h('div', { class: 'peek' }, owl()),
         h('h2', { text: 'Quasi fatto' }),
         h('p', {}, 'Cucù si sta collegando a ', h('strong', { text: ssid }),
-          '. Con il telefono di nuovo su quella rete, inquadra il codice che compare sulla TV.'),
+          '. Torna anche tu su quella rete e inquadra il codice che compare sulla TV.'),
         h('p', { class: 'muted', style: 'margin-top:18px' }, 'Oppure apri ', h('strong', { text: deviceHost() }), '.'),
         h('p', { class: 'muted', style: 'margin-top:8px', text: `Se sulla TV non compare niente, la password forse non era giusta: ricollegati a ${ap} e riprova.` })
       ));
@@ -4849,7 +4927,7 @@
       if (!ok) return;
       try {
         await api(`/system/wifi/${enc(ssid)}`, { method: 'DELETE' });
-        if (isCurrent) showReconnect('Cambio rete', 'Cucù si scollega da questa rete. Se non ne ha altre salvate accende la sua: guarda la TV e inquadra il codice che compare, si collega il telefono e si apre la pagina del Wi-Fi.');
+        if (isCurrent) showReconnect('Cambio rete', 'Cucù si scollega da questa rete. Se non ne ha altre salvate accende la sua: guarda la TV e inquadra il codice che compare: ti colleghi alla sua rete e si apre la pagina del Wi-Fi.');
         else renderWifi();
       } catch (e) { toast(e.message); }
     }
@@ -4998,7 +5076,7 @@
       reload.addEventListener('click', () => {
         // Sull'hotspot (10.42.0.1) la pagina non tornerà: Cucù è passato a un'altra rete
         if (location.hostname === '10.42.0.1') {
-          note.textContent = `Collega il telefono al Wi-Fi di casa e apri ${info ? info.hostname : 'cucu-xxxx'}.local`;
+          note.textContent = `Collegati al Wi-Fi di casa e apri ${info ? info.hostname : 'cucu-xxxx'}.local`;
           note.classList.remove('hidden');
         } else {
           location.reload();
