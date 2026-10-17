@@ -1,5 +1,5 @@
 {
-  "version": "0.2.1",
+  "version": "0.3.0",
   "min_version": "0.1.0",
-  "changelog": "Cucù no longer gets stuck on its own Wi-Fi: the hotspot turns on only when no saved network answers (right away on first setup, after 45 seconds otherwise), and from the hotspot Cucù goes back to the home network by itself when nobody is connected to it. The system log is kept across reboots."
+  "changelog": "Printable cards for the figurines: from a character, a sheet of paper strips to cut, fold and slide into the figurine, with the framing chosen in the app and blank cards to draw on. Settings: factory reset (characters, figurines, limits, PIN, name and, if chosen, Wi-Fi networks; every phone then finds Cucù as new), and a Space panel. Cucù always keeps 500 MB free on the SD card: uploads that would use it are refused, and updates do not start below 200 MB. From a computer, files can be dragged onto a character. Texts no longer assume a phone, nearby networks are collapsed in Settings, and the first character card no longer flashes."
 }
