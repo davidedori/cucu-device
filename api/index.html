@@ -200,7 +200,7 @@
     body.scroll-locked { position: fixed; left: 0; right: 0; }
 
     /* Primo collegamento (#/wifi, anche nel mini-browser del captive portal): solo il Wi-Fi */
-    body.setup-mode .nav, body.setup-mode #update-banner, body.setup-mode #pin-banner { display: none !important; }
+    body.setup-mode .nav, body.setup-mode #update-banner, body.setup-mode #space-banner, body.setup-mode #pin-banner { display: none !important; }
     body.setup-mode .brand { pointer-events: none; }   /* da qui non si entra nell'app */
 
     /* ---------- Navigazione ---------- */
@@ -713,6 +713,11 @@
     .card-strip::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px dashed #8d8e89; }
 
     .row > .card-strip { width: 22px; margin-right: 4px; }
+    .space-bar { display: flex; height: 12px; border-radius: 999px; background: var(--bg); overflow: hidden; }
+    .space-bar .used { background: var(--blue-ink); }
+    .space-bar .used.low { background: var(--apricot-ink); }
+    .space-bar .reserve { margin-left: auto; background: repeating-linear-gradient(-45deg, #d6d7d3 0 3px, transparent 3px 6px); }
+    .row .chev svg { width: 18px; height: 18px; color: var(--muted); display: block; }
     .card-line { margin-top: 16px; }
     .card-line .row { padding-right: 14px; }
     .card-line .row > .card-strip { width: 18px; margin: 0 9px; }
@@ -1315,6 +1320,7 @@
   <main>
     <!-- C'è un aggiornamento: lo installa il genitore quando vuole (niente aggiornamenti automatici) -->
     <a class="note update-banner hidden" id="update-banner" href="#/impostazioni"><strong>C'è un aggiornamento di Cucù.</strong> Lo installi quando vuoi, da Impostazioni.</a>
+    <a class="note alert update-banner hidden" id="space-banner" href="#/impostazioni/spazio"><strong>Lo spazio su Cucù sta finendo.</strong> <span id="space-banner-text"></span></a>
     <!-- Gesto con la statuina fatto mentre questo telefono è già dentro: si può scegliere un PIN nuovo -->
     <div class="note alert pin-banner hidden" id="pin-banner" role="status">
       <strong>Cucù è pronto per un PIN nuovo.</strong> Puoi sceglierlo finché la statuina resta su Cucù.
@@ -1485,6 +1491,11 @@
           <div id="wifi"></div>
         </div>
 
+        <div class="panel" id="space-panel">
+          <h2>Spazio</h2>
+          <div id="space"></div>
+        </div>
+
         <div class="panel">
           <h2>Aggiornamenti</h2>
           <div class="panel-sub" style="margin-top:6px" id="update-text">Gli aggiornamenti li installi tu, quando vuoi: Cucù ti avvisa quando ce n'è uno nuovo.</div>
@@ -1515,6 +1526,9 @@
           <h2 style="margin-bottom:8px">Informazioni</h2>
           <div id="info"></div>
         </div>
+      </div>
+      <div class="danger-zone">
+        <button class="btn btn-quiet" id="factory-reset" style="color:var(--danger)">Ripristina Cucù</button>
       </div>
     </section>
   </main>
@@ -1953,7 +1967,7 @@
     function parseRoute() {
       const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
       const section = ['adesso', 'personaggi', 'cartellini', 'tempo', 'impostazioni', 'wifi', 'nowifi'].includes(parts[0]) ? parts[0] : 'adesso';
-      return { section, name: section === 'personaggi' || section === 'cartellini' ? parts[1] || null : null };
+      return { section, name: ['personaggi', 'cartellini', 'impostazioni'].includes(section) ? parts[1] || null : null };
     }
 
     function showView(id) {
@@ -1987,6 +2001,7 @@
       lastSection = r.section;
       document.body.classList.toggle('setup-mode', r.section === 'wifi' || r.section === 'nowifi');
       drawUpdateBanner();
+      drawSpaceBanner();
 
       stopTagScan();
       stopNowPolling();
@@ -2028,7 +2043,9 @@
         showView('impostazioni');
         renderWifi();
         renderInfo();
+        renderSpace();
         renderSecurity();
+        if (r.name === 'spazio') setTimeout(() => $('space-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
         if (!updatesChecked) checkUpdates();
       }
       window.scrollTo(0, 0);
@@ -2042,6 +2059,8 @@
       try {
         info = await api('/system/info');
         applyDeviceName();
+        drawSpaceBanner();
+        if (parseRoute().section === 'impostazioni') { renderSpace(); renderInfo(); }
         showHomeScreenPanel();   // senza Wi-Fi per scelta, anche dall'hotspot
       } catch (_) { /* API vecchia o non raggiungibile: la testata resta senza */ }
     }
@@ -2104,6 +2123,34 @@
       });
     }
 
+    // Quanto spazio resta per episodi e foto e chi ne occupa di più. Il margine (SPACE_RESERVE
+    // in main.py) non si usa mai: serve allo stato, alle anteprime e agli aggiornamenti
+    async function renderSpace() {
+      const root = $('space');
+      const d = info && info.disk;
+      if (!d) { root.replaceChildren(h('p', { class: 'muted', text: 'Informazioni non disponibili.' })); return; }
+      const used = d.total_bytes - d.free_bytes;
+      const reserve = d.reserve_bytes || 0;
+      const bar = h('div', { class: 'space-bar', role: 'img', 'aria-label': `Occupati ${formatBytes(used)} su ${formatBytes(d.total_bytes)}` },
+        h('i', { class: 'used' + (d.low ? ' low' : ''), style: `width:${(used / d.total_bytes * 100).toFixed(1)}%` }),
+        h('i', { class: 'reserve', style: `width:${(Math.min(reserve, d.free_bytes) / d.total_bytes * 100).toFixed(1)}%` }));
+      const list = h('div', { class: 'rows' });
+      root.replaceChildren(
+        h('div', { class: 'panel-sub', style: 'margin:6px 0 10px', text: `Restano ${formatBytes(d.usable_bytes)} per episodi, audio e foto.` }),
+        bar,
+        h('p', { class: 'muted small', style: 'margin:8px 0 0', text: `Gli ultimi ${formatBytes(reserve)} Cucù li tiene sempre liberi, per funzionare e aggiornarsi.` }),
+        list);
+      try {
+        const chars = (await api('/characters')).filter(c => c.size_bytes > 0).sort((a, b) => b.size_bytes - a.size_bytes).slice(0, 5);
+        if (!chars.length) return;
+        list.style.marginTop = '12px';
+        chars.forEach(c => list.append(h('a', { class: 'row', href: '#/personaggi/' + enc(c.name), style: 'color:inherit;text-decoration:none' },
+          h('div', { class: 'row-main', text: c.display_name }),
+          h('span', { class: 'muted', text: formatBytes(c.size_bytes) }),
+          h('span', { class: 'chev', 'aria-hidden': 'true' }, icon('chevron')))));
+      } catch (_) { /* resta senza elenco */ }
+    }
+
     function renderInfo() {
       const root = $('info');
       const kv = (k, v) => h('div', { class: 'kv' }, h('span', { class: 'muted', text: k }), h('span', { text: v }));
@@ -2118,7 +2165,6 @@
               onclick: () => askDeviceName() }))),
         kv('Indirizzo', `${info.hostname}.local`),
         kv('Versione', info.version ? `${info.version} (${info.channel === 'beta' ? 'prova' : 'stabile'})` : '—'),
-        kv('Spazio libero', info.disk ? `${formatBytes(info.disk.free_bytes)} su ${formatBytes(info.disk.total_bytes)}` : '—'),
         h('p', { class: 'muted small', style: 'margin:10px 0 0', text: 'Se cambi il nome, l\'icona già sulla schermata Home tiene quello vecchio: per aggiornarla, toglila e aggiungila di nuovo.' }),
       );
     }
@@ -3115,7 +3161,7 @@
         h('div', { id: 'upload-slot' }),
         h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => pickVideos(c.name, c.kind) }, icon('upload'), words(c.kind).add),
         pickerHint(c.kind),
-        info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.free_bytes)}` }) : null
+        info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.usable_bytes ?? info.disk.free_bytes)}` }) : null
       );
     }
 
@@ -3269,7 +3315,7 @@
         h('div', { id: 'upload-slot' }),
         h('button', { class: 'btn btn-block', id: 'upload-btn', style: 'margin-top:14px', onclick: () => pickPhotos(c.name) }, icon('upload'), 'Aggiungi foto'),
         pickerHint('photos'),
-        info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.free_bytes)}` }) : null
+        info && info.disk ? h('div', { class: 'muted small', style: 'text-align:center;margin-top:8px', text: `Spazio libero: ${formatBytes(info.disk.usable_bytes ?? info.disk.free_bytes)}` }) : null
       );
     }
 
@@ -3314,6 +3360,7 @@
         pendingDeletes.delete(job);
         try { await run(); } catch (e) { toast(e.message); }
         if (!document.hidden) refreshCharacter();
+        loadInfo();   // spazio liberato
       };
       job.timer = setTimeout(execute, 5000);
       job.flush = () => { clearTimeout(job.timer); execute(); };
@@ -3438,9 +3485,13 @@
         if (problem) { item.status = 'error'; item.error = problem; }
       }
 
-      const needed = items.filter(i => i.status === 'waiting').reduce((a, i) => a + i.file.size, 0);
-      if (info && info.disk && needed > info.disk.free_bytes) {
-        toast(`Non c'è abbastanza spazio: servono ${formatBytes(needed)}, liberi ${formatBytes(info.disk.free_bytes)}.`);
+      // Ogni file passa da una cartella temporanea prima di essere copiato: per un momento
+      // occupa il doppio (vedi SpaceGuard in main.py). Il margine di Cucù non si usa
+      const waiting = items.filter(i => i.status === 'waiting');
+      const needed = waiting.reduce((a, i) => a + i.file.size, 0) + waiting.reduce((m, i) => Math.max(m, i.file.size), 0);
+      const usable = info && info.disk ? (info.disk.usable_bytes ?? info.disk.free_bytes) : null;
+      if (usable !== null && needed > usable) {
+        toast(`Non c'è abbastanza spazio: servono ${formatBytes(needed)}, liberi ${formatBytes(usable)}. Guarda in Impostazioni › Spazio cosa occupa di più.`);
         return;
       }
 
@@ -4639,6 +4690,7 @@
     $('wifi-refresh').addEventListener('click', () => renderWifi());
     $('new-character').addEventListener('click', () => openNewCharacter());
     $('cards-add').addEventListener('click', () => openCardsAdd());
+    $('factory-reset').addEventListener('click', () => openFactoryReset());
     $('wifi-setup-refresh').addEventListener('click', () => renderWifi('wifi-setup'));
 
     // Detto PRIMA di cambiare rete: dopo, sull'hotspot, la pagina non c'è più
@@ -4770,6 +4822,14 @@
     function rememberLatest(v) {
       latestVersion = v;
       try { localStorage.setItem('cucu-update', JSON.stringify({ at: Date.now(), latest: v })); } catch (_) { /* solo una comodità */ }
+    }
+
+    // Sotto SPACE_LOW (main.py) l'avviso in cima, tranne in Impostazioni dove c'è il pannello
+    function drawSpaceBanner() {
+      const d = info && info.disk;
+      const show = !!(d && d.low) && parseRoute().section !== 'impostazioni';
+      $('space-banner').classList.toggle('hidden', !show);
+      if (show) $('space-banner-text').textContent = `Restano ${formatBytes(d.usable_bytes)} per episodi e foto: guarda cosa occupa di più.`;
     }
 
     function drawUpdateBanner() {
@@ -5126,6 +5186,52 @@
           await postAuth('/auth/change', { current_pin: current, new_pin: pin });
           toast('PIN cambiato: sugli altri dispositivi andrà inserito di nuovo');
         },
+      });
+    }
+
+    // Ripristino di fabbrica (POST /system/factory-reset): tutto quello che il genitore ha
+    // messo su Cucù sparisce. Si conferma spuntando la casella, e con il PIN se c'è
+    function openFactoryReset() {
+      const needPin = !!(authState && authState.pin_set);
+      const understood = h('input', { type: 'checkbox', id: 'fr-ok' });
+      const wifi = h('input', { type: 'checkbox', 'aria-label': 'Dimentica anche le reti Wi-Fi' });
+      wifi.checked = true;
+      const pin = needPin ? pinField('fr-pin', 'current-password') : null;
+      const go = h('button', { class: 'btn btn-block btn-danger-solid', text: 'Ripristina', disabled: true });
+      understood.addEventListener('change', () => { go.disabled = !understood.checked; });
+      go.addEventListener('click', async () => {
+        if (needPin && !pin.value) { pin.focus(); return; }
+        go.disabled = true;
+        let res;
+        try {
+          res = await api('/system/factory-reset', { method: 'POST', body: { pin: needPin ? pin.value : '', forget_wifi: wifi.checked } });
+        } catch (e) { toast(e.message); go.disabled = false; return; }
+        // le scelte fatte su questo telefono (modalità bambino, filtri, proposte già viste)
+        try { Object.keys(localStorage).filter(k => k.startsWith('cucu')).forEach(k => localStorage.removeItem(k)); } catch (_) { /* pazienza */ }
+        if (res.forget_wifi) {
+          showReconnect('Cucù è come nuovo',
+            'Ha dimenticato le reti Wi-Fi e accende la sua: guarda la TV e inquadra il codice per collegarti di nuovo.',
+            { revealAfter: 60 });
+        } else {
+          closeSheet();
+          location.hash = '#/adesso';
+          location.reload();
+        }
+      });
+      openSheet({
+        title: 'Ripristinare Cucù?',
+        content: h('div', {},
+          h('p', { class: 'sheet-text', text: "Cucù torna com'era appena uscito dalla scatola. Si cancellano i personaggi con tutti gli episodi, gli audio e le foto, le statuine abbinate, i limiti di tempo, il PIN e il nome. Resta il software, con gli aggiornamenti già fatti." }),
+          h('div', { class: 'rows', style: 'margin:14px 0 0' },
+            h('label', { class: 'row', style: 'cursor:pointer;padding-left:0;padding-right:0' },
+              h('div', { class: 'row-main' },
+                h('div', { class: 'row-title', text: 'Dimentica anche le reti Wi-Fi' }),
+                h('div', { class: 'row-sub', text: "Per darlo a un'altra famiglia: Cucù accende la sua rete e sulla TV compare come collegarsi." })),
+              h('span', { class: 'switch' }, wifi, h('span', { class: 'slider' }))),
+            h('label', { class: 'row', for: 'fr-ok', style: 'cursor:pointer;padding-left:0;padding-right:0;gap:10px' },
+              understood, h('span', { class: 'row-main', text: 'Ho capito: video e foto cancellati non si possono recuperare.' }))),
+          needPin ? h('div', { style: 'margin-top:14px' }, h('label', { class: 'lbl', for: 'fr-pin', text: 'PIN' }), pin) : null,
+          h('div', { class: 'actions' }, go, h('button', { class: 'btn btn-block', text: 'Annulla', onclick: closeSheet }))),
       });
     }
 

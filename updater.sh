@@ -203,6 +203,16 @@ fi
 
 log "Aggiornamento disponibile: $LOCAL_VERSION → $REMOTE_VERSION"
 
+# ---- SPAZIO SULLA SD ---------------------------------------------------------
+# Con la SD piena fetch, pip e initramfs fallirebbero a metà: meglio non partire.
+# Stessa soglia (UPDATE_MIN_FREE) nell'API, che rifiuta già "Aggiorna ora"
+UPDATE_MIN_FREE_KB=$((200 * 1000 * 1000 / 1024))   # 200 MB
+FREE_KB="$(df -Pk "$PROJECT_DIR" | awk 'NR==2 {print $4}')"
+if [ -n "$FREE_KB" ] && [ "$FREE_KB" -lt "$UPDATE_MIN_FREE_KB" ]; then
+    fail "Spazio libero insufficiente: $((FREE_KB / 1024)) MB, ne servono almeno $((UPDATE_MIN_FREE_KB / 1024)). Aggiornamento annullato."
+    exit 1
+fi
+
 # ---- BACKUP FILE CONFIGURAZIONE UTENTE -------------------------------------
 # tags.json, time_limits.json, tag_labels.json e ui_auth.json (PIN) vengono modificati dall'utente (tramite UI web)
 # e non devono essere sovrascritti dal git reset --hard. Vengono salvati prima

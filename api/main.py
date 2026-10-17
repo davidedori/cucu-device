@@ -609,6 +609,55 @@ class PinGuard:
                 return
         await self.app(scope, receive, send)
 
+# ---------- Spazio sulla scheda SD ----------
+# Con la SD piena smettono di funzionare le scritture dello stato (episodi, minuti), le
+# anteprime, i log e l'aggiornamento. Episodi, audio e foto non usano mai gli ultimi
+# SPACE_RESERVE: un caricamento che ci entrerebbe viene rifiutato. Sotto SPACE_LOW la
+# web UI avvisa in cima alla pagina. Stesse costanti in index.html (Impostazioni)
+
+SPACE_RESERVE = 500_000_000
+SPACE_LOW = 1_000_000_000
+UPDATE_MIN_FREE = 200_000_000   # stessa soglia in updater.sh
+
+def _free_bytes() -> Optional[int]:
+    try:
+        return shutil.disk_usage(CHARACTERS_DIR if CHARACTERS_DIR.exists() else BASE_DIR).free
+    except OSError:
+        return None
+
+def _space_message(needed: int, free: int) -> str:
+    usable = max(0, free - SPACE_RESERVE)
+    return (f"Su Cucù non c'è abbastanza spazio: servono {_fmt_bytes(needed)}, liberi "
+            f"{_fmt_bytes(usable)}. Elimina qualche episodio o foto che non serve più "
+            "(in Impostazioni › Spazio vedi chi occupa di più).")
+
+def _fmt_bytes(n: int) -> str:
+    # come formatBytes() in index.html: multipli di 1000
+    for unit, size in (("GB", 10 ** 9), ("MB", 10 ** 6)):
+        if n >= size:
+            return f"{n / size:.1f} {unit}".replace(".", ",").replace(",0 ", " ")
+    return f"{max(n, 0) // 1000} KB"
+
+_UPLOAD_PATH = re.compile(r"^/characters/[^/]+/(episodes|photos|image|card/image)$")
+
+class SpaceGuard:
+    """Rifiuta subito (prima di ricevere il file) un caricamento che entrerebbe nel
+    margine. Il file passa prima da tmp_uploads (TMPDIR, sulla stessa SD) e poi viene
+    copiato nella cartella del personaggio: per un momento occupa il doppio."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("method") == "POST" and _UPLOAD_PATH.match(scope.get("path", "")):
+            length = dict(scope.get("headers") or []).get(b"content-length", b"")
+            free = _free_bytes()
+            if length.isdigit() and free is not None and free - 2 * int(length) < SPACE_RESERVE:
+                response = JSONResponse({"detail": _space_message(2 * int(length), free)}, status_code=507)
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+app.add_middleware(SpaceGuard)
 app.add_middleware(PinGuard)
 
 # Schermate della TV con testo e QR, disegnate qui (api/tv_screens.py) perché cambiano
@@ -967,7 +1016,13 @@ def system_info():
     cfg = dotenv_values(CONFIG_ENV_FILE) if CONFIG_ENV_FILE.exists() else {}
     try:
         disk = shutil.disk_usage(CHARACTERS_DIR if CHARACTERS_DIR.exists() else BASE_DIR)
-        disk_info = {"free_bytes": disk.free, "total_bytes": disk.total}
+        disk_info = {
+            "free_bytes": disk.free, "total_bytes": disk.total,
+            # quello che episodi e foto possono ancora usare (il resto è il margine)
+            "usable_bytes": max(0, disk.free - SPACE_RESERVE),
+            "reserve_bytes": SPACE_RESERVE,
+            "low": disk.free < SPACE_LOW,
+        }
     except OSError:
         disk_info = None
     return {
@@ -1151,6 +1206,23 @@ def system_now():
         "volume": data.get("volume") if alive else None,
     }
 
+def _dir_size(path: Path) -> int:
+    """Spazio occupato da una cartella (episodi, foto, anteprime)."""
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for e in it:
+                try:
+                    if e.is_dir(follow_symlinks=False):
+                        total += _dir_size(Path(e.path))
+                    elif e.is_file(follow_symlinks=False):
+                        total += e.stat(follow_symlinks=False).st_size
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return total
+
 @app.get("/characters")
 def list_characters():
     episode_state = load_episode_state()
@@ -1198,6 +1270,7 @@ def list_characters():
             },
             "tags_count": tags_count,
             "card": _card_info(char_dir),
+            "size_bytes": _dir_size(char_dir),
         })
 
     # ordiniamo per nome giusto per estetica
@@ -1811,8 +1884,15 @@ async def upload_character_episodes(
         tmp_path = dest_path.with_name(dest_path.name + ".part")
         try:
             with tmp_path.open("wb") as f:
+                written = 0
                 while chunk := await upload.read(1024 * 1024):
                     f.write(chunk)
+                    written += len(chunk)
+                    # senza Content-Length SpaceGuard non può sapere quanto è grande
+                    if written % (64 * 1024 * 1024) < len(chunk):
+                        free = _free_bytes()
+                        if free is not None and free < SPACE_RESERVE:
+                            raise HTTPException(status_code=507, detail=_space_message(written, free + written))
                 f.flush()
                 os.fsync(f.fileno())
             # Prima che diventi un episodio: un video che Cucù non riesce a
@@ -2657,6 +2737,11 @@ def start_update(background_tasks: BackgroundTasks, body: UpdateStart = UpdateSt
     """
     if _update_status()["running"]:
         return {"status": "ok", "message": "Aggiornamento già in corso"}
+    free = _free_bytes()
+    if free is not None and free < UPDATE_MIN_FREE:
+        raise HTTPException(status_code=507, detail=(
+            f"Per aggiornare servono almeno {_fmt_bytes(UPDATE_MIN_FREE)} liberi su Cucù, ce ne sono "
+            f"{_fmt_bytes(free)}. Elimina qualche episodio o foto che non serve più e riprova."))
     if _is_player_busy() and not body.force:
         raise HTTPException(status_code=409, detail="C'è un episodio in corso")
     _write_json_atomic(UPDATE_REQUEST_FILE, {"until": int(time.time()) + UPDATE_REQUEST_SEC})
@@ -3063,3 +3148,62 @@ def forget_wifi(ssid: str, background_tasks: BackgroundTasks):
         return {"status": "ok", "deleted": ssid}
     except subprocess.CalledProcessError as e:
         raise HTTPException(status_code=404, detail=f"Errore (forse rete non trovata): {e}")
+
+
+# --- Ripristino di fabbrica ------------------------------------------------------
+# Da Impostazioni, per ricominciare o per dare Cucù a un'altra famiglia: cancella
+# personaggi (con episodi, audio e foto), statuine, giri, limiti e minuti, PIN, nome,
+# volume e, se richiesto, le reti Wi-Fi salvate. Restano il software, config.env
+# (canale degli aggiornamenti e password dell'hotspot) e il nome tecnico (cucu-xxxx).
+# Con il PIN serve anche il PIN, come per toglierlo
+
+FACTORY_FILES = [EPISODE_STATE_FILE, BASE_DIR / "episode_state.json.bak", TAG_LABELS_FILE,
+                 TIME_LIMITS_FILE, DAILY_USAGE_FILE, DEVICE_NAME_FILE, BASE_DIR / "volume.json",
+                 NO_WIFI_FILE, UI_AUTH_FILE]
+
+class FactoryReset(BaseModel):
+    pin: str = ""
+    forget_wifi: bool = True
+
+def _factory_reset_followup(forget_wifi: bool):
+    time.sleep(2)   # prima la risposta al telefono: dimenticando le reti si scollega
+    _restart_service_task()
+    if forget_wifi:
+        with _wifi_lock:
+            try:
+                for ssid in _saved_networks():
+                    subprocess.run(["sudo", "nmcli", "con", "delete", ssid], capture_output=True, timeout=30)
+            except (OSError, subprocess.SubprocessError) as e:
+                print(f"[Ripristino] Reti Wi-Fi non dimenticate: {e}")
+            _forget_followup()
+
+@app.post("/system/factory-reset")
+def factory_reset(body: FactoryReset, request: Request, background_tasks: BackgroundTasks):
+    auth = load_ui_auth()
+    if auth is not None:
+        ip = request.client.host if request.client else "?"
+        _check_rate_limit(ip)
+        if not _pin_matches(auth, body.pin):
+            _register_failure(ip)
+            raise HTTPException(status_code=403, detail="PIN sbagliato.")
+    if _update_status()["running"]:
+        raise HTTPException(status_code=409, detail="C'è un aggiornamento in corso: riprova quando ha finito.")
+
+    # prima le statuine: da qui nessuna fa più partire niente
+    _write_json_atomic(TAGS_FILE, {})
+    if CHARACTERS_DIR.exists():
+        for d in CHARACTERS_DIR.iterdir():
+            if d.is_dir():
+                shutil.rmtree(d, ignore_errors=True)
+            else:
+                d.unlink(missing_ok=True)
+    CHARACTERS_DIR.mkdir(parents=True, exist_ok=True)
+    for f in FACTORY_FILES:
+        f.unlink(missing_ok=True)
+    _fsync_path(BASE_DIR)
+    print(f"[Ripristino] Cucù riportato com'era (reti Wi-Fi dimenticate: {body.forget_wifi})")
+
+    background_tasks.add_task(_factory_reset_followup, body.forget_wifi)
+    resp = JSONResponse({"status": "ok", "forget_wifi": body.forget_wifi})
+    resp.delete_cookie(SESSION_COOKIE, path="/")
+    return resp
