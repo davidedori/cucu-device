@@ -1488,7 +1488,6 @@
           <p style="margin:0">Cucù funziona senza Wi-Fi. Se l'app di Cucù è già sulla schermata Home, aprila: funziona anche qui. Altrimenti apri <strong id="nowifi-host">cucu-xxxx.local</strong> nel browser e aggiungilo alla schermata Home: funzionerà anche quando Cucù sarà sulla rete di casa. Se non si apre, usa <strong>10.42.0.1</strong>.</p>
           <p class="muted" id="nowifi-captive" style="margin:12px 0 0">Chiudi questa finestra con la X e scegli di usare la rete senza Internet: così resti collegato a Cucù. Lo chiede solo la prima volta.</p>
           <p class="muted" style="margin:12px 0 0">Se perdi l'indirizzo: appoggia la stessa statuina 5 volte di fila e lasciala lì, e sulla TV compare come raggiungere Cucù.</p>
-          <a class="btn btn-primary btn-block" id="nowifi-open" href="#/adesso" style="margin-top:16px">Apri Cucù</a>
         </div>
       </div>
     </section>
@@ -2020,6 +2019,7 @@
       }
       lastSection = r.section;
       document.body.classList.toggle('setup-mode', r.section === 'wifi' || r.section === 'nowifi');
+      document.title = pageTitle();
       drawUpdateBanner();
       drawSpaceBanner();
 
@@ -2060,7 +2060,6 @@
         showView('nowifi');
         infoReady.then(() => { if (info) $('nowifi-host').textContent = `${info.hostname}.local`; });
         // l'app solo fuori dal mini-browser del captive portal (non ricorda il PIN, niente caricamenti)
-        $('nowifi-open').hidden = inCaptiveBrowser();
         $('nowifi-captive').hidden = !inCaptiveBrowser();
       } else {
         showView('impostazioni');
@@ -2119,13 +2118,21 @@
 
     // Il nome scelto per questo Cucù (o "Cucù"): in alto a destra, nel titolo della pagina e
     // nel nome dell'icona sulla Home (lo prende quando la si aggiunge; il manifest ce l'ha già)
+    // Il titolo della pagina: il nome di questo Cucù, ma nelle pagine del primo collegamento
+    // e del senza Wi-Fi (quelle che si aprono nella finestrella del captive portal) "Wi-Fi di Cucù"
+    function pageTitle() {
+      const s = parseRoute().section;
+      if (s === 'wifi' || s === 'nowifi') return 'Wi-Fi di Cucù';
+      return (info && info.name) || 'Cucù';
+    }
+
     function applyDeviceName() {
       if (!info) return;
       const name = info.name || 'Cucù';
       const pill = $('device-pill');
       pill.textContent = [info.name || info.hostname, info.version && 'v' + info.version].filter(Boolean).join(' · ');
       pill.hidden = false;
-      document.title = name;
+      document.title = pageTitle();
       document.querySelector('meta[name="apple-mobile-web-app-title"]').setAttribute('content', name);
     }
 
