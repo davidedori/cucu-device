@@ -1,5 +1,5 @@
 {
-  "version": "0.3.1",
+  "version": "0.3.2",
   "min_version": "0.1.0",
-  "changelog": "Wi-Fi passwords are no longer written to the system log, and the old log that contained them is deleted once. On Cucù's own network the app installed at home works and removes \"Colleghiamoci!\" from the TV; the iPhone portal always opens the Wi-Fi page, and the no-Wi-Fi page suggests cucu-xxxx.local first. After switching network, Settings retries the network list."
+  "changelog": "The app no longer gets stuck after a network switch: it waits for Cucù to be on the new network, never shows Cucù's own network as connected, and retries the network list. The API stops within 3 seconds on restarts and updates, even with a phone connected. Texts and steps fit Android, iPad and computers too: the TV screens say \"Collegati al Wi-Fi\" and point to cucu-xxxx.local, the portal page explains how to stay connected on each device, and the device name prompt only promises the home screen icon before the app is added there. The ready screen has a small blue cloud."
 }
