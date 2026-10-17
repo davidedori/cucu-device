@@ -4583,9 +4583,33 @@
     // sezione si ridisegna (per esempio "Cerca di nuovo le reti")
     const openDetails = new Set();
 
+    // In Impostazioni, mentre cerca le reti: la stessa forma della sezione finita (rete
+    // attuale e voci chiuse), così la pagina sotto non salta quando arrivano i dati
+    function wifiSkeleton() {
+      const closed = (label) => h('details', { class: 'more', style: 'margin-top:10px;opacity:.5', inert: true },
+        h('summary', {}, icon('chevron'), label));
+      return [
+        h('div', { class: 'rows', style: 'margin-top:0' },
+          h('div', { class: 'row', style: 'border-top:0' },
+            h('div', { class: 'row-lead', style: 'background:var(--bg);color:var(--muted)' }, signalBars(0)),
+            h('div', { class: 'row-main' },
+              h('div', { class: 'row-title', text: 'Cerco le reti…' }),
+              h('div', { class: 'row-sub', html: '&nbsp;' })))),
+        closed('Reti vicine'), closed('Reti salvate'), closed('La rete di Cucù'),
+      ];
+    }
+
     async function renderWifi(rootId = 'wifi') {
       const root = $(rootId);
-      root.replaceChildren(h('p', { class: 'muted', text: 'Cerco le reti…' }));
+      if (rootId !== 'wifi') {
+        root.replaceChildren(h('p', { class: 'muted', text: 'Cerco le reti…' }));
+      } else if (root.querySelector('.row-title')) {
+        // si cerca di nuovo: resta quello che c'è, appena velato, fino ai dati nuovi
+        root.style.opacity = '.55';
+      } else {
+        root.replaceChildren(...wifiSkeleton());
+      }
+      root.setAttribute('aria-busy', 'true');
       try {
         const data = await api('/system/wifi');
         wifiCurrent = data.current ? data.current.ssid : null;
@@ -4666,6 +4690,9 @@
         root.replaceChildren(...els);
       } catch (e) {
         root.replaceChildren(h('p', { class: 'muted', text: 'Non riesco a leggere le reti: ' + e.message }));
+      } finally {
+        root.style.opacity = '';
+        root.removeAttribute('aria-busy');
       }
     }
 
