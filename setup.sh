@@ -199,7 +199,7 @@ chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "$PROJECT_DIR"
 step "Copia file di progetto"
 
 # Codice: sovrascrive sempre (è la fonte di verità)
-for f in read_nfc.py nfc_reader.py media_check.py clock.py led.py updater.sh VERSION requirements.txt card_spec.json; do
+for f in read_nfc.py nfc_reader.py media_check.py clock.py led.py updater.sh system_fixes.sh VERSION requirements.txt card_spec.json; do
     copy_file "$REPO_DIR/$f" "$PROJECT_DIR/$f"
 done
 copy_file "$REPO_DIR/api/main.py"    "$PROJECT_DIR/api/main.py"
@@ -211,7 +211,7 @@ if [ "$(realpath "$REPO_DIR/api/static")" != "$(realpath -m "$PROJECT_DIR/api/st
     cp -r "$REPO_DIR/api/static/." "$PROJECT_DIR/api/static/"
 fi
 chmod +x "$PROJECT_DIR/read_nfc.py" "$PROJECT_DIR/updater.sh"
-ok "Copiati: read_nfc.py, nfc_reader.py, media_check.py, clock.py, led.py, updater.sh, VERSION, requirements.txt, card_spec.json, api/main.py, api/index.html, api/cards.py, api/static/"
+ok "Copiati: read_nfc.py, nfc_reader.py, media_check.py, clock.py, led.py, updater.sh, system_fixes.sh, VERSION, requirements.txt, card_spec.json, api/main.py, api/index.html, api/cards.py, api/static/"
 
 # Grafica: sovrascrive sempre (skip se repo == deploy dir)
 if [ "$(realpath "$REPO_DIR/graphics")" != "$(realpath "$PROJECT_DIR/graphics")" ]; then

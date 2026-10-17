@@ -19,6 +19,10 @@ Environment=XDG_RUNTIME_DIR=/run/user/__DEPLOY_UID__ TERM=linux
 # e altrimenti fallisce sempre in silenzio (mascherato dal "-"), lasciando
 # lo schermo grigio invece di congelare l'ultimo frame dell'animazione.
 ExecStartPre=-+/usr/bin/plymouth quit --retain-splash
+# Sistemazioni di sistema come root (system_fixes.sh): così arrivano anche con un
+# aggiornamento, che gira con lo updater.sh della versione precedente. Veloce e
+# idempotente; con "-" un errore non ferma il lettore
+ExecStartPre=-+/bin/bash /home/davidedorigatti/cucu-device/system_fixes.sh
 ExecStart=/usr/bin/python3 -u /home/davidedorigatti/cucu-device/read_nfc.py
 WorkingDirectory=/home/davidedorigatti/cucu-device
 # /run/cucu (RAM): ci va last_seen_tag.json, riscritto 10 volte al secondo, che
