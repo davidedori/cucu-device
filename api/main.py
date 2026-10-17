@@ -2790,24 +2790,24 @@ def list_wifi():
     - saved: lista connessioni salvate
     - scan: lista reti visibili al momento
     """
-    # 1. Trova connessione attiva
+    # 1. Connessione attiva: dalla connessione di NetworkManager, non dall'elenco delle
+    # reti viste (che subito dopo un cambio di rete può ancora dare attivo l'hotspot).
+    # L'hotspot non è "la rete a cui Cucù è collegato": current resta None
     current = None
     try:
-        # nmcli -t -f ACTIVE,SSID,SIGNAL,BARS dev wifi
-        res = subprocess.run(
-            ["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL,BARS", "dev", "wifi"],
-            capture_output=True, text=True
-        )
-        for line in res.stdout.splitlines():
-            # es: yes:Vodafone-123:80:▂▄▆_
-            parts = line.split(":")
-            if len(parts) >= 4 and parts[0] == "yes":
-                current = {
-                    "ssid": parts[1],
-                    "signal": parts[2],
-                    "bars": parts[3]
-                }
-                break
+        ssid, is_hotspot = _active_wifi()
+        if ssid and not is_hotspot:
+            current = {"ssid": ssid, "signal": "", "bars": ""}
+            res = subprocess.run(
+                ["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL,BARS", "dev", "wifi"],
+                capture_output=True, text=True, timeout=10
+            )
+            for line in res.stdout.splitlines():
+                # es: yes:Vodafone-123:80:▂▄▆_
+                parts = line.split(":")
+                if len(parts) >= 4 and parts[0] == "yes" and parts[1] == ssid:
+                    current.update(signal=parts[2], bars=parts[3])
+                    break
     except Exception as e:
         print(f"Errore check active wifi: {e}")
 
@@ -2863,6 +2863,17 @@ def list_wifi():
         "scan": scan_results,
         "no_wifi": NO_WIFI_FILE.exists(),   # "Usa Cucù senza Wi-Fi"
     }
+
+
+@app.get("/system/wifi/current")
+def current_wifi():
+    """La rete a cui Cucù è collegato adesso, senza cercare le reti (veloce): l'app la usa
+    dopo un cambio di rete per sapere quando Cucù è arrivato su quella scelta."""
+    try:
+        ssid, is_hotspot = _active_wifi()
+    except Exception:
+        ssid, is_hotspot = None, False
+    return {"ssid": ssid, "hotspot": is_hotspot}
 
 
 def _connect_wifi_task(ssid: str, password: str):

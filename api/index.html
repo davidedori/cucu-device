@@ -1485,8 +1485,8 @@
       </div>
       <div class="stack">
         <div class="panel">
+          <p class="note" id="nowifi-captive" style="margin:0 0 14px">Chiudi questa finestra con la X e scegli di usare la rete senza Internet: così resti collegato a Cucù. Lo chiede solo la prima volta.</p>
           <p style="margin:0">Cucù funziona senza Wi-Fi. Se l'app di Cucù è già sulla schermata Home, aprila: funziona anche qui. Altrimenti apri <strong id="nowifi-host">cucu-xxxx.local</strong> nel browser e aggiungilo alla schermata Home: funzionerà anche quando Cucù sarà sulla rete di casa. Se non si apre, usa <strong>10.42.0.1</strong>.</p>
-          <p class="muted" id="nowifi-captive" style="margin:12px 0 0">Chiudi questa finestra con la X e scegli di usare la rete senza Internet: così resti collegato a Cucù. Lo chiede solo la prima volta.</p>
           <p class="muted" style="margin:12px 0 0">Se perdi l'indirizzo: appoggia la stessa statuina 5 volte di fila e lasciala lì, e sulla TV compare come raggiungere Cucù.</p>
         </div>
       </div>
@@ -4882,9 +4882,20 @@
       return `Per qualche secondo perdi il collegamento con Cucù. Poi collegati anche tu a "${ssid}" e inquadra il codice che compare sulla TV (oppure apri ${deviceHost()}).`;
     }
 
+    // Pronto quando Cucù dice di essere sulla rete scelta: rispondere non basta, perché
+    // mentre si collega risponde ancora per qualche secondo dalla rete di prima (anche la
+    // sua, se l'app è aperta con il nome .local sulla rete di Cucù)
+    const onNetwork = (ssid) => async () => {
+      const r = await fetch('/system/wifi/current', { cache: 'no-store' });
+      if (r.status === 404) return apiAnswers();   // API di prima
+      if (!r.ok) return false;
+      const d = await r.json();
+      return d.ssid === ssid && !d.hotspot;
+    };
+
     function afterSwitch(ssid) {
       if (onHotspot) showJoinHome(ssid);
-      else showReconnect('Cambio rete', afterSwitchText(ssid));
+      else showReconnect('Cambio rete', afterSwitchText(ssid), { ready: onNetwork(ssid) });
     }
 
     // Dopo il cambio di rete dall'hotspot: niente attesa di Cucù (la pagina perde la rete), solo cosa fare
