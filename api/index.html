@@ -2153,15 +2153,20 @@
         h('i', { class: 'used' + (d.low ? ' low' : ''), style: `width:${(used / d.total_bytes * 100).toFixed(1)}%` }),
         h('i', { class: 'reserve', style: `width:${(Math.min(reserve, d.free_bytes) / d.total_bytes * 100).toFixed(1)}%` }));
       const list = h('div', { class: 'rows' });
+      const more = h('div');
       root.replaceChildren(
         h('div', { class: 'panel-sub', style: 'margin:6px 0 10px', text: `Restano ${formatBytes(d.usable_bytes)} per episodi, audio e foto.` }),
         bar,
         h('p', { class: 'muted small', style: 'margin:8px 0 0', text: `Gli ultimi ${formatBytes(reserve)} Cucù li tiene sempre liberi, per funzionare e aggiornarsi.` }),
-        list);
+        more);
       try {
         const chars = (await api('/characters')).filter(c => c.size_bytes > 0).sort((a, b) => b.size_bytes - a.size_bytes).slice(0, 5);
         if (!chars.length) return;
-        list.style.marginTop = '12px';
+        // aperta da sola quando lo spazio sta finendo: è lì che si guarda
+        const det = h('details', { class: 'more', style: 'margin-top:10px', open: d.low || openDetails.has('space') || null },
+          h('summary', {}, icon('chevron'), 'Chi occupa di più'), list);
+        det.addEventListener('toggle', () => det.open ? openDetails.add('space') : openDetails.delete('space'));
+        more.replaceChildren(det);
         chars.forEach(c => list.append(h('a', { class: 'row', href: '#/personaggi/' + enc(c.name), style: 'color:inherit;text-decoration:none' },
           h('div', { class: 'row-main', text: c.display_name }),
           h('span', { class: 'muted', text: formatBytes(c.size_bytes) }),
@@ -4574,6 +4579,10 @@
         [1, 2, 3, 4].map(i => h('i', { class: i <= n ? 'on' : '' })));
     }
 
+    // Sezioni a scomparsa di Impostazioni aperte dal genitore: restano aperte quando la
+    // sezione si ridisegna (per esempio "Cerca di nuovo le reti")
+    const openDetails = new Set();
+
     async function renderWifi(rootId = 'wifi') {
       const root = $(rootId);
       root.replaceChildren(h('p', { class: 'muted', text: 'Cerco le reti…' }));
@@ -4597,7 +4606,6 @@
           .filter(n => n.ssid !== wifiCurrent)
           .sort((a, b) => (parseInt(b.signal, 10) || 0) - (parseInt(a.signal, 10) || 0));
 
-        els.push(h('div', { class: 'lbl', style: 'margin:18px 0 0', text: 'Reti vicine' }));
         const list = h('div', { class: 'rows' });
         if (!nets.length) list.append(h('div', { class: 'row-empty', text: 'Nessun\'altra rete trovata.' }));
         nets.forEach(net => {
@@ -4615,7 +4623,16 @@
             })
           ));
         });
-        els.push(list);
+        if (rootId === 'wifi') {
+          // in Impostazioni chiuse come le salvate (resta aperta se la si era aperta)
+          const near = h('details', { class: 'more', style: 'margin-top:10px', open: openDetails.has('wifi-near') || null },
+            h('summary', {}, icon('chevron'), `Reti vicine (${nets.length})`), list);
+          near.addEventListener('toggle', () => near.open ? openDetails.add('wifi-near') : openDetails.delete('wifi-near'));
+          els.push(near);
+        } else {
+          // nel primo collegamento sono tutta la pagina
+          els.push(h('div', { class: 'lbl', style: 'margin:18px 0 0', text: 'Reti vicine' }), list);
+        }
 
         // la rete di Cucù ha la sua sezione qui sotto
         const savedNets = data.saved.filter(ssid => !ssid.endsWith('_AP'));
