@@ -151,22 +151,25 @@ def render(title, items, qr_data, overlay_path: Path, base_png: Path, full_path:
 def render_done(ssid: str, host: str, run_dir: Path, graphics_dir: Path):
     """"Fatto!": Cucù è sulla rete di casa, il QR apre l'app."""
     render("Fatto!", [
-        {"lines": [[("Collega il telefono al Wi-Fi", False)], [(ssid, True)]],
+        {"lines": [[("Collegati al Wi-Fi", False)], [(ssid, True)]],
          "notes": [[("ora anche Cucù è lì", False)]]},
         {"lines": [[("Inquadra il codice", False)]],
          "notes": [[("oppure vai su ", False), (host, True)]]},
     ], f"http://{host}/", run_dir / "done_overlay.png", graphics_dir / "done.png", run_dir / "done_screen.png",
-        pill="Poi aggiungi Cucù alla schermata Home", pill_colors=INFO)
+        pill="Sul telefono, aggiungi poi Cucù alla schermata Home", pill_colors=INFO)
 
 
-def render_first(ap_ssid: str, password: str, ap_ip: str, run_dir: Path, graphics_dir: Path):
-    """"Colleghiamoci!": Cucù non ha ancora una rete, il QR collega il telefono all'hotspot."""
+def render_first(ap_ssid: str, password: str, ap_ip: str, run_dir: Path, graphics_dir: Path, host: str = None):
+    """"Colleghiamoci!": Cucù non ha ancora una rete, il QR collega il telefono all'hotspot.
+    host: cucu-xxxx.local, che si apre anche sulla rete di Cucù; ap_ip come ripiego (su
+    Android i nomi .local non sempre si aprono)."""
     render("Colleghiamoci!", [
         {"lines": [[("Inquadra il codice con il telefono", False)]],
          "notes": [[("oppure collegati alla rete ", False), (ap_ssid, True)],
                    [("password ", False), (password, True)]]},
         {"lines": [[("Si apre la pagina per il Wi-Fi di casa", False)]],
-         "notes": [[("se non si apre, vai su ", False), (ap_ip, True)]]},
+         "notes": ([[("se non si apre, vai su ", False), (host, True)], [("oppure ", False), (ap_ip, True)]] if host
+                   else [[("se non si apre, vai su ", False), (ap_ip, True)]])},
     ], wifi_qr_data(ap_ssid, password), run_dir / "first_overlay.png", graphics_dir / "first.png",
         run_dir / "first_screen.png")
 
@@ -180,12 +183,13 @@ def render_help(run_dir: Path, graphics_dir: Path, host: str, ap_ssid: str = Non
             {"lines": [[("Inquadra il codice con il telefono", False)]],
              "notes": [[("oppure collegati alla rete ", False), (ap_ssid, True)],
                        [("password ", False), (password, True)]]},
-            {"lines": [[("Apri l'app Cucù", True), (" o vai su ", False), (ap_ip, True)]]},
+            {"lines": [[("Apri l'app Cucù", True), (" o vai su ", False), (host, True)]],
+             "notes": [[("se non si apre, ", False), (ap_ip, True)]]},
         ]
         qr = wifi_qr_data(ap_ssid, password)
     else:
         items = [
-            {"lines": [[("Collega il telefono al Wi-Fi", False)], [(ssid or "", True)]],
+            {"lines": [[("Collegati al Wi-Fi", False)], [(ssid or "", True)]],
              "notes": [[("la stessa rete di Cucù", False)]]},
             {"lines": [[("Apri l'app Cucù", True), (" o inquadra il codice", False)]],
              "notes": [[("oppure vai su ", False), (host, True)]]},

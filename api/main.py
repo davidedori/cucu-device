@@ -796,7 +796,8 @@ def _refresh_first_screen():
     ssid, password = _hotspot()
     try:
         import tv_screens
-        tv_screens.render_first(ssid, password, HOTSPOT_IP, run_dir, GRAPHICS_DIR)
+        tv_screens.render_first(ssid, password, HOTSPOT_IP, run_dir, GRAPHICS_DIR,
+                                host=f"{socket.gethostname()}.local")
     except Exception as e:
         print(f"[WiFi] Schermata del primo collegamento non disponibile: {e}")
         return

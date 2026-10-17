@@ -85,11 +85,18 @@ HOW_TO = {
 }
 
 
+# Su iPad stessi percorsi nelle impostazioni, con il suo nome (l'iPad recente si presenta
+# come un Mac: lì il consiglio resta quello generico)
+HOW_TO["ipad"] = {k: v.replace("iPhone", "iPad") for k, v in HOW_TO["ios"].items()}
+
+
 def platform_from_user_agent(user_agent):
     ua = user_agent or ""
     if "Android" in ua:
         return "android"
-    if any(k in ua for k in ("iPhone", "iPad", "iPod")):
+    if "iPad" in ua:
+        return "ipad"
+    if any(k in ua for k in ("iPhone", "iPod")):
         return "ios"
     return None
 
