@@ -321,8 +321,11 @@ had_tag = False
 # sconosciuta): finché resta appoggiata non si ritenta a ogni tick
 start_blocked_uid = None
 
-# Gesto d'emergenza: la stessa statuina appoggiata PIN_RESET_TAPS volte entro
-# PIN_RESET_TAPS_SEC. Finché la statuina resta appoggiata, e solo finché resta:
+# Gesto d'emergenza: la stessa statuina appoggiata PIN_RESET_TAPS volte di fila,
+# ognuna entro PIN_RESET_GAP_SEC dalla precedente. Conta il ritmo, non il tempo
+# totale: con una statuina sconosciuta si aspetta il punto di domanda prima di
+# toglierla, ~4 s ad appoggio, e 5 appoggi superavano i 15 s che c'erano prima
+# (cucu-14d5, 16/10: 15,8 s). Finché la statuina resta appoggiata, e solo finché resta:
 # - sulla TV "Eccomi!", come raggiungere Cucù adesso (l'API la disegna da
 #   help_request.json: QR del Wi-Fi dell'hotspot, o nome della rete e indirizzo)
 # - se c'è il PIN, una finestra in cui la web UI accetta un PIN nuovo senza quello
@@ -336,11 +339,11 @@ start_blocked_uid = None
 UI_AUTH_FILE = BASE_DIR / "ui_auth.json"
 PIN_RESET_FILE = RUN_DIR / "pin_reset.json"
 PIN_RESET_TAPS = 5
-PIN_RESET_TAPS_SEC = 15.0
+PIN_RESET_GAP_SEC = 6.0
 PIN_RESET_SEC = 20
 PIN_RESET_BEAT = 5.0
 pin_reset_uid = None
-pin_reset_taps = []  # istanti (monotoni) degli ultimi appoggi di pin_reset_uid
+pin_reset_taps = []  # istanti (monotoni) degli appoggi di fila di pin_reset_uid
 pin_window_uid = None  # statuina che tiene aperta la finestra del PIN
 pin_window_beat = 0.0
 HELP_REQUEST_FILE = RUN_DIR / "help_request.json"
@@ -350,9 +353,9 @@ def track_pin_reset_gesture(uid):
     """Da chiamare a ogni statuina appoggiata (anche sconosciuta)."""
     global pin_reset_uid, pin_reset_taps, help_uid, pin_window_uid, pin_window_beat
     now = time.monotonic()
-    if uid != pin_reset_uid:
+    if uid != pin_reset_uid or (pin_reset_taps and now - pin_reset_taps[-1] > PIN_RESET_GAP_SEC):
         pin_reset_uid, pin_reset_taps = uid, []
-    pin_reset_taps = [t for t in pin_reset_taps if now - t < PIN_RESET_TAPS_SEC] + [now]
+    pin_reset_taps.append(now)
     if len(pin_reset_taps) < PIN_RESET_TAPS:
         return
     pin_reset_taps = []
