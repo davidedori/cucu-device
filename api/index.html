@@ -1486,7 +1486,8 @@
       <div class="stack">
         <div class="panel">
           <p class="note" id="nowifi-captive" style="margin:0 0 14px">Chiudi questa finestra con la X e scegli di usare la rete senza Internet: così resti collegato a Cucù. Lo chiede solo la prima volta.</p>
-          <p style="margin:0">Cucù funziona senza Wi-Fi. Se l'app di Cucù è già sulla schermata Home, aprila: funziona anche qui. Altrimenti apri <strong id="nowifi-host">cucu-xxxx.local</strong> nel browser e aggiungilo alla schermata Home: funzionerà anche quando Cucù sarà sulla rete di casa. Se non si apre, usa <strong>10.42.0.1</strong>.</p>
+          <p style="margin:0" id="nowifi-where">Cucù funziona senza Wi-Fi. Se l'app di Cucù è già sulla schermata Home, aprila: funziona anche qui. Altrimenti apri <strong id="nowifi-host">cucu-xxxx.local</strong> nel browser e aggiungilo alla schermata Home: funzionerà anche quando Cucù sarà sulla rete di casa. Se non si apre, usa <strong>10.42.0.1</strong>.</p>
+          <p style="margin:0" id="nowifi-where-android" hidden>Cucù funziona senza Wi-Fi. Apri <strong>10.42.0.1</strong> in Chrome e aggiungilo alla schermata Home: sulla rete di Cucù l'indirizzo è sempre questo.</p>
           <p class="muted" style="margin:12px 0 0">Se perdi l'indirizzo: appoggia la stessa statuina 5 volte di fila e lasciala lì, e sulla TV compare come raggiungere Cucù.</p>
         </div>
       </div>
@@ -1999,6 +2000,12 @@
         if (location.hash !== '#/adesso') history.replaceState(null, '', '#/adesso');
         return;
       }
+      // Nel mini-browser del captive portal solo le pagine del Wi-Fi: l'app lì non va (non ricorda
+      // il PIN, niente caricamenti). Ci si arriva anche senza volerlo: su Android è successo dopo
+      // aver scelto di usare la rete senza Internet
+      if (inCaptiveBrowser() && !['wifi', 'nowifi'].includes(parseRoute().section)) {
+        history.replaceState(null, '', info && info.no_wifi ? '#/nowifi' : '#/wifi');
+      }
       const r = parseRoute();
 
       // Uscendo da Tempo con modifiche non salvate: si chiede prima di perderle
@@ -2061,6 +2068,9 @@
         infoReady.then(() => { if (info) $('nowifi-host').textContent = `${info.hostname}.local`; });
         // l'app solo fuori dal mini-browser del captive portal (non ricorda il PIN, niente caricamenti)
         $('nowifi-captive').hidden = !inCaptiveBrowser();
+        // Android sulla rete di Cucù non ha trovato il nome .local (prova di ottobre 2026): l'indirizzo
+        $('nowifi-where').hidden = phonePlatform() === 'android';
+        $('nowifi-where-android').hidden = phonePlatform() !== 'android';
         // iPhone e iPad: la X, poi "usa senza Internet". Altrove (Android, Mac) di solito è il
         // dispositivo a chiedere se restare collegato a una rete senza Internet
         $('nowifi-captive').textContent = phonePlatform() === 'ios'
