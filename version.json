@@ -1,5 +1,5 @@
 {
-  "version": "0.3.2",
+  "version": "0.3.3",
   "min_version": "0.1.0",
-  "changelog": "The app no longer gets stuck after a network switch: it waits for Cucù to be on the new network, never shows Cucù's own network as connected, and retries the network list. The API stops within 3 seconds on restarts and updates, even with a phone connected. Texts and steps fit Android, iPad and computers too: the TV screens say \"Collegati al Wi-Fi\" and point to cucu-xxxx.local, the portal page explains how to stay connected on each device, and the device name prompt only promises the home screen icon before the app is added there. The ready screen has a small blue cloud."
+  "changelog": "The emergency gesture works with any figurine, even one not paired yet: what counts is the rhythm, five taps about 3 seconds apart, and the boot screen now reminds parents how to do it. In the Wi-Fi window that opens on Cucù's own network only the Wi-Fi pages appear, never the whole app (it happened on Android after choosing to stay on a network without Internet), and on Android the page for using Cucù without Wi-Fi points to 10.42.0.1."
 }
