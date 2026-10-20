@@ -5436,7 +5436,10 @@
         if (res.forget_wifi) {
           showReconnect('Cucù è come nuovo',
             'Ha dimenticato le reti Wi-Fi e accende la sua. Quando sulla TV compare "Colleghiamoci!" il ripristino è finito: puoi spegnere Cucù e darlo a chi vuoi, oppure inquadrare il codice per collegarti di nuovo.',
-            { revealAfter: 60 });
+            // niente ricarica appena l'API risponde: per qualche secondo risponde ancora dalla rete di
+            // casa, e la pagina ricaricata (nome e scelte appena cancellati) chiedeva come chiamarlo
+            // proprio mentre spariva. Da qui si torna dalla rete di Cucù, con il codice sulla TV
+            { revealAfter: 60, ready: () => Promise.resolve(false) });
         } else {
           closeSheet();
           location.hash = '#/adesso';
@@ -5555,20 +5558,26 @@
     // All'avvio al massimo una proposta: prima la schermata Home (nel browser),
     // il PIN alla volta dopo. Su iPhone l'app sulla Home ha una memoria sua,
     // quindi lì la proposta del PIN arriva comunque
+    // Niente proposte sopra un'altra finestra, sopra la riconnessione (Cucù sta cambiando rete o è
+    // appena stato ripristinato) o nella scheda di un personaggio
+    function offerBlocked() {
+      return !!$('sheet-root').firstChild || !!$('reconnect-root').firstChild || !!parseRoute().name;
+    }
+
     async function maybeOfferOnStart() {
       // Il nome di questo Cucù, una volta per telefono se non c'è ancora: prima della
       // proposta della schermata Home, perché l'icona prende il nome quando la si aggiunge
       await infoReady;
       if (info && !info.name && homeScreenHere() && store.get('cucu-name-asked') !== '1') {
         await new Promise(r => setTimeout(r, 1200));
-        if (!$('sheet-root').firstChild && !parseRoute().name) {
+        if (!offerBlocked()) {
           store.set('cucu-name-asked', '1');
           await askDeviceName({ first: true });
         }
       }
       if (shouldOfferHomeScreen()) {
         setTimeout(() => {
-          if ($('sheet-root').firstChild || parseRoute().name) return;
+          if (offerBlocked()) return;
           try { localStorage.setItem('cucu-home-offered', '1'); } catch (_) { /* pazienza */ }
           showHomeScreenGuide();
         }, 1500);
@@ -5584,7 +5593,7 @@
       try { asked = localStorage.getItem('cucu-pin-offered') === '1'; } catch (_) { /* storage bloccato */ }
       if (asked) return;
       setTimeout(() => {
-        if ($('sheet-root').firstChild || parseRoute().name) return;
+        if (offerBlocked()) return;
         try { localStorage.setItem('cucu-pin-offered', '1'); } catch (_) { /* pazienza */ }
         openSheet({
           title: 'Un PIN per le impostazioni?',
