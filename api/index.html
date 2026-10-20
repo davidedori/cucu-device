@@ -5435,7 +5435,7 @@
         try { Object.keys(localStorage).filter(k => k.startsWith('cucu')).forEach(k => localStorage.removeItem(k)); } catch (_) { /* pazienza */ }
         if (res.forget_wifi) {
           showReconnect('Cucù è come nuovo',
-            'Ha dimenticato le reti Wi-Fi e accende la sua: guarda la TV e inquadra il codice per collegarti di nuovo.',
+            'Ha dimenticato le reti Wi-Fi e accende la sua. Quando sulla TV compare "Colleghiamoci!" il ripristino è finito: puoi spegnere Cucù e darlo a chi vuoi, oppure inquadrare il codice per collegarti di nuovo.',
             { revealAfter: 60 });
         } else {
           closeSheet();
@@ -5451,7 +5451,7 @@
             h('label', { class: 'row', style: 'cursor:pointer;padding-left:0;padding-right:0' },
               h('div', { class: 'row-main' },
                 h('div', { class: 'row-title', text: 'Dimentica anche le reti Wi-Fi' }),
-                h('div', { class: 'row-sub', text: "Per darlo a un'altra famiglia: Cucù accende la sua rete e sulla TV compare come collegarsi." })),
+                h('div', { class: 'row-sub', text: "Per darlo a un'altra famiglia: Cucù accende la sua rete e sulla TV compare \"Colleghiamoci!\". Da lì si può spegnere." })),
               h('span', { class: 'switch' }, wifi, h('span', { class: 'slider' }))),
             h('label', { class: 'row', for: 'fr-ok', style: 'cursor:pointer;padding-left:0;padding-right:0;gap:10px' },
               understood, h('span', { class: 'row-main', text: 'Ho capito: video e foto cancellati non si possono recuperare.' }))),
