@@ -77,7 +77,8 @@ nmcli con add type wifi ifname wlan0 con-name "$CONNECTION_NAME" \
     autoconnect no \
     ssid "$HOTSPOT_SSID"
 
-# Configura: AP mode, banda 2.4GHz, DHCP condiviso, WPA2-PSK
+# Configura: AP mode, banda 2.4GHz, DHCP condiviso, WPA2-PSK (solo RSN/CCMP: senza,
+# l'hotspot si presentava anche WPA1/TKIP e alcuni dispositivi non si collegavano)
 # autoconnect-priority -1: resta la più bassa, se mai l'autoconnect venisse riacceso
 nmcli con modify "$CONNECTION_NAME" \
     802-11-wireless.mode ap \
@@ -85,6 +86,7 @@ nmcli con modify "$CONNECTION_NAME" \
     ipv4.method shared \
     wifi-sec.key-mgmt wpa-psk \
     wifi-sec.psk "$HOTSPOT_PASSWORD" \
+    wifi-sec.proto rsn wifi-sec.pairwise ccmp wifi-sec.group ccmp \
     connection.autoconnect-priority -1
 
 echo "Hotspot configurato: SSID=$HOTSPOT_SSID | Password=$HOTSPOT_PASSWORD (in $CONFIG_ENV)"

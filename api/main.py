@@ -21,6 +21,10 @@ import urllib.request
 import urllib.error
 import sys
 
+# Una riga alla volta nel log: con l'uscita a blocchi le righe "[WiFi] ..." arrivavano
+# tutte insieme e con l'ora sbagliata
+sys.stdout.reconfigure(line_buffering=True)
+
 # media_check.py sta nella cartella del progetto, accanto a read_nfc.py: le
 # regole su cosa Cucù riesce a riprodurre sono le stesse per entrambi
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -689,12 +693,15 @@ HELP_FILE = RUN_STATE_FILE.parent / "help.json"
 
 
 def _active_wifi():
-    """(nome della rete, è l'hotspot) della connessione Wi-Fi attiva, o (None, False)."""
-    res = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE", "con", "show", "--active"],
+    """(nome della rete, è l'hotspot) della connessione Wi-Fi attiva, o (None, False).
+    Solo se è collegata davvero: una connessione che NetworkManager sta ancora provando
+    ("activating", anche per minuti quando la rete non si trova) non conta, se no Cucù si
+    crede in rete e non accende mai l'hotspot (cucu-4aab, 24/11/2026)."""
+    res = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE,STATE", "con", "show", "--active"],
                          capture_output=True, text=True, timeout=10)
     for line in res.stdout.splitlines():
         parts = re.split(r'(?<!\\):', line)
-        if len(parts) >= 2 and parts[1] == "802-11-wireless":
+        if len(parts) >= 3 and parts[1] == "802-11-wireless" and parts[2] == "activated":
             name = parts[0].replace("\\:", ":")
             if name.endswith("_AP"):
                 return name, True
@@ -3018,15 +3025,27 @@ def _forget_followup():
 # Hotspot solo quando serve, e ritorno alla rete di casa. NetworkManager non accende più
 # l'hotspot da solo (autoconnect no, setup_hotspot.sh): all'avvio lo accendeva prima ancora
 # di aver visto la rete di casa, e una volta acceso non la cercava più (in modalità AP non
-# scansiona). Qui: senza reti salvate l'hotspot si accende subito; con reti salvate solo
-# dopo HOTSPOT_GRACE_SEC senza rete. Sull'hotspot, con reti salvate e nessun telefono
-# collegato, ogni tanto si riprovano le reti salvate (sempre più di rado: dai nonni senza
-# Wi-Fi l'hotspot sparisce per meno di un minuto ogni 10). Le azioni dall'app prendono
-# _wifi_lock, così questo controllo non le disturba.
+# scansiona). Qui:
+# - senza reti salvate l'hotspot si accende subito;
+# - con reti salvate, senza rete per BOOT_GRACE_SEC all'avvio o HOTSPOT_GRACE_SEC dopo una
+#   caduta, prima un tentativo vero (_try_saved_networks) e solo se non va l'hotspot;
+# - sull'hotspot, con reti salvate e nessun telefono collegato, ogni tanto si riprovano le
+#   reti salvate (sempre più di rado: dai nonni senza Wi-Fi l'hotspot sparisce per un
+#   minuto circa ogni 10).
+# Un tentativo vero (successo su cucu-4aab il 24/11/2026, router con band steering che lo
+# buttava fuori): spegne l'hotspot, cerca davvero le reti e prova solo quelle che vede; se
+# non ne vede nessuna, o nessuna si collega, ricarica il driver del Wi-Fi (cucu-wifi-reset,
+# installato da system_fixes.sh) e riprova una volta. Il chip del Pi Zero 2 W dopo una
+# caduta o dopo l'hotspot a volte non riesce più a cercare ("Failed to initiate sched
+# scan"), e senza ricerca NetworkManager non trova la rete di casa neanche a un metro.
+# Le azioni dall'app prendono _wifi_lock, così questo controllo non le disturba.
 WIFI_CHECK_SEC = 15
+BOOT_GRACE_SEC = 120
 HOTSPOT_GRACE_SEC = 45
 RETURN_FIRST_SEC = 120
 RETURN_MAX_SEC = 600
+SCAN_WAIT_SEC = 12
+WIFI_RESET = "/usr/local/sbin/cucu-wifi-reset"
 WPA_CTRL = Path("/run/wpa_supplicant/wlan0")   # wpa_supplicant -O "... GROUP=netdev"
 _wifi_lock = threading.Lock()
 
@@ -3078,22 +3097,111 @@ def _hotspot_up(reason: str):
                    capture_output=True, timeout=45)
 
 
-def _try_saved_networks():
-    """Dall'hotspot prova le reti salvate (al massimo 3). True se una si collega."""
-    for name in _recent_networks()[:3]:
-        try:
-            res = subprocess.run(["sudo", "nmcli", "con", "up", name], capture_output=True, timeout=45)
-            if res.returncode == 0:
-                print(f"[WiFi] Tornato sulla rete '{name}'")
-                return True
-        except subprocess.TimeoutExpired:
-            pass
-    ssid, on_ap = _active_wifi()   # nel frattempo NetworkManager può essersi collegato da solo
+def _hotspot_down():
+    """Spegne l'hotspot se è acceso: in modalità AP l'antenna non cerca le reti."""
+    _, on_ap = _active_wifi()
+    if on_ap:
+        res = subprocess.run(["sudo", "-n", "nmcli", "con", "down", f"{socket.gethostname()}_AP"],
+                             capture_output=True, text=True, timeout=30)
+        if res.returncode != 0:   # regola sudo non ancora installata: con up lo sostituisce lo stesso
+            print(f"[WiFi] Hotspot non spento: {res.stderr.strip()}")
+        time.sleep(2)
+
+
+def _network_ssid(name: str):
+    """(SSID, nascosta) di una connessione salvata: il nome può non essere il nome della rete."""
+    res = subprocess.run(["nmcli", "-g", "802-11-wireless.ssid,802-11-wireless.hidden",
+                          "con", "show", name], capture_output=True, text=True, timeout=10)
+    lines = res.stdout.splitlines()
+    ssid = lines[0].strip() if lines else ""
+    hidden = len(lines) > 1 and lines[1].strip() == "yes"
+    return ssid or name, hidden
+
+
+def _visible_ssids(wanted: set):
+    """Cerca le reti (scansione nuova, non quelle in memoria) e restituisce gli SSID visti.
+    Smette di aspettare appena compare una di quelle cercate."""
+    try:   # permesso dalla regola polkit di setup.sh, senza sudo
+        res = subprocess.run(["nmcli", "dev", "wifi", "rescan"], capture_output=True, text=True, timeout=15)
+        if res.returncode != 0:
+            print(f"[WiFi] Ricerca delle reti non partita: {res.stderr.strip()}")
+    except subprocess.TimeoutExpired:
+        print("[WiFi] Ricerca delle reti non partita: nmcli non risponde")
+    seen = set()
+    deadline = time.monotonic() + SCAN_WAIT_SEC
+    while time.monotonic() < deadline:
+        time.sleep(3)
+        res = subprocess.run(["nmcli", "-t", "-f", "SSID", "dev", "wifi", "list", "--rescan", "no"],
+                             capture_output=True, text=True, timeout=15)
+        seen = {l.replace("\\:", ":") for l in res.stdout.splitlines() if l}
+        if seen & wanted:
+            break
+    return seen
+
+
+def _reset_wifi_driver():
+    """Ricarica il driver del Wi-Fi (cucu-wifi-reset come root). True se è ripartito."""
+    print("[WiFi] Ricarico il driver del Wi-Fi")
+    try:
+        res = subprocess.run(["sudo", "-n", WIFI_RESET], capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        print("[WiFi] Driver del Wi-Fi: nessuna risposta")
+        return False
+    if res.returncode != 0:
+        print(f"[WiFi] Driver del Wi-Fi non ricaricato: {(res.stderr or res.stdout).strip()}")
+        return False
+    deadline = time.monotonic() + 20   # NetworkManager deve riprendersi wlan0
+    while time.monotonic() < deadline:
+        res = subprocess.run(["nmcli", "-t", "-f", "DEVICE,STATE", "dev"],
+                             capture_output=True, text=True, timeout=10)
+        if any(l.startswith("wlan0:") and not l.endswith(("unavailable", "unmanaged"))
+               for l in res.stdout.splitlines()):
+            return True
+        time.sleep(2)
+    print("[WiFi] Driver del Wi-Fi ricaricato, ma wlan0 non è tornata pronta")
+    return False
+
+
+def _on_home_network():
+    ssid, on_ap = _active_wifi()
     return bool(ssid) and not on_ap
+
+
+def _try_saved_networks(reason: str):
+    """Un tentativo vero di tornare su una rete salvata (al massimo le ultime 3): hotspot
+    spento, ricerca delle reti, connessione a quelle viste; se non va, driver ricaricato e un
+    secondo giro. True se Cucù è su una rete. Lascia l'hotspot spento: lo riaccende chi chiama."""
+    names = _recent_networks()[:3]
+    if not names:
+        return False
+    print(f"[WiFi] Provo le reti salvate: {reason}")
+    _hotspot_down()
+    nets = {n: _network_ssid(n) for n in names}
+    wanted = {ssid for ssid, _ in nets.values()}
+    for round_ in (1, 2):
+        seen = _visible_ssids(wanted)
+        found = [n for n in names if nets[n][0] in seen or nets[n][1]]
+        print(f"[WiFi] Reti viste: {len(seen)}; salvate tra queste: {', '.join(found) or 'nessuna'}")
+        for name in found:
+            try:
+                res = subprocess.run(["sudo", "nmcli", "con", "up", name],
+                                     capture_output=True, text=True, timeout=45)
+                if res.returncode == 0:
+                    print(f"[WiFi] Tornato sulla rete '{name}'")
+                    return True
+                print(f"[WiFi] '{name}' non si collega: {res.stderr.strip()}")
+            except subprocess.TimeoutExpired:
+                print(f"[WiFi] '{name}' non si collega: nessuna risposta in 45 s")
+        if _on_home_network():   # nel frattempo NetworkManager può essersi collegato da solo
+            return True
+        if round_ == 1 and not _reset_wifi_driver():
+            break
+    return _on_home_network()
 
 
 def _wifi_watchdog():
     lost_since = time.monotonic()   # all'avvio come se la rete fosse appena sparita
+    grace = BOOT_GRACE_SEC          # all'avvio NetworkManager ha bisogno di più tempo
     next_try, wait = None, RETURN_FIRST_SEC
     while True:
         if _wifi_lock.acquire(blocking=False):
@@ -3101,24 +3209,37 @@ def _wifi_watchdog():
                 now = time.monotonic()
                 ssid, on_ap = _active_wifi()
                 if ssid and not on_ap:   # sulla rete di casa: tutto a posto
+                    if lost_since is not None and grace == HOTSPOT_GRACE_SEC:
+                        print(f"[WiFi] Di nuovo su '{ssid}'")
                     lost_since, next_try, wait = None, None, RETURN_FIRST_SEC
+                    grace = HOTSPOT_GRACE_SEC
                 else:
                     saved = _saved_networks()
-                    if not ssid:   # nessuna rete: l'hotspot, subito se non ce n'è una salvata
-                        lost_since = lost_since or now
+                    if not ssid:   # nessuna rete: subito l'hotspot se non ce n'è una salvata
+                        if lost_since is None:
+                            print("[WiFi] Rete persa")
+                            lost_since = now
                         if not saved:
                             _hotspot_up("nessuna rete salvata")
-                        elif now - lost_since >= HOTSPOT_GRACE_SEC:
-                            _hotspot_up(f"nessuna rete salvata raggiungibile da {HOTSPOT_GRACE_SEC} s")
-                            next_try = time.monotonic() + wait
+                            grace = HOTSPOT_GRACE_SEC
+                        elif now - lost_since >= grace:
+                            waited = int(now - lost_since)
+                            grace = HOTSPOT_GRACE_SEC
+                            if _try_saved_networks(f"nessuna rete da {waited} s"):
+                                lost_since, next_try, wait = None, None, RETURN_FIRST_SEC
+                            else:
+                                _hotspot_up("le reti salvate non rispondono")
+                                lost_since = None
+                                next_try = time.monotonic() + wait
                     elif saved:   # sull'hotspot con reti salvate: ogni tanto si riprova
                         lost_since = None
+                        grace = HOTSPOT_GRACE_SEC
                         if next_try is None:
                             next_try = now + wait
                         elif now >= next_try:
                             if _hotspot_clients():   # qualcuno lo sta usando: più tardi
                                 next_try = now + RETURN_FIRST_SEC
-                            elif _try_saved_networks():
+                            elif _try_saved_networks("dall'hotspot"):
                                 next_try, wait = None, RETURN_FIRST_SEC
                             else:
                                 _hotspot_up("le reti salvate non rispondono")
