@@ -3040,7 +3040,7 @@ def _forget_followup():
 # scan"), e senza ricerca NetworkManager non trova la rete di casa neanche a un metro.
 # Le azioni dall'app prendono _wifi_lock, così questo controllo non le disturba.
 WIFI_CHECK_SEC = 15
-BOOT_GRACE_SEC = 120
+BOOT_GRACE_SEC = 60
 HOTSPOT_GRACE_SEC = 45
 RETURN_FIRST_SEC = 120
 RETURN_MAX_SEC = 600
