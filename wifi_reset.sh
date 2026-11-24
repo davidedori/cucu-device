@@ -11,8 +11,11 @@
 # =============================================================================
 set -u
 
-# brcmfmac_wcc (kernel recenti) usa brcmfmac: va tolto per primo
-modprobe -r brcmfmac_wcc 2>/dev/null
+# I moduli del produttore del chip (brcmfmac_cyw, _wcc, _bca a seconda del kernel)
+# usano brcmfmac: vanno tolti per primi, poi si ricaricano da soli con brcmfmac
+for holder in /sys/module/brcmfmac/holders/*; do
+    [ -e "$holder" ] && modprobe -r "$(basename "$holder")"
+done
 if ! modprobe -r brcmfmac; then
     echo "brcmfmac non si toglie" >&2
     exit 1
